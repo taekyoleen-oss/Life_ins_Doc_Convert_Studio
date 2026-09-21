@@ -3,6 +3,7 @@ import { parseMethodDoc } from "./methoddoc/parse";
 import type { Evidence } from "./methoddoc/spec";
 import { latexToDoc } from "./methoddoc/tex";
 import { jsonToSpec, specToYaml } from "./conditions/yaml";
+import { sheetFromSpec, type SheetState } from "./sheet";
 
 /** 불러온 산출방법서 원문 — 원문 탭과 근거 연결에 쓴다 */
 export interface Original {
@@ -19,6 +20,8 @@ export interface Loaded {
   original?: Original;
   /** LaTeX·Markdown 으로 받은 산출방법서는 그 원문을 편집 탭에 그대로 올린다 */
   source?: { kind: "latex" | "markdown"; text: string };
+  /** MethodSpec JSON 에 실려 온 위험률 표 — 위험률 표 창으로 */
+  sheet?: SheetState;
   message: string;
 }
 
@@ -44,7 +47,9 @@ export async function loadFile(file: File): Promise<Loaded> {
   if (e === "yaml" || e === "yml") return { yaml: await file.text(), message: `${file.name} — 조건 파일을 열었습니다` };
   if (e === "json") {
     const spec = jsonToSpec(await file.text());
-    return { yaml: specToYaml(spec, [], ` ${file.name} (MethodSpec JSON) 에서 불러온 조건`), message: `${file.name} — MethodSpec 을 조건으로 옮겼습니다` };
+    const sheet = sheetFromSpec(spec, file.name) ?? undefined;
+    return { yaml: specToYaml(spec, [], ` ${file.name} (MethodSpec JSON) 에서 불러온 조건`), sheet,
+      message: `${file.name} — MethodSpec 을 조건으로 옮겼습니다${sheet ? ` (위험률 표 ${sheet.map.length - 1}개는 아래 위험률 표로)` : ""}` };
   }
   if (e === "tex") {
     const text = await file.text();

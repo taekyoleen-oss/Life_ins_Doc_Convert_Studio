@@ -214,6 +214,7 @@ export default function Studio() {
       if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
       setYaml(r.yaml); setSaved(r.yaml);
       setOriginal(r.original ?? null);
+      if (r.sheet) { setSheet(r.sheet); showPane("sheet"); }
       setLatex(r.source?.kind === "latex" ? { text: r.source.text, dirty: true } : { text: "", dirty: false });
       setMd(r.source?.kind === "markdown" ? { text: r.source.text, dirty: true } : { text: "", dirty: false });
       setTab(r.original ? "original" : "doc");

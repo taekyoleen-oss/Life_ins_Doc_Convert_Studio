@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachTables, autoMap, baseName, cellNum, guessRole, parseDelimited, pickColumn, readXlsx, sanitizeSheet, sexOf, sheetFromText } from "@/lib/sheet";
+import { attachTables, autoMap, baseName, cellNum, guessRole, parseDelimited, pickColumn, readXlsx, sanitizeSheet, sexOf, sheetFromSpec, sheetFromText } from "@/lib/sheet";
 import { yamlToSpec } from "@/lib/conditions/yaml";
 import { renderMethodDoc } from "@/lib/methoddoc/render";
 import { SAMPLES } from "@/lib/samples";
@@ -63,6 +63,18 @@ describe("열 → 조건 → 산출방법서", () => {
     expect(f.rates[0].table?.values).toEqual([0.0005, 0.0006]);
     const rows = renderMethodDoc(m).flatMap((s) => s.blocks).flatMap((b) => (b.t === "table" ? b.rows : []));
     expect(rows.some((r) => r[0] === "제7회 경험생명표 사망률" && r[3] === "40~41세 2행")).toBe(true);
+  });
+  it("JSON 의 위험률 표 → 위험률 표 창 → 다시 붙이면 같은 표 (자유설계보험 JSON 을 열 때)", () => {
+    const withT = { ...spec, rates: [
+      { ...spec.rates[0], id: "t1:r1", table: { ages: [40, 41, 42], values: [0.00103, 0.00112, 1.2e-7], sex: "M" as const } },
+      { ...spec.rates[1], id: "t1:r2", table: { ages: [41, 42], values: [0.0013, 0.0014] } },
+    ] };
+    const st = sheetFromSpec(withT, "a.json")!;
+    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률(남)", "80% 이상 장해율"]);
+    expect(st.sheet.rows[0]).toEqual(["40", "0.00103", ""]);
+    const bare = { ...withT, rates: withT.rates.map((r) => ({ ...r, table: undefined })) };
+    expect(attachTables(bare, st).rates.map((r) => r.table)).toEqual(withT.rates.map((r) => r.table));
+    expect(sheetFromSpec(spec, "x")).toBeNull();
   });
   it("연령 열이 없거나 저장본이 어긋나면 표를 붙이지 않는다", () => {
     expect(attachTables(spec, { sheet, map: map.map(() => ({ to: "skip" as const })) })).toBe(spec);

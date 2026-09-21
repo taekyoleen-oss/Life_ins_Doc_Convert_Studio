@@ -208,6 +208,18 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("막대를 끌어 조건 창 넓히기", w1 > w0 + 150, `${Math.round(w0)} → ${Math.round(w1)}`);
   await p.screenshot({ path: `${OUT}/s10_layout.png` });
 
+  // 16) 자유설계보험 등이 낸 MethodSpec JSON — 위험률 표는 위험률 표 창으로 (조건 파일에는 표가 없다)
+  const fiSpec = { specVersion: "1.0", meta: { productName: "JSON 표 시험" }, contract: { age: 40, sex: "M", termYears: 3, payYears: 3, freq: 12 },
+    basis: { interest: 0.025, standardInterest: 0.0325 }, expenses: [], units: [], reserve: { notes: [] }, surrender: { notes: [] }, formulas: [], sections: [],
+    rates: [{ id: "t1:r1", name: "사망률", role: "death", table: { ages: [40, 41, 42], values: [0.001, 0.0011, 0.0012], sex: "M" } }],
+    benefits: [{ id: "t1:c1", name: "사망", role: "death", amount: 1e8, endAge: 42, exitRateIds: ["t1:r1"] }] };
+  await p.setInputFiles("header input[type=file]", { name: "fi.methodspec.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(fiSpec)) });
+  await p.waitForSelector(".doc-body h1:has-text('JSON 표 시험')");
+  await p.waitForTimeout(400);
+  const fiRow = await p.locator(".doc-body tr", { hasText: "사망률" }).first().textContent();
+  ok("MethodSpec JSON 의 위험률 표 → 위험률 표 창 · 산출방법서 '40~42세 3행'",
+    (await p.locator("th.sheet-name", { hasText: "사망률(남)" }).count()) === 1 && fiRow.includes("40~42세 3행"), fiRow);
+
   ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
   fs.writeFileSync(`${OUT}/e2e.txt`, log.join("\n"), "utf8");
   await b.close();

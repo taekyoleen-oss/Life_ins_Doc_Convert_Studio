@@ -180,6 +180,24 @@ export function linkNote(st: SheetState | null, withTables: MethodSpec, rateId: 
   return `표: ${cols.join("·")}열 → ${t ? `${t.ages[0]}~${t.ages[t.ages.length - 1]}세 ${t.ages.length}행${t.sex ? ` (${sexName(t.sex)})` : ""}` : "연령 열을 정하면 붙습니다"}`;
 }
 
+/**
+ * MethodSpec 의 위험률 표(RateRef.table) → 위험률 표 창. attachTables 의 반대 —
+ * 자유설계보험 등이 낸 JSON 을 열 때 표를 잃지 않게 한다(조건 파일에는 표가 실리지 않으므로).
+ */
+export function sheetFromSpec(spec: MethodSpec, name: string): SheetState | null {
+  const rates = spec.rates.filter((r) => r.table?.ages?.length);
+  if (!rates.length) return null;
+  const ages = [...new Set(rates.flatMap((r) => r.table!.ages))].sort((a, b) => a - b);
+  const sexName = (s?: Sex) => (s === "M" ? "(남)" : s === "F" ? "(여)" : "");
+  return {
+    sheet: {
+      name, head: ["연령", ...rates.map((r) => `${r.name}${sexName(r.table!.sex)}`)],
+      rows: ages.map((a) => [String(a), ...rates.map((r) => { const i = r.table!.ages.indexOf(a); return i < 0 ? "" : String(r.table!.values[i]); })]),
+    },
+    map: [{ to: "age" }, ...rates.map((r): ColMap => ({ to: "rate", rateId: r.id, ...(r.table!.sex ? { sex: r.table!.sex } : {}) }))],
+  };
+}
+
 /** 이어 둔 열을 RateRef.table 로 붙인 스펙. 연령 열이 없으면 그대로 */
 export function attachTables(spec: MethodSpec, st: SheetState | null): MethodSpec {
   const ageCol = st ? st.map.findIndex((m) => m.to === "age") : -1;
