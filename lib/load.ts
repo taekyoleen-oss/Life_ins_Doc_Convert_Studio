@@ -13,6 +13,10 @@ export interface Original {
   missing: string[];
   /** PDF 는 원본 보기용 주소 (다 쓰면 revokeObjectURL) */
   pdfUrl?: string;
+  /** 그림으로 읽었으면 보낸 쪽 그림(data URL) — 원문 탭에서 대조한다 */
+  images?: string[];
+  /** 글자 있는 PDF — 원문 탭에서 [그림으로 다시 읽기] 할 때 쓴다 */
+  file?: File;
 }
 
 export interface Loaded {
@@ -25,21 +29,23 @@ export interface Loaded {
   message: string;
 }
 
-export const ACCEPT = ".pdf,.docx,.hwp,.hwpx,.tex,.md,.txt,.yaml,.yml,.json";
+export const ACCEPT = ".pdf,.docx,.hwp,.hwpx,.tex,.md,.txt,.yaml,.yml,.json,.png,.jpg,.jpeg";
 
 const ext = (name: string) => (name.split(".").pop() ?? "").toLowerCase();
 
-/** 산출방법서 문서 → 조건. 값마다 출처를 주석으로 달고, 못 찾은 항목을 머리말에 적는다 */
-function fromDoc(name: string, doc: ExtractedDoc): { yaml: string; original: Original } {
+/** 산출방법서 문서 → 조건. 값마다 출처를 주석으로 달고, 못 찾은 항목을 머리말에 적는다 (그림으로 읽은 글도 이 길을 탄다) */
+export function fromDoc(name: string, doc: ExtractedDoc): { yaml: string; original: Original; format?: string } {
   const r = parseMethodDoc(doc, { fallbackName: name.replace(/\.[^.]+$/, "") });
-  // 원문 절(번호 체계로 자른 문단 묶음)은 PDF 에서 날짜·쪽번호가 제목으로 잡히는 잡음이 많다 — 원문은 [원문] 탭에 그대로 있으니 조건에는 싣지 않는다
-  r.spec.sections = [];
+  // 원문 절(번호 체계로 자른 문단 묶음)은 PDF 에서 날짜·쪽번호가 제목으로 잡히는 잡음이 많다 — 원문은 [원문] 탭에 그대로 있으니 조건에는 싣지 않는다.
+  // 표준 산출방법서는 절을 정해진 대로 읽었으므로 둔다
+  if (!r.format) r.spec.sections = [];
   const header = [
     ` ${name} 에서 읽은 조건 — 값 옆 주석이 원문 위치와 확신도입니다(원문 탭에서 확인).`,
+    r.format ? ` ${r.format} 양식 — 식·주석·절까지 읽었습니다.` : "",
     r.missing.length ? ` 못 찾은 항목: ${r.missing.join(", ")} — 직접 채워 주세요.` : "",
     r.evidence.some((e) => e.confidence === "low") ? " ⚠ 추정 값은 반드시 확인하세요." : "",
   ].filter(Boolean).join("\n");
-  return { yaml: specToYaml(r.spec, r.evidence, header), original: { name, doc, evidence: r.evidence, missing: r.missing } };
+  return { yaml: specToYaml(r.spec, r.evidence, header), original: { name, doc, evidence: r.evidence, missing: r.missing }, format: r.format };
 }
 
 export async function loadFile(file: File): Promise<Loaded> {
@@ -62,7 +68,7 @@ export async function loadFile(file: File): Promise<Loaded> {
     return { yaml, original, source: e === "md" ? { kind: "markdown", text } : undefined, message: `${file.name} — 산출방법서를 읽어 조건으로 옮겼습니다` };
   }
   const doc = await extractDoc(file.name, new Uint8Array(await file.arrayBuffer()));
-  const { yaml, original } = fromDoc(file.name, doc);
-  if (e === "pdf") original.pdfUrl = URL.createObjectURL(file);
-  return { yaml, original, message: `${file.name} — 문단 ${doc.paragraphs.length}·표 ${doc.tables.length}에서 조건 ${original.evidence.length}개를 읽었습니다` };
+  const { yaml, original, format } = fromDoc(file.name, doc);
+  if (e === "pdf") { original.pdfUrl = URL.createObjectURL(file); original.file = file; }
+  return { yaml, original, message: `${file.name} — ${format ? `${format} · ` : ""}문단 ${doc.paragraphs.length}·표 ${doc.tables.length}에서 조건 ${original.evidence.length}개를 읽었습니다` };
 }

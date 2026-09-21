@@ -1,0 +1,250 @@
+% 산출방법서 — Life_ins_Doc_Convert_Studio 에서 생성. XeLaTeX(kotex)로 조판한다: xelatex 파일.tex
+\documentclass[10pt,a4paper]{article}
+\usepackage{kotex}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage[margin=18mm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\title{종신보험 보험료 및 책임준비금 산출방법서}
+\date{2026. 9. 21.}
+\begin{document}
+\maketitle
+
+\section*{개요}
+
+\begin{center}\small
+\begin{tabular}{|l|l|}
+\hline
+\textbf{항목} & \textbf{내용} \\
+\hline
+상품명 & 종신보험 \\
+종류 & 표준형(완전 환급) \\
+작성일 & 2026. 9. 21. \\
+계약 단위 & 주계약 \\
+\hline
+\end{tabular}
+\end{center}
+
+가입 조건
+
+\begin{center}\small
+\begin{tabular}{|l|l|}
+\hline
+\textbf{가입 조건} & \textbf{내용} \\
+\hline
+보험의 종류 & 생명보험 / 종신 \\
+보험종목 & 표준형(완전 환급) \\
+보험료 납입주기 & 월납 · 연납 \\
+보험가입금액 한도 & 1천만원 \textasciitilde{} 10억원 \\
+갱신 & 비갱신형 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}\small
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{보험기간} & \textbf{보험료 납입기간} & \textbf{가입나이} \\
+\hline
+110세만기 & 10·15·20년납 & 만15세 \textasciitilde{} 65세 \\
+110세만기 & 30년납 & 만15세 \textasciitilde{} 50세 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{quote}\small
+가입 조건은 판매 범위를 적은 정보이며, 보험료·책임준비금 예시는 2. 의 시산 기준으로 계산한다.
+\end{quote}
+
+\section*{1. 기초율에 관한 사항}
+
+\subsection*{1.1. 이율에 관한 사항}
+
+\begin{center}\small
+\begin{tabular}{|l|l|}
+\hline
+\textbf{구분} & \textbf{값} \\
+\hline
+적용이율 i & 2.500\% \\
+표준이율 & 3.250\% \\
+현가율 v = 1/(1+i) & 0.975610 \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection*{1.2. 위험률에 관한 사항}
+
+\begin{center}\small
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{위험률} & \textbf{유형} & \textbf{근거·출처} & \textbf{표} \\
+\hline
+제7회 경험생명표 사망률 & 사망 & 보험개발원 제7회 경험생명표 사망률 & 별첨 \\
+80\% 이상 장해율 & 최초발생 & 써미트 2014-59호 80\%이상 재해장해 + 질병장해발생율 & 별첨 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{quote}\small
+표준위험률이 없는 경우에는 적용위험률을 사용한다.
+\end{quote}
+
+\subsection*{1.3. 적용해지율에 관한 사항}
+
+적용하지 않음 (w = 0).
+
+\subsection*{1.4. 납입면제(납입자수)에 관한 사항}
+
+별도의 납입면제율을 두지 않는다. 납입자수 l′ 는 각 담보의 탈퇴 사유로 유지자수 l 과 똑같이 줄어든다(3. 계산기수의 담보별 식).
+
+\subsection*{1.5. 시산보험료 계산 시 적용하는 사업비에 관한 사항}
+
+\begin{center}\small
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{구분} & \textbf{기호} & \textbf{기준} & \textbf{적용사업비율} \\
+\hline
+계약체결비용 (초년도) & $\alpha_S$ & 보험가입금액 & 1.00\% \\
+계약체결비용 (초년도) & $\alpha_P$ & 기준연납순보험료 & 1배 \\
+계약관리비용 (납입중) & $\beta_S$ & 매년 보험가입금액 & 1.50/1,000 \\
+계약관리비용 (납입중) & $\beta_G$ & 영업보험료 & 4.50\% \\
+계약관리비용 (납입후) & $\beta'$ & 매년 보험가입금액 & 1.00/1,000 \\
+수금비용 & $\gamma$ & 영업보험료 & 2.50\% \\
+\hline
+\end{tabular}
+\end{center}
+
+\section*{2. 계약 단위와 급부}
+
+시산 기준 — 보험료·책임준비금 예시는 아래 계약으로 계산한다.
+
+\begin{center}\small
+\begin{tabular}{|l|l|}
+\hline
+\textbf{항목} & \textbf{내용} \\
+\hline
+피보험자 & 40세 남 \\
+보험기간 & 71년 \\
+보험료 납입기간 & 20년 \\
+납입주기 & 월납 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|l|l|l|l|l|l|l|l|}
+\hline
+\textbf{담보} & \textbf{단위} & \textbf{급부 유형} & \textbf{지급 사유} & \textbf{보장금액} & \textbf{보장 종료} & \textbf{면책} & \textbf{급부 위험률} & \textbf{탈퇴 위험률} \\
+\hline
+사망·80\% 이상 장해 & 주계약 & 사망 & 사망 또는 80\% 이상 장해 시 & 100,000,000원 & 110세 & 없음 & 탈퇴 사유 전부 & 제7회 경험생명표 사망률 및 80\% 이상 장해율 \\
+\hline
+\end{tabular}
+}
+\end{center}
+
+\section*{3. 계산기수}
+
+유지자수·납입자수 — 사망·80\% 이상 장해
+
+\begin{align*}
+& q_x : \text{ 제}7\text{회 경험생명표 사망률} \\
+& k_x : 80\% \text{ 이상 장해율} \\[4pt]
+& l_x = l'_x = 100,000 \\
+& \text{유지자수 } \quad l_{x+t+1} = l_{x+t} \times ( 1 - q_{x+t} - k_{x+t} + q_{x+t}\cdot k_{x+t}/2 ) \\
+& \text{납입자수 } \quad l'_{x+t+1} = l'_{x+t} \times ( 1 - q_{x+t} - k_{x+t} + q_{x+t}\cdot k_{x+t}/2 ) \quad \to l'_{x+t} = l_{x+t} \\
+& \text{급부 발생자 } \quad C_{x+t} = ( l_{x+t} - l_{x+t+1} )\cdot v^{t+\tfrac{1}{2}}
+\end{align*}
+
+\begin{quote}\small
+사망·80\% 이상 장해 모두 같은 보험금을 지급하므로 탈퇴자 전부가 급부 대상이다. 납입자수 l′ 는 탈퇴 사유로 유지자수와 똑같이 줄어든다 — 별도의 납입면제율을 곱하지 않는다.
+\end{quote}
+
+계산기수
+
+\begin{align*}
+& D_{x+t} = l_{x+t}\cdot v^t \quad D'_{x+t} = l'_{x+t}\cdot v^t \\
+& C_{x+t} = l_{x+t}\cdot g_{x+t}\cdot ( 1 - w_{x+t}/2 )\cdot v^{t+\tfrac{1}{2}} \quad W_{x+t} = l_{x+t}\cdot w_{x+t}\cdot v^{t+\tfrac{1}{2}} \\
+& N_{x+t} = \sum_{u\ge t} D_{x+u} \quad N'_{x+t} = \sum_{u\ge t} D'_{x+u}
+\end{align*}
+
+\begin{quote}\small
+g 는 위 담보별 식의 급부 발생률이다. Q·(1−w/2) + w = Q + w − Q·w/2 이므로 급부·해지 탈퇴의 합이 l\_\{x+t\} − l\_\{x+t+1\} 과 정확히 일치한다.
+\end{quote}
+
+\section*{4. 보험료의 계산}
+
+급부 현가와 납입기수
+
+\begin{align*}
+& \mathrm{PVB} = \sum_{t=0}^{n-1} S_t\cdot C_{x+t} + \sum_{t=0}^{n} C_t\cdot D_{x+t} \\
+& N* = mm \cdot [ ( N'_x - N'_{x+m} ) - ( mm-1 )/( 2\cdot mm )\cdot ( D'_x - D'_{x+m} ) ]
+\end{align*}
+
+순보험료·기준연납순보험료
+
+\begin{align*}
+& P = \mathrm{PVB} / N* \quad P_{base} = \mathrm{PVB} / ( N'_x - N'_{x+\min(n,20)} )
+\end{align*}
+
+영업보험료
+
+\begin{align*}
+& G = [ P + ( \alpha_S + \alpha_P\cdot P_{base} )\cdot D'_x/N* + \beta_S/mm + \beta'\cdot ( N_{x+m} - N_{x+n} )/N* ] / ( 1 - \beta_G - \gamma )
+\end{align*}
+
+\begin{quote}\small
+보장기간 n이 20년보다 짧으면 α\_P는 α\_P × n/20으로 줄인다. 10만원당 보험료에서 한 번만 반올림하고, 담보 보험료 = 10만원당 보험료 × (보장금액 ÷ 100,000)으로 한다.
+\end{quote}
+
+\section*{5. 책임준비금의 계산}
+
+연말 책임준비금
+
+\begin{align*}
+& P_\beta = ( \mathrm{PVB} + CSV_0 + \beta'\cdot ( N_{x+m} - N_{x+n} ) ) / ( N'_x - N'_{x+m} ) \\
+& V_t = [ \sum_{u\ge t} S_u\cdot C_{x+u} + \sum_{u>t} C_u\cdot D_{x+u} + CSV_t + \beta'\cdot ( N_{x+\max(t,m)} - N_{x+n} ) - P_\beta \cdot ( N'_{x+t} - N'_{x+m} )\cdot [t\le m] ] / D_{x+t}
+\end{align*}
+
+\begin{quote}\small
+순보식에 납입 후 유지비 β′를 더한 형태. 표준준비금은 표준이율로 같은 식을 계산한다.
+\end{quote}
+
+\section*{6. 해지환급금의 계산}
+
+해약공제와 해지환급금
+
+\begin{align*}
+& \text{해약공제}_t = \alpha^{\text{공제}} \cdot \max( \min(m,7) - t, 0 ) / \min(m,7) \quad \alpha^{\text{공제}} = \min( \alpha , \alpha^{std} ) \\
+& \alpha = \alpha_S + \alpha_P \cdot round_{5}( P_{base} ) \quad (\text{영업보험료 } G \text{ 에는 반올림 전 } P_{base} \text{ 를 쓴다}) \\
+& W^{\text{표준}}_t = \max( V_t - \text{ 해약공제}_t, 0 )
+\end{align*}
+
+환급률
+
+\begin{align*}
+& \text{환급률}_t = W_t / \text{ 납입누계}_t, \quad \text{ 납입누계}_t = \min(t, m) \times mm \times G
+\end{align*}
+
+\section*{7. 책임준비금 관련 사항}
+
+\begin{quote}\small
+회계연도말 보험료적립금은 적용기초율 적립금과 표준기초율 적립금 중 큰 금액으로 한다.
+\end{quote}
+
+\begin{quote}\small
+연중 보간은 하지 않고 연말 기준으로 산출한다.
+\end{quote}
+
+\section*{8. 해지환급금 관련 사항}
+
+\begin{quote}\small
+해약공제는 납입기간과 7년 중 짧은 기간에 걸쳐 매년 균등하게 줄어든다.
+\end{quote}
+
+\begin{quote}\small
+해약공제 기준 신계약비는 적용기초율과 표준기초율로 구한 신계약비 중 작은 쪽으로 한다.
+\end{quote}
+
+\end{document}

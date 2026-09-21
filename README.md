@@ -9,12 +9,14 @@
 - ✏️ **조건 → 산출방법서** — 조건을 고치면 오른쪽 산출방법서가 바로 바뀐다. 유지자수·납입자수·보험료·준비금·해지환급금 식은 조건에서 자동으로 만든다(KaTeX).
 - 📊 **위험률 표** — Excel 표 붙여넣기·CSV·TSV·XLSX 를 올리면 첫 행을 열 이름으로 읽고, 열마다 연령·위험률·성별로 조건에 잇는다(이름이 겹치면 자동). 이은 열은 `RateRef.table` 로 산출방법서 위험률 표와 MethodSpec JSON 에 실린다(남·여 열이 있으면 계약 성별의 열).
 - ∑ **수식·기호 견본** — 산출방법서 탭 [＋ 수식 더하기]는 견본 식(유지자수·계산기수·보험료·준비금·해지환급금)을 조건 식으로 더하고, LaTeX·Markdown 탭 [수식·기호 견본]은 커서 자리에 식·기호·절 제목·표를 넣는다.
-- 📥 **산출방법서 → 조건** — PDF·DOCX·HWP(5.x)·HWPX·TEX·MD 를 열거나 창에 끌어다 놓으면 조건으로 옮긴다. 값 옆 주석이 원문 위치·확신도다.
+- 📄 **표준 산출방법서 (Word·한글)** — 앱이 정확히 되읽는 양식(`표준 산출방법서 v1`). [표준 양식] 메뉴에서 상품별 견본(`표준_산출방법서_종신보험` · `_질병보험` · `_암보험`, .docx · .hwpx)을 받거나, 지금 조건을 [Word 내려받기] 해서 Word·한글에서 표의 값·행, `[식]` 아래 식 줄, `※` 설명을 고친 뒤 **[고친 Word·한글 올리기]** 하면 바뀐 값·식·주석만 조건에 들어간다. Word·한글 수식 편집기로 넣은 식도 읽는다. 쓰는 규칙: [`standards/README.md`](standards/README.md)
+- 📥 **산출방법서 → 조건** — PDF·DOCX·HWP(5.x)·HWPX·TEX·MD 를 열거나 창에 끌어다 놓으면 조건으로 옮긴다. 표준 산출방법서는 식·주석·절까지, 다른 양식은 표·본문 규칙으로 읽히는 값을 읽는다. 값 옆 주석이 원문 위치·확신도다.
+- 🖼️ **그림으로 읽기** — 스캔 PDF·PNG·JPG 는 쪽을 골라 **본인의 Anthropic API 키**로 보내면 Claude(claude-opus-5)가 쪽을 글로 옮겨 적고, 그 글을 같은 규칙이 읽어 조건으로 만든다(쪽당 약 $0.07, 보내기 전에 예상 비용 표시). 키는 이 브라우저에만 둔다.
 - 🔗 **대응 위치** — 조건 한 줄을 고르면 그 조건이 만든 표의 행·수식·원문 근거 줄이 앰버색으로 표시되고, 오른쪽을 누르거나 끌어서 고르면 왼쪽 조건 줄이 표시된다.
 - 📝 **LaTeX·Markdown 으로 고치기** — 탭에서 산출방법서 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어간다. 조건 파일의 주석·순서는 지킨다.
 - 📄 **원문 탭** — 불러온 문서를 본문 N줄·표 N 단위로 보여 주고, 줄마다 거기서 읽은 조건을 딱지로 단다. PDF 는 원본 보기도 된다.
 - 📚 **샘플** — 종신(사망·80% 장해) · 2대질병 · 무해지 암 · 납입지원 조건, 그리고 LaTeX·Markdown 산출방법서 고쳐 보기.
-- 📤 **내보내기** — 조건 `.yaml`, 다른 앱용 `MethodSpec .json`(위험률 표 포함 — 자유설계보험 `/method` 에서 열면 상품 만들기 설계 전체가 된다), 산출방법서 `.tex`(xelatex+kotex) · `.md` · `.html`(수식 포함) · 인쇄/PDF.
+- 📤 **내보내기** — 조건 `.yaml`, 다른 앱용 `MethodSpec .json`(위험률 표 포함 — 자유설계보험 `/method` 에서 열면 상품 만들기 설계 전체가 된다), 산출방법서 Word `.docx`(표준 산출방법서 — 한글에서도 열림) · `.tex`(xelatex+kotex) · `.md` · `.html`(수식 포함) · 인쇄/PDF.
 - 🔁 **자유설계보험과 왕복** — 그쪽이 낸 MethodSpec JSON 을 여기서 열면 조건은 입력 카드로, 위험률 표는 아래 위험률 표 창으로 들어온다.
 - 💾 브라우저 자동 저장(localStorage — 조건 · 위험률 표와 연결 · 화면 나눔). 서버·로그인 없음.
 
@@ -55,18 +57,27 @@ lib/methoddoc/     앱 독립 모듈 (flexible_insurance 와 같은 뿌리, 이�
   extract.ts pdf.ts  파일 → 문단·표 (DOCX·HWP·HWPX·PDF·Markdown)
   parse.ts         문단·표 → MethodSpec + 근거
   formulas.ts      MethodSpec → 산출식 (유지자수·납입자수·보험료·준비금·환급금)
-  render.ts        MethodSpec → 산출방법서 블록 (블록마다 조건 경로)
+  render.ts        MethodSpec → 산출방법서 블록 (블록마다 조건 경로) = 표준 산출방법서 v1
   tex.ts           평문 수식 ↔ LaTeX, 산출방법서 ↔ .tex
+  docx.ts          산출방법서 → Word(.docx) — 의존성 없이 직접 쓴다
+  vision.ts        스캔 PDF·그림 → 옮겨 적은 문단·표 (모델 호출은 주입)
 lib/conditions/
   yaml.ts          조건 파일 ↔ MethodSpec, 줄 범위, 되읽은 값 병합, 주석 보존 패치, 입력 칸 한 칸 고치기(editYaml)
   link.ts          조건 줄·칸 ↔ 산출방법서 블록 ↔ 원문 근거 대응
 lib/sheet.ts       위험률 표 읽기(TSV·CSV·XLSX) · 열 → 조건 잇기 · RateRef.table 붙이기
 lib/snippets.ts    수식·기호·문서 요소 견본
-components/        Studio · ConditionForm(입력 카드) · RateSheetPane · FormulaPalette · CodeEditor · DocPreview · OriginalPane
+lib/standards.ts   표준 산출방법서 목록(상품별 견본) · 작성 안내 — 한 줄 더하면 새 상품
+lib/pages.ts       PDF·그림 → 쪽 그림(브라우저)
+lib/vision-client.ts  Anthropic SDK 호출(사용자 키, 브라우저)
+components/        Studio · ConditionForm(입력 카드) · RateSheetPane · FormulaPalette · CodeEditor · DocPreview · OriginalPane · VisionDialog
+standards/         표준_산출방법서_*.docx · .hwpx · 쓰는 규칙(README)
 docs/설계.md       설계·연동·LaTeX 변환 제안
 ```
 
 ## 문서
 
+- 올려 볼 샘플과 시험 순서: [`samples/README.md`](samples/README.md)
+- 표준 산출방법서 쓰는 규칙: [`standards/README.md`](standards/README.md)
+- 스캔 PDF · 그림 → 조건 (그림으로 읽기): [`docs/이미지-PDF-변환-설계.md`](docs/이미지-PDF-변환-설계.md)
 - 설계와 제안: [`docs/설계.md`](docs/설계.md)
 - 모듈 설명: [`lib/methoddoc/README.md`](lib/methoddoc/README.md)

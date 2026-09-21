@@ -96,7 +96,7 @@ export default function DocPreview({ sections, title, highlight, follow, onPick 
           <h2>{sec.title}</h2>
           {blocks.map(({ b, first }, bi) => {
             const path = b.t === "table" ? undefined : b.path;
-            if (b.t === "p") return <p key={bi} data-path={path} className={cls(first)} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
+            if (b.t === "p") return <p key={bi} data-path={path} className={cls(first, b.kind === "label" ? "doc-label" : "")} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
             if (b.t === "note") return <blockquote key={bi} data-path={path} className={cls(first)} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
             if (b.t === "formula") return <div key={bi} data-path={path} className={cls(first, "formula")} dangerouslySetInnerHTML={{ __html: formulaHtml(b.text) }} />;
             return (

@@ -62,7 +62,7 @@ describe("열 → 조건 → 산출방법서", () => {
     const f = attachTables({ ...spec, contract: { ...spec.contract, sex: "F" } }, st);
     expect(f.rates[0].table?.values).toEqual([0.0005, 0.0006]);
     const rows = renderMethodDoc(m).flatMap((s) => s.blocks).flatMap((b) => (b.t === "table" ? b.rows : []));
-    expect(rows.some((r) => r[0] === "제7회 경험생명표 사망률" && r[3] === "40~41세 2행")).toBe(true);
+    expect(rows.some((r) => r[0] === "제7회 경험생명표 사망률" && r[4] === "40~41세 2행")).toBe(true);
   });
   it("JSON 의 위험률 표 → 위험률 표 창 → 다시 붙이면 같은 표 (자유설계보험 JSON 을 열 때)", () => {
     const withT = { ...spec, rates: [

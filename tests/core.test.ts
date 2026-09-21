@@ -10,7 +10,7 @@ import { jsonToSpec, mergeSpec, patchYaml, specToYaml, yamlToSpec } from "@/lib/
 import { SAMPLES } from "@/lib/samples";
 
 const sample = (id: string) => yamlToSpec(SAMPLES.find((s) => s.id === id)!.yaml);
-const docOf = (spec: ReturnType<typeof sample>["spec"]) => renderMethodDoc(withFormulas(spec), { today: new Date("2026-09-21") });
+const docOf = (spec: ReturnType<typeof sample>["spec"]) => renderMethodDoc(withFormulas(spec));
 
 describe("조건 파일(YAML)", () => {
   it("샘플이 오류 없이 읽히고 실무 표기가 소수로 바뀐다", () => {

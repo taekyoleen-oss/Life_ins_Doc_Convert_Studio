@@ -1,4 +1,4 @@
-// Life_ins_Doc_Convert_Studio 동작 확인 — 선택 연결·파일 열기·LaTeX 반영·입력 카드·위험률 표·수식 견본·화면 조절
+// Life_ins_Doc_Convert_Studio 동작 확인 — 선택 연결·파일 열기·LaTeX 반영·입력 카드·위험률 표·수식 견본·화면 조절·Word·한글 표준 양식·그림으로 읽기(가짜 API)
 /* eslint-disable @typescript-eslint/no-require-imports -- node 로 바로 돌리는 CommonJS 스크립트 */
 const path = require("path"), fs = require("fs");
 const PW = path.join(process.env.LOCALAPPDATA, "npm-cache/_npx/9833c18b2d85bc59/node_modules/playwright-core/index.js");
@@ -62,7 +62,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("조건 이율 3% → 산출방법서 3.000%", rate.includes("3.000%"), rate);
 
   // 5) PDF 열기 → 조건 + 원문 탭
-  await p.setInputFiles("input[type=file]", pdf);
+  await p.setInputFiles("input[aria-label='열 파일']", pdf);
   await p.waitForSelector(".orig-list", { timeout: 60000 });
   await p.waitForTimeout(800);
   const yamlText = await p.$$eval(".cm-content .cm-line", (els) => els.map((e) => e.textContent).join("\n"));
@@ -228,12 +228,91 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     basis: { interest: 0.025, standardInterest: 0.0325 }, expenses: [], units: [], reserve: { notes: [] }, surrender: { notes: [] }, formulas: [], sections: [],
     rates: [{ id: "t1:r1", name: "사망률", role: "death", table: { ages: [40, 41, 42], values: [0.001, 0.0011, 0.0012], sex: "M" } }],
     benefits: [{ id: "t1:c1", name: "사망", role: "death", amount: 1e8, endAge: 42, exitRateIds: ["t1:r1"] }] };
-  await p.setInputFiles("header input[type=file]", { name: "fi.methodspec.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(fiSpec)) });
+  await p.setInputFiles("input[aria-label='열 파일']", { name: "fi.methodspec.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(fiSpec)) });
   await p.waitForSelector(".doc-body h1:has-text('JSON 표 시험')");
   await p.waitForTimeout(400);
   const fiRow = await p.locator(".doc-body tr", { hasText: "사망률" }).first().textContent();
   ok("MethodSpec JSON 의 위험률 표 → 위험률 표 창 · 산출방법서 '40~42세 3행'",
     (await p.locator("th.sheet-name", { hasText: "사망률(남)" }).count()) === 1 && fiRow.includes("40~42세 3행"), fiRow);
+
+  // 17) 표준 산출방법서 — Word 로 받아 고친 뒤 올리면 바뀐 값·식만 조건에 (조건을 통째로 바꾸지 않는다)
+  const OPEN = "input[aria-label='열 파일']", MERGE = "input[aria-label='고쳐 반영할 파일']";
+  await p.click("details:has(summary:has-text('샘플')) summary");
+  await p.click("details:has(summary:has-text('샘플')) .menu-list button:has-text('종신보험 (')");
+  await p.waitForSelector(".doc-body h1:has-text('종신보험')");
+  await p.click(".tab:has-text('Word·한글')");
+  const [dlw] = await Promise.all([p.waitForEvent("download"), p.click("button:has-text('Word 내려받기')")]);
+  const docx = fs.readFileSync(await dlw.path());
+  ok("[Word·한글] Word 내려받기 → 표준 산출방법서 .docx", dlw.suggestedFilename().endsWith(".docx") && docx.includes(Buffer.from("표준 산출방법서 v1")), dlw.suggestedFilename());
+  // Word 에서 고쳤다고 친다 — 압축 없는 ZIP 이라 같은 길이의 글자는 바로 바꿀 수 있다: 적용이율 2.5→3, 기준연납순보험료 식의 20→25
+  const swap = (buf, from, to) => { const i = buf.indexOf(Buffer.from(from)); if (i < 0) throw new Error(`없음: ${from}`); const b = Buffer.from(buf); Buffer.from(to).copy(b, i); return b; };
+  let edited = swap(docx, ">2.500%<", ">3.000%<");
+  edited = swap(edited, "N′_{x+min(n,20)}", "N′_{x+min(n,25)}");
+  await p.setInputFiles(MERGE, { name: "종신_고침.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: edited });
+  await p.waitForSelector(".word-log");
+  const wlog = await p.textContent(".word-log");
+  ok("고친 Word 올리기 → 이율과 고친 식만 조건에 반영", /basis\.interest/.test(wlog) && /formulas/.test(wlog) && !/expenses|benefits|rates/.test(wlog), wlog.slice(0, 200));
+  await p.click(".tab:has-text('산출방법서')");
+  const row17 = await p.locator(".doc-body tr", { hasText: "적용이율" }).first().textContent();
+  await p.click(".tab:has-text('Word·한글')"); await p.screenshot({ path: `${OUT}/s11_word.png` }); await p.click(".tab:has-text('산출방법서')");
+  ok("반영 뒤 산출방법서 적용이율 3.000% · 고친 식이 나온다", row17.includes("3.000%") && (await p.locator(".doc-body .formula", { hasText: "25" }).count()) >= 1, row17);
+
+  // 18) 표준 양식 메뉴 — 한글(.hwpx) 견본을 받아 [열기] → 표준 산출방법서로 읽는다
+  await p.click("details:has(summary:has-text('표준 양식')) summary");
+  const [dh] = await Promise.all([p.waitForEvent("download"), p.click(".menu-list button:has-text('표준_산출방법서_질병보험.hwpx')")]);
+  const hwpx = fs.readFileSync(await dh.path());
+  ok("[표준 양식] 표준_산출방법서_질병보험.hwpx 내려받기", dh.suggestedFilename() === "표준_산출방법서_질병보험.hwpx" && hwpx.length > 20000, `${hwpx.length}B`);
+  await p.setInputFiles(OPEN, { name: "표준_산출방법서_질병보험.hwpx", mimeType: "application/hwp+zip", buffer: hwpx });
+  await p.waitForSelector(".toast:has-text('표준_산출방법서_질병보험.hwpx —')");
+  const t18 = await p.textContent(".toast");
+  ok("한글 표준 산출방법서 [열기] → '표준 산출방법서 v1' 로 읽음", /표준 산출방법서 v1/.test(t18), t18);
+
+  // 19) 그림으로 읽기 — 스캔 PDF → 쪽 고르기 → Anthropic API(여기서는 가짜 응답) → 옮겨 적은 글을 규칙이 읽어 조건
+  const page1 = { blocks: [
+    { kind: "text", text: "무배당 든든건강보험 보험료 및 책임준비금 산출방법서", rows: [] },
+    { kind: "text", text: "1. 예정기초율에 관한 사항", rows: [] },
+    { kind: "text", text: "(1) 예정이율 : 연 2.75% 복리", rows: [] },
+    { kind: "table", text: "", rows: [["구분", "기준", "비율"], ["계약체결비용", "초년도 보험가입금액", "8/1,000"], ["계약관리비용", "영업보험료", "7.5%"]] },
+  ], unreadable: "" };
+  const sent = [];
+  const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST, OPTIONS" };
+  await p.route("https://api.anthropic.com/**", async (route) => {
+    const req = route.request();
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
+    sent.push({ headers: req.headers(), body: JSON.parse(req.postData() || "{}") });
+    const ev = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+    const body = ev("message_start", { message: { id: "msg_e2e", type: "message", role: "assistant", model: "claude-opus-5", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 3800, output_tokens: 1 } } })
+      + ev("content_block_start", { index: 0, content_block: { type: "text", text: "" } })
+      + ev("content_block_delta", { index: 0, delta: { type: "text_delta", text: JSON.stringify(page1) } })
+      + ev("content_block_stop", { index: 0 })
+      + ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 600 } })
+      + ev("message_stop", {});
+    return route.fulfill({ status: 200, headers: { ...CORS, "content-type": "text/event-stream" }, body });
+  });
+  const sdir = path.join(__dirname, "../samples");
+  const scan = path.join(sdir, fs.readdirSync(sdir).find((f) => f.normalize("NFC").startsWith("07_") && f.endsWith(".pdf")));
+  await p.setInputFiles(OPEN, scan);
+  await p.waitForSelector(".modal.vision .vision-page img", { timeout: 20000 });
+  ok("스캔 PDF 열기 → [그림으로 읽기] 창 · 쪽 미리보기 · 예상 비용", /예상 비용 약 \$/.test(await p.textContent(".modal.vision .vision-send")));
+  await p.screenshot({ path: `${OUT}/s12_vision.png` });
+  await p.fill(".modal.vision input[type=password]", "sk-ant-e2e-test-key");
+  await p.click(".modal.vision .btn-primary");
+  await p.waitForSelector(".modal.vision", { state: "detached", timeout: 30000 });
+  const req = sent[0] || { headers: {}, body: {} };
+  const content = req.body.messages?.[0]?.content ?? [];
+  ok("보낸 요청: claude-opus-5 · 쪽 그림 · 구조화 출력 · 대체 모델(fallbacks)",
+    req.body.model === "claude-opus-5" && content.some((c) => c.type === "image" && c.source?.media_type === "image/jpeg") &&
+    req.body.output_config?.format?.type === "json_schema" && req.body.fallbacks === "default" && /server-side-fallback-2026-07-01/.test(req.headers["anthropic-beta"] || ""),
+    `${sent.length}건 · ${req.body.model} · beta ${req.headers["anthropic-beta"]}`);
+  await p.click(".tab:has-text('산출방법서')");
+  const r19 = await p.locator(".doc-body tr", { hasText: "적용이율" }).first().textContent();
+  ok("옮겨 적은 글 → 규칙 → 조건: 적용이율 2.750% · 사업비 2줄", r19.includes("2.750%") && (await p.locator(".doc-body tr", { hasText: "8/1000" }).count() + await p.locator(".doc-body tr", { hasText: "8.00/1,000" }).count()) >= 1, r19);
+  await p.click(".tab:has-text('원문')");
+  await p.click("button:has-text('쪽 그림')");
+  ok("[원문] 탭 쪽 그림으로 대조", (await p.locator(".orig-pages img").count()) === 1);
+  await p.screenshot({ path: `${OUT}/s13_vision_pages.png` });
+  const kept = await p.evaluate(() => ({ local: localStorage.getItem("life_ins_doc_convert_studio:anthropic-key"), yaml: localStorage.getItem("life_ins_doc_convert_studio:yaml") || "" }));
+  ok("API 키는 이 창에만 — localStorage·조건 파일에 없음", kept.local === null && !kept.yaml.includes("sk-ant"));
 
   ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
   fs.writeFileSync(`${OUT}/e2e.txt`, log.join("\n"), "utf8");

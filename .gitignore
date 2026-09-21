@@ -46,6 +46,7 @@ next-env.d.ts
 # 로컬 환경 변수
 .env.local
 public/pdf.worker.min.mjs
+public/standards/
 
 # 검증 출력
 .tsc.txt

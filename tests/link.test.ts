@@ -41,7 +41,7 @@ describe("조건 줄 → 산출방법서 블록", () => {
   });
   it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 담보식", () => {
     const got = hl(lineOf(/id: k80/));
-    expect(got.some((t) => /^80% 이상 장해율 \| 최초발생/.test(t))).toBe(true);
+    expect(got.some((t) => /^80% 이상 장해율 \| k80 \| 최초발생/.test(t))).toBe(true);
     expect(got.some((t) => /k_x : 80% 이상 장해율/.test(t))).toBe(true);
   });
   it("성별 줄 → 피보험자 행", () => {

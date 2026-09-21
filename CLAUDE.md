@@ -14,6 +14,8 @@ flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대�
 - LaTeX·Markdown 을 고쳐 조건에 반영할 때는 `mergeSpec` → `patchYaml` — 조건 파일을 통째로 다시 쓰지 않는다(사용자 주석 보존).
 - 입력 카드(`ConditionForm`)는 따로 상태를 두지 않는다 — 칸은 YAML 에서 읽고 `editYaml` 로 그 칸만 쓴다. 칸의 `data-path` 는 산출방법서 블록 경로와 같은 `pathKey`.
 - `product`(M01 가입 조건 — 보험기간·납입기간·가입나이 표 등)는 산출방법서에 싣는 **정보**, `contract`(M02)는 실제로 계산하는 **시산 기준** 한 점이다. 되읽을 때 `readProduct` 가 가입 조건 표를 먼저 떼어 본문 규칙에서 뺀다 — 새 규칙이 "110세만기·만15세" 를 계약으로 읽지 않게 할 것.
+- **표준 산출방법서 v1** = 이 앱이 내는 산출방법서 모양(`render.ts` `STANDARD_FORMAT`). 개요 표 `양식` 행이 표시, 식은 `[식] 제목` + 식 줄 + `※ 설명`(편집용 내보내기에만 — `kind: "label"`). 모양을 바꾸면 `parse.ts` `readStandard`·`standards/README.md` 를 같이 고치고, `STANDARDS_UPDATE=1` 로 `standards/*.docx` 를 다시 만들고, `.hwpx` 는 한글로 다시 저장한다(시험이 되읽어 확인). 판을 바꾸면 옛 판도 읽게 둔다.
+- 그림으로 읽기: 모델은 **옮겨 적기만**(`vision.ts`), 값은 `parseMethodDoc` 가 읽는다. API 키는 사용자가 앱에서 넣고 sessionStorage(고르면 localStorage)에만 — 내보내기·조건 파일에 절대 넣지 않는다. 실제 API 호출(비용)은 사용자 동의 없이 하지 않는다 — 시험은 가짜 ask·Playwright 경로 가로채기.
 - 위험률 표는 조건 파일에 싣지 않는다(localStorage). `attachTables` 가 이은 열을 `RateRef.table` 로 붙인다 — 계약 성별의 열 하나.
 - 결과는 자유설계보험(`../flexible_insurance`) 입력으로 쓸 수 있어야 한다: 카드 코드·모양은 그 빌더(`components/builder/steps.tsx`)와 맞추고, 주고받는 것은 MethodSpec JSON 뿐이다. 대응표는 `docs/설계.md` §6.
 
@@ -23,8 +25,10 @@ flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대�
 2. RTK 훅이 `next`·`vitest`·`tsc` 출력을 삼킨다 → `node node_modules/next/dist/bin/next build --turbopack`, `node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=.vitest-out.json`, `node node_modules/typescript/bin/tsc --noEmit > .tsc.txt`.
 3. Bash heredoc 은 역슬래시를 먹는다 — LaTeX 문자열이 든 파일은 Write/Edit 도구로 고친다.
 4. CodeMirror 는 보이는 줄만 DOM 에 그린다 — e2e 에서 innerText 로 전체 글을 읽지 말 것(찾아 바꾸기 패널을 쓴다).
-5. PDF 워커는 `scripts/copy-pdf-worker.mjs` 가 predev/prebuild 에서 `public/` 으로 복사한다(커밋하지 않음).
+5. PDF 워커와 `standards/*.hwpx` 는 `scripts/copy-public.mjs` 가 predev/prebuild 에서 `public/` 으로 복사한다(커밋하지 않음). `node node_modules/next/dist/bin/next build` 로 바로 빌드할 때는 먼저 `node scripts/copy-public.mjs`.
 6. OneDrive 한글 파일명은 NFD — 테스트는 `readdirSync` + `normalize("NFC")` 로 찾는다.
+7. Bash heredoc 이 긴 파이썬 패치에서 깨질 때가 있다(RTK 훅) — 스크립트 파일로 써서 돌린다.
+8. 한글 자동화: `HWPFrame.HwpObject` COM 으로 `.docx` → `.hwpx` 저장이 된다(한컴오피스 설치 PC).
 
 ## 검증
 
@@ -35,5 +39,5 @@ node node_modules/eslint/bin/eslint.js .
 node node_modules/next/dist/bin/next build --turbopack
 ```
 
-브라우저 확인(37항목: 양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표·JSON 표 내보내기·열기·수식 견본·화면 조절·콘솔 오류):
+브라우저 확인(47항목: 양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표·JSON 표 내보내기·열기·수식 견본·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
 `node node_modules/next/dist/bin/next start --port 3217` 을 띄운 뒤 `OUT=<폴더> node scripts/e2e.cjs` — npx 로 받아 둔 playwright-core 와 chromium 을 쓴다.

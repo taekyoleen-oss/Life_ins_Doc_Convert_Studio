@@ -327,8 +327,29 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
       const prev = out.benefits.find((x) => x.name === b.name);
       return { ...prev, ...b, id: prev?.id ?? b.id, rateId: fix(b.rateId), exitRateIds: b.exitRateIds?.map((x) => fix(x)!) };
     });
-    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.amount, b.endAge, b.rateId, b.exitRateIds]));
+    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.amount, b.endAge, b.rateId, b.exitRateIds, b.steps, b.points]));
     if (view(out.benefits) !== view(next)) { changes.push(`benefits: ${out.benefits.length}개 → ${next.length}개 갱신`); out.benefits = next; }
+  }
+  // 표준 산출방법서에서만 오는 것 — 회사·판·비고, 식, 준비금·환급금 주석, 원문 절
+  for (const k of ["insurer", "version", "date", "note"] as const) setIf(`meta.${k}`, (s) => s.meta[k], (s, v) => { s.meta[k] = v; });
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  // 식은 문서에서 절 순서로 나온다 — 순서만 다른 것은 바뀐 게 아니다
+  const fkey = (fs: MethodSpec["formulas"]) => fs.map((f) => JSON.stringify([f.section, f.label, f.text, f.note ?? ""])).sort();
+  if (took.has("formulas") && !same(fkey(out.formulas), fkey(parsed.formulas))) {
+    changes.push(`formulas: 조건의 식 ${out.formulas.length}개 → ${parsed.formulas.length}개 (${parsed.formulas.map((f) => f.label).join(", ") || "자동 식만"})`);
+    out.formulas = parsed.formulas;
+  }
+  if (took.has("reserve") && !same(out.reserve.notes, parsed.reserve.notes)) {
+    changes.push(`reserve.notes: ${out.reserve.notes.length}줄 → ${parsed.reserve.notes.length}줄`);
+    out.reserve = { notes: parsed.reserve.notes };
+  }
+  if (took.has("surrender") && !same(out.surrender, parsed.surrender)) {
+    changes.push(`surrender: 해약공제 ${out.surrender.deductionYears ?? "—"}년 · 주석 ${out.surrender.notes.length}줄 → ${parsed.surrender.deductionYears ?? "—"}년 · ${parsed.surrender.notes.length}줄`);
+    out.surrender = parsed.surrender;
+  }
+  if (took.has("sections") && !same(out.sections, parsed.sections)) {
+    changes.push(`sections: 원문 절 ${out.sections.length}개 → ${parsed.sections.length}개`);
+    out.sections = parsed.sections;
   }
   return { spec: out, changes };
 }

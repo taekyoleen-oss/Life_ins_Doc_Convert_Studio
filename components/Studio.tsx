@@ -7,6 +7,9 @@ import ConditionForm from "./ConditionForm";
 import DocPreview from "./DocPreview";
 import FormulaPalette from "./FormulaPalette";
 import OriginalPane from "./OriginalPane";
+import dynamic from "next/dynamic";
+// 그림으로 읽기 창은 열 때만 받는다 — Anthropic SDK 가 첫 화면 번들에 들어가지 않게
+const VisionDialog = dynamic(() => import("./VisionDialog"), { ssr: false });
 import RateSheetPane from "./RateSheetPane";
 import { SAMPLES } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
@@ -14,15 +17,17 @@ import { anchorsForPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/
 import { withFormulas } from "@/lib/methoddoc/formulas";
 import { docToMarkdown, renderMethodDoc } from "@/lib/methoddoc/render";
 import { docToLatex, latexToDoc } from "@/lib/methoddoc/tex";
-import { extractText } from "@/lib/methoddoc/extract";
+import { ExtractError, extractDoc, extractText, type ExtractedDoc } from "@/lib/methoddoc/extract";
+import { IMAGE_EXT } from "@/lib/pages";
 import { parseMethodDoc } from "@/lib/methoddoc/parse";
 import type { RateRole } from "@/lib/methoddoc/spec";
-import { ACCEPT, loadFile, type Original } from "@/lib/load";
-import { exporters } from "@/lib/export";
+import { ACCEPT, fromDoc, loadFile, type Original } from "@/lib/load";
+import { DOCX_MIME, download, exporters } from "@/lib/export";
+import { STANDARDS, standardFile, standardSpec, toStandardDocx } from "@/lib/standards";
 import { attachTables, autoMap, linkNote, newRateId, sanitizeSheet, sheetFromFile, sheetFromText, type Sheet, type SheetState } from "@/lib/sheet";
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 
-type Tab = "doc" | "latex" | "markdown" | "original";
+type Tab = "doc" | "latex" | "markdown" | "word" | "original";
 type PaneId = "cond" | "doc" | "sheet";
 interface Buf { text: string; dirty: boolean }
 type Toast = { text: string; kind: "ok" | "warn" | "err" } | null;
@@ -107,6 +112,11 @@ export default function Studio() {
   const srcEditor = useRef<EditorApi | null>(null);        // LaTeX·Markdown 편집기 — 견본을 커서 자리에 넣는다
   const [toast, setToast] = useState<Toast>(null);
   const [help, setHelp] = useState(false);
+  // Word·한글로 고쳐 올린 결과 — 무엇이 조건에 들어갔는지 탭에 남긴다
+  const [wordLog, setWordLog] = useState<{ name: string; format?: string; changes: string[] } | null>(null);
+  const mergeInput = useRef<HTMLInputElement | null>(null);
+  // 그림으로 읽기(스캔 PDF · PNG · JPG) — 쪽을 고르고 사용자 키로 보낸다
+  const [vision, setVision] = useState<{ file: File; reason: string } | null>(null);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.kind === "err" ? 9000 : 6000); return () => clearTimeout(t); }, [toast]);
 
   // LaTeX·Markdown 편집 버퍼 — 고치지 않았으면 조건에서 늘 새로 만든다
@@ -208,6 +218,7 @@ export default function Studio() {
   const open = useCallback(async (file: File) => {
     if (SHEET_EXT.test(file.name)) { await openSheetFile(file); return; }
     if (yaml !== saved && !window.confirm("지금 조건에 고친 내용이 있습니다. 새 파일로 바꿀까요?")) return;
+    if (IMAGE_EXT.test(file.name)) { setVision({ file, reason: "그림 파일입니다." }); return; }
     try {
       setToast({ text: `${file.name} 읽는 중…`, kind: "ok" });
       const r = await loadFile(file);
@@ -221,6 +232,7 @@ export default function Studio() {
       setLeftSel([]); setRightSel([]);
       setToast({ text: r.message, kind: "ok" });
     } catch (e) {
+      if (e instanceof ExtractError && e.why === "scanned") { setToast(null); setVision({ file, reason: "글자 층이 없는 스캔 PDF 입니다." }); return; }
       setToast({ text: errText(e), kind: "err" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,10 +272,57 @@ export default function Studio() {
     setToast({ text: `조건 ${changes.length}건 반영 — ${changes.slice(0, 3).join(" · ")}${changes.length > 3 ? " …" : ""}`, kind: "ok" });
   };
 
+  /**
+   * Word·한글(또는 어떤 산출방법서든)을 고쳐 올리면 바뀐 값만 지금 조건에 넣는다 — [열기] 처럼 조건을 통째로 바꾸지 않는다.
+   * 표준 산출방법서면 식·주석·절까지, 아니면 표·본문 규칙으로 읽은 값만.
+   */
+  const applyFile = async (file: File) => {
+    if (syntaxErrors.length) { setToast({ text: `조건 파일 ${syntaxErrors[0].line}번째 줄 오류를 먼저 고쳐 주세요`, kind: "err" }); return; }
+    try {
+      setToast({ text: `${file.name} 읽는 중…`, kind: "ok" });
+      const doc = await extractDoc(file.name, new Uint8Array(await file.arrayBuffer()));
+      const back = parseMethodDoc(doc, { fallbackName: parsed.spec.meta.productName });
+      const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence);
+      if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
+      setOriginal({ name: file.name, doc, evidence: back.evidence, missing: back.missing });
+      setWordLog({ name: file.name, format: back.format, changes });
+      setTab("word"); showPane("doc");
+      if (!changes.length) { setToast({ text: `${file.name} — 조건과 다른 값이 없습니다`, kind: "warn" }); return; }
+      setYaml(patchYaml(yaml, spec));
+      setToast({ text: `${file.name} — 조건 ${changes.length}건 반영${back.format ? "" : " (표준 양식이 아니어서 값만)"}`, kind: "ok" });
+    } catch (e) {
+      setToast({ text: errText(e), kind: "err" });
+    }
+  };
+
+  /** 표준 산출방법서 한글 파일 — public/standards 에 있으면 받는다(없으면 .docx 를 한글에서 저장하도록 안내) */
+  const downloadHwpx = async (name: string) => {
+    try {
+      const r = await fetch(`/standards/${encodeURIComponent(name)}.hwpx`);
+      if (!r.ok) throw new Error();
+      download(`${name}.hwpx`, new Uint8Array(await r.arrayBuffer()), "application/hwp+zip");
+    } catch {
+      setToast({ text: `${name}.hwpx 가 아직 없습니다 — .docx 를 한글에서 열어 [다른 이름으로 저장 → HWPX] 하세요`, kind: "warn" });
+    }
+  };
+
+  /** 그림에서 옮겨 적은 글 → 조건. [열기] 와 같이 조건을 새로 만든다 */
+  const onVisionDone = (doc: ExtractedDoc, pages: string[], usd: number) => {
+    const name = vision!.file.name;
+    const { yaml: y, original: o } = fromDoc(name, doc);
+    o.images = pages;
+    if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
+    setVision(null);
+    setYaml(y); setSaved(y); setOriginal(o);
+    setLatex({ text: "", dirty: false }); setMd({ text: "", dirty: false });
+    setTab("original"); showPane("doc"); setLeftSel([]); setRightSel([]);
+    setToast({ text: `${name} — 그림 ${pages.length}쪽을 옮겨 적어 조건 ${o.evidence.length}개를 읽었습니다 · 쓴 비용 약 $${usd.toFixed(3)} — 쪽 그림과 대조하세요`, kind: "ok" });
+  };
+
   const print = () => { setTab("doc"); showPane("doc"); setTimeout(() => window.print(), 150); };
 
   const s = parsed.spec;
-  const tabs: [Tab, string][] = [["doc", "산출방법서"], ["latex", `LaTeX${latex.dirty ? " ●" : ""}`], ["markdown", `Markdown${md.dirty ? " ●" : ""}`],
+  const tabs: [Tab, string][] = [["doc", "산출방법서"], ["latex", `LaTeX${latex.dirty ? " ●" : ""}`], ["markdown", `Markdown${md.dirty ? " ●" : ""}`], ["word", "Word·한글"],
     ...(original ? [["original", `원문 · ${original.name}`] as [Tab, string]] : [])];
   const top = visible("cond") || visible("doc");
   const nTables = specT.rates.filter((r) => r.table).length;
@@ -281,7 +340,7 @@ export default function Studio() {
           ))}
         </div>
         <button className="btn-primary" onClick={() => fileInput.current?.click()}>열기</button>
-        <input ref={fileInput} type="file" accept={`${ACCEPT},.csv,.tsv,.xlsx`} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
+        <input ref={fileInput} aria-label="열 파일" type="file" accept={`${ACCEPT},.csv,.tsv,.xlsx`} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
         <details className="menu">
           <summary className="btn">샘플 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
@@ -293,12 +352,28 @@ export default function Studio() {
           </div>
         </details>
         <details className="menu">
+          <summary className="btn">표준 양식 ▾</summary>
+          <div className="menu-list right-0" onClick={closeMenu}>
+            <p className="menu-head">표준 산출방법서 — 상품별 견본 (Word · 한글)</p>
+            {STANDARDS.map((x) => [
+              <button key={`${x.id}-d`} onClick={() => download(`${standardFile(x)}.docx`, toStandardDocx(standardSpec(x)), DOCX_MIME)}>{standardFile(x)}.docx<small>{x.hint}</small></button>,
+              <button key={`${x.id}-h`} onClick={() => void downloadHwpx(standardFile(x))}>{standardFile(x)}.hwpx<small>한글</small></button>,
+            ])}
+            <p className="menu-head">지금 조건으로</p>
+            <button onClick={() => exporters.docx(specT)}>Word .docx — 표준 양식으로 내려받기<small>Word·한글에서 고친 뒤 아래로 올립니다</small></button>
+            <button onClick={() => mergeInput.current?.click()}>고친 Word·한글 올려 조건에 반영<small>바뀐 값·식·주석만 들어갑니다 (조건 주석 유지)</small></button>
+          </div>
+        </details>
+        <input ref={mergeInput} aria-label="고쳐 반영할 파일" type="file" accept={ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void applyFile(f); e.target.value = ""; }} />
+        <details className="menu">
           <summary className="btn">내보내기 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">조건 (다른 앱에서 읽기)</p>
             <button onClick={() => exporters.yaml(yaml, s)}>조건 파일 .yaml</button>
             <button onClick={() => exporters.json(specT)}>MethodSpec .json<small>자유설계보험(flexible_insurance) 등 다른 앱 입력 · 위험률 표 {nTables}개 포함</small></button>
             <p className="menu-head">산출방법서</p>
+            <button onClick={() => exporters.docx(specT)}>Word .docx<small>표준 산출방법서 — 한글에서도 열림 · 작성 안내 포함</small></button>
+            <button onClick={() => exporters.docx(specT, false)}>Word .docx (작성 안내 없이)<small>출력·제출용</small></button>
             <button onClick={() => exporters.tex(sections, title, s)}>LaTeX .tex<small>xelatex 로 조판 (kotex)</small></button>
             <button onClick={() => exporters.md(sections, title, s)}>Markdown .md</button>
             <button onClick={() => exporters.html(sections, title, s)}>HTML .html<small>수식 포함 단독 파일</small></button>
@@ -339,7 +414,7 @@ export default function Studio() {
               <section className="print-block flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="no-print flex items-center gap-1 border-b border-border bg-white px-2 pt-1.5">
                   {tabs.map(([t, label]) => (
-                    <button key={t} onClick={() => setTab(t)} className={`tab ${tab === t ? "tab-on" : ""}`}>{label}</button>
+                    <button key={t} onClick={() => setTab(t)} className={`tab ${t === "original" ? "tab-shrink" : ""} ${tab === t ? "tab-on" : ""}`}>{label}</button>
                   ))}
                   <span className="flex-1" />
                   <span className="pb-1">{tools("doc")}</span>
@@ -379,8 +454,50 @@ export default function Studio() {
                     </div>
                   );
                 })()}
+                {tab === "word" && (
+                  <div className="thin-scroll min-h-0 flex-1 overflow-auto bg-white px-6 py-5 text-sm leading-7">
+                    <h3 className="mb-1 text-base font-bold">Word·한글로 고치기 — 표준 산출방법서</h3>
+                    <ol className="word-steps">
+                      <li><b>내려받기</b> — 지금 조건을 표준 산출방법서(.docx)로 받습니다. 한글에서도 열리고, [다른 이름으로 저장 → HWPX] 하면 한글 문서가 됩니다.</li>
+                      <li><b>고치기</b> — 표의 값·행, <code>[식]</code> 아래 식 줄, <code>※</code> 설명을 고칩니다. 절 제목과 표 머리글은 그대로 둡니다. 식은 <code>l_{"{x+t}"}</code> 처럼 적거나 Word·한글 수식 편집기로 넣습니다.</li>
+                      <li><b>올리기</b> — 바뀐 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서 v1</code> 행이 있으면 식·주석·절까지, 없으면 값만 읽습니다.</li>
+                      <li><b>출력</b> — Word(작성 안내 없이) 또는 PDF(인쇄 → PDF 저장, 수식이 조판되어 나옵니다).</li>
+                    </ol>
+                    <div className="my-3 flex flex-wrap gap-2">
+                      <button className="btn-primary" onClick={() => exporters.docx(specT)}>Word 내려받기</button>
+                      <button className="btn-primary" onClick={() => mergeInput.current?.click()}>고친 Word·한글 올리기 → 조건에 반영</button>
+                      <button className="btn" onClick={() => exporters.docx(specT, false)}>Word (작성 안내 없이)</button>
+                      <button className="btn" onClick={print}>PDF 저장</button>
+                    </div>
+                    {wordLog && (
+                      <div className={`word-log ${wordLog.changes.length ? "" : "word-log-none"}`}>
+                        <b>{wordLog.name}</b> — {wordLog.format ? `${wordLog.format} 로 읽음 (식·주석·절 포함)` : "표준 양식이 아님 — 표·본문 규칙으로 읽은 값만"}
+                        {wordLog.changes.length
+                          ? <ul>{wordLog.changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
+                          : <p>조건과 다른 값이 없습니다.</p>}
+                        <p className="text-xs text-muted-foreground">어디서 읽었는지는 [원문] 탭에서 봅니다.</p>
+                      </div>
+                    )}
+                    <h4 className="mt-4 font-bold">상품별 표준 산출방법서</h4>
+                    <table className="word-std">
+                      <tbody>
+                        {STANDARDS.map((x) => (
+                          <tr key={x.id}>
+                            <td><b>{standardFile(x)}</b><br /><small className="text-muted-foreground">{x.hint}</small></td>
+                            <td className="whitespace-nowrap">
+                              <button className="btn" onClick={() => download(`${standardFile(x)}.docx`, toStandardDocx(standardSpec(x)), DOCX_MIME)}>Word</button>{" "}
+                              <button className="btn" onClick={() => void downloadHwpx(standardFile(x))}>한글</button>{" "}
+                              <button className="btn" onClick={() => loadSample(x.yaml)}>조건 열기</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 {tab === "original" && original && (
-                  <div className="min-h-0 flex-1"><OriginalPane original={original} highlight={origHl} follow={follow} onPick={pickAnchors} /></div>
+                  <div className="min-h-0 flex-1"><OriginalPane original={original} highlight={origHl} follow={follow} onPick={pickAnchors}
+                  onVision={original.file ? () => setVision({ file: original.file!, reason: "글자 있는 PDF 를 쪽 그림으로 다시 읽습니다(표가 깨졌거나 수식이 그림일 때)." }) : undefined} /></div>
                 )}
               </section>
             )}
@@ -404,9 +521,10 @@ export default function Studio() {
         <span>자동 저장됨</span>
       </footer>
 
-      {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON — CSV · XLSX 는 위험률 표로</small></div>}
+      {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
       {toast && <div className={`toast toast-${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       {help && <Help onClose={() => setHelp(false)} />}
+      {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
     </div>
   );
 }
@@ -438,9 +556,11 @@ function Help({ onClose }: { onClose: () => void }) {
         <h2>Life_ins_Doc_Convert_Studio 사용법</h2>
         <ol>
           <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M02 계약조건 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다.</li>
-          <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
+          <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
           <li><b>위험률 표</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽습니다. 열마다 [잇기]에서 연령·위험률·성별을 고르면 그 값 표가 산출방법서와 MethodSpec JSON 에 실립니다(남·여 열이 있으면 계약 성별의 열).</li>
           <li><b>수식·기호 견본</b> 산출방법서 탭의 [＋ 수식 더하기]는 견본 식을 조건에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
+          <li><b>그림으로 읽기</b> 스캔 PDF·PNG·JPG 를 열면 쪽을 골라 본인의 Anthropic API 키로 보냅니다. AI 는 쪽을 글로 옮겨 적기만 하고 값은 앱의 규칙이 읽습니다. 글자 있는 PDF 도 [원문] 탭에서 [그림으로 다시 읽기] 할 수 있습니다.</li>
+          <li><b>Word·한글로 고치기</b> [Word·한글] 탭이나 [표준 양식] 메뉴에서 표준 산출방법서(.docx · .hwpx)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다. [열기]로 올리면 조건 전체를 새로 만듭니다.</li>
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
           <li><b>대응 위치</b> 왼쪽 칸·줄을 고르면 오른쪽에서 그 조건이 만든 곳(표의 행·수식·원문 근거·위험률 표의 열)이 노랗게, 오른쪽을 누르면 왼쪽 칸이 표시됩니다.</li>
           <li><b>화면 조절</b> 창 사이 막대를 끌어 크기를 바꾸고(두 번 누르면 처음 비율), 창마다 [⤢ 전체]·[– 숨기기], 위 [보기]에서 다시 켭니다.</li>

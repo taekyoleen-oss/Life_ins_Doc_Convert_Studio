@@ -13,10 +13,12 @@ interface Props {
   follow: boolean;
   /** 원문에서 고른 자리들 (클릭이면 scroll=true) */
   onPick: (anchors: Set<string>, scroll: boolean) => void;
+  /** 글자 있는 PDF 를 그림으로 다시 읽기(AI) — 표가 깨졌거나 수식이 그림일 때 */
+  onVision?: () => void;
 }
 
-export default function OriginalPane({ original, highlight, follow, onPick }: Props) {
-  const [view, setView] = useState<"text" | "pdf">("text");
+export default function OriginalPane({ original, highlight, follow, onPick, onVision }: Props) {
+  const [view, setView] = useState<"text" | "pdf" | "pages">("text");
   const box = useRef<HTMLDivElement | null>(null);
   const { doc, evidence } = original;
 
@@ -46,16 +48,22 @@ export default function OriginalPane({ original, highlight, follow, onPick }: Pr
         <span className="text-muted-foreground">문단 {doc.paragraphs.length} · 표 {doc.tables.length} · 읽은 항목 {evidence.length}</span>
         {original.missing.length > 0 && <span className="rounded bg-amber-100 px-1.5 text-amber-800">못 찾음: {original.missing.join(", ")}</span>}
         <span className="flex-1" />
-        {original.pdfUrl && (
+        {onVision && original.file && !original.images && <button className="btn" onClick={onVision} title="표가 깨졌거나 수식이 그림이면 쪽 그림을 AI 로 옮겨 적어 다시 읽습니다">그림으로 다시 읽기 (AI)</button>}
+        {(original.pdfUrl || original.images) && (
           <div className="flex overflow-hidden rounded border border-border">
-            {(["text", "pdf"] as const).map((v) => (
-              <button key={v} onClick={() => setView(v)} className={`px-2 py-0.5 ${view === v ? "bg-primary text-white" : "bg-white"}`}>{v === "text" ? "추출 텍스트" : "PDF 원본"}</button>
+            {(["text", original.images ? "pages" : "pdf"] as const).map((v) => (
+              <button key={v} onClick={() => setView(v)} className={`px-2 py-0.5 ${view === v ? "bg-primary text-white" : "bg-white"}`}>{v === "text" ? (original.images ? "옮겨 적은 글" : "추출 텍스트") : v === "pages" ? "쪽 그림" : "PDF 원본"}</button>
             ))}
           </div>
         )}
       </div>
       {view === "pdf" && original.pdfUrl ? (
         <iframe src={original.pdfUrl} className="min-h-0 flex-1 bg-white" title={original.name} />
+      ) : view === "pages" && original.images ? (
+        <div className="orig-pages thin-scroll min-h-0 flex-1 overflow-auto bg-muted p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- 보낸 쪽 그림(data URL) */}
+          {original.images.map((src, i) => <img key={i} src={src} alt={`${i + 1}번째 쪽`} />)}
+        </div>
       ) : (
         <div ref={box} className="thin-scroll min-h-0 flex-1 overflow-auto bg-white px-4 py-3 text-[13px] leading-6">
           {doc.warnings.length > 0 && <p className="mb-2 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">{doc.warnings.join(" ")}</p>}
