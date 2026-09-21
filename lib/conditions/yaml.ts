@@ -1,8 +1,8 @@
 import { Document, isCollection, isMap, isNode, isScalar, isSeq, LineCounter, parseDocument, stringify, type Node } from "yaml";
 import { parseRate, parseTimes } from "../methoddoc/parse";
 import {
-  emptySpec, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
-  type BenefitSpec, type Evidence, type ExpenseItem, type MethodSpec, type RateRef, type RateRole,
+  emptySpec, hasProduct, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
+  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole,
 } from "../methoddoc/spec";
 
 /**
@@ -45,6 +45,11 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
   const b = spec.basis;
   const view: Record<string, unknown> = {
     meta: clean({ productName: spec.meta.productName, insurer: spec.meta.insurer, kind: spec.meta.kind, version: spec.meta.version, date: spec.meta.date, note: spec.meta.note }),
+    product: hasProduct(spec.product) ? clean({
+      category: spec.product.category, types: spec.product.types,
+      terms: spec.product.terms?.map((r) => clean({ label: r.label, term: r.term, pay: r.pay, age: r.age, ageF: r.ageF })),
+      payFreqs: spec.product.payFreqs, sumLimit: spec.product.sumLimit, renewal: spec.product.renewal,
+    }) : undefined,
     contract: clean({ ...spec.contract }),
     basis: clean({
       interest: b.interest !== undefined ? pct(b.interest) : undefined,
@@ -89,6 +94,8 @@ function styleFlow(doc: Document) {
   };
   flowItems(["expenses"]);
   flowItems(["basis", "lapse"]);
+  flowItems(["product", "terms"]);
+  for (const key of ["types", "payFreqs"]) { const s = doc.getIn(["product", key], true); if (isSeq(s)) s.flow = true; }
   const bens = doc.getIn(["benefits"], true);
   if (isSeq(bens)) for (const b of bens.items) {
     if (!isMap(b)) continue;
@@ -132,6 +139,21 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
 
   spec.meta = { productName: str(m.productName) ?? "" };
   for (const k of ["insurer", "kind", "version", "date", "note"] as const) if (str(m[k])) spec.meta[k] = str(m[k]);
+
+  // 가입 조건 — 원문 표기 그대로 글자로 둔다. 빈 행(입력 화면에서 막 더한 것)은 건너뛴다
+  const pr = obj(raw.product);
+  const strs = (v: unknown) => arr(v).map(str).filter((s): s is string => !!s);
+  const product: ProductInfo = {};
+  if (str(pr.category)) product.category = str(pr.category);
+  if (strs(pr.types).length) product.types = strs(pr.types);
+  const terms = arr(pr.terms).map(obj).map((r): EntryRow => ({
+    ...(str(r.label) ? { label: str(r.label) } : {}), term: str(r.term) ?? "", pay: str(r.pay) ?? "", age: str(r.age) ?? "",
+    ...(str(r.ageF) ? { ageF: str(r.ageF) } : {}),
+  })).filter((r) => r.label || r.term || r.pay || r.age || r.ageF);
+  if (terms.length) product.terms = terms;
+  if (strs(pr.payFreqs).length) product.payFreqs = strs(pr.payFreqs);
+  for (const k of ["sumLimit", "renewal"] as const) if (str(pr[k])) product[k] = str(pr[k]);
+  if (hasProduct(product)) spec.product = product;
 
   for (const k of ["age", "termYears", "termAge", "payYears", "payAge", "sumAssured"] as const) { const v = num(c[k]); if (v !== undefined) spec.contract[k] = v; }
   const sex = str(c.sex);
@@ -244,6 +266,12 @@ export function jsonToSpec(text: string): MethodSpec {
 // ── 산출방법서를 고쳐 되읽은 값을 조건 파일에 반영 ──────────────────────────
 export interface MergeResult { spec: MethodSpec; changes: string[] }
 
+/** 가입 조건 비교용 — 칸 순서가 달라도 같은 내용이면 같다 */
+const productKey = (p?: ProductInfo) => JSON.stringify(p ? {
+  category: p.category, types: p.types, payFreqs: p.payFreqs, sumLimit: p.sumLimit, renewal: p.renewal,
+  terms: p.terms?.map((r) => ({ label: r.label, term: r.term, pay: r.pay, age: r.age, ageF: r.ageF })),
+} : null);
+
 /**
  * 되읽은 스펙(parsed)에서 근거가 있는 값만 지금 조건(current)에 덮는다.
  * 위험률은 이름으로 짝지어 id·값 표를 지키고, 담보가 가리키는 id 도 그에 맞춰 옮긴다.
@@ -262,6 +290,10 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
   };
   setIf("meta.productName", (s) => s.meta.productName || undefined, (s, v) => { s.meta.productName = v; });
   setIf("meta.kind", (s) => s.meta.kind, (s, v) => { s.meta.kind = v; });
+  if (took.has("product") && hasProduct(parsed.product) && productKey(out.product) !== productKey(parsed.product)) {
+    changes.push(`product: 가입 조건 ${out.product?.terms?.length ?? 0}행 → ${parsed.product.terms?.length ?? 0}행 갱신`);
+    out.product = parsed.product;
+  }
   for (const k of ["age", "sex", "termYears", "termAge", "payYears", "freq", "sumAssured"] as const) {
     setIf(`contract.${k}`, (s) => s.contract[k], (s, v) => { (s.contract as Record<string, unknown>)[k] = v; });
   }
@@ -334,7 +366,7 @@ export interface YamlEdit { path: YamlPath; value?: unknown; add?: boolean }
 export const pathKey = (p: YamlPath) => p.map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k)).join("");
 
 /** 새로 만드는 항목 중 한 줄로 두는 것 — specToYaml 의 styleFlow 와 같은 관례 */
-const FLOW = /^(expenses|basis\.lapse)\[\d+\]$|\.(exitRateIds|steps|points)(\[\d+\])?$/;
+const FLOW = /^(expenses|basis\.lapse|product\.terms)\[\d+\]$|\.(exitRateIds|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$/;
 function markFlow(node: unknown, key: string) {
   if (!isCollection(node)) return;
   if (FLOW.test(key)) node.flow = true;

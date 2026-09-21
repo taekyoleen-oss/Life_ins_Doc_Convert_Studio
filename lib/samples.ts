@@ -39,7 +39,16 @@ export const SAMPLES: Sample[] = [
 meta:
   productName: 종신보험
   kind: 표준형(완전 환급)
-contract:
+product:              # 가입 조건 — 산출방법서에 싣는 판매 범위(정보). 산출은 아래 contract 한 점으로 한다
+  category: 생명보험 / 종신
+  types: [표준형(완전 환급)]
+  terms:              # 보험기간 · 보험료 납입기간 · 가입나이 (사업방법서 표와 같은 모양)
+    - { term: 110세만기, pay: 10·15·20년납, age: 만15세 ~ 65세 }
+    - { term: 110세만기, pay: 30년납, age: 만15세 ~ 50세 }
+  payFreqs: [월납, 연납]
+  sumLimit: 1천만원 ~ 10억원
+  renewal: 비갱신형
+contract:             # 시산 기준 — 보험료·책임준비금을 실제로 계산하는 계약 한 점
   age: 40             # 가입나이
   sex: M              # M 남 / F 여
   termYears: 71       # 보험기간(년) — 110세 만기면 110 − 40 + 1
@@ -69,6 +78,13 @@ ${NOTES}
   { id: "twoMajor", label: "2대질병 진단보험 (80세 만기)", hint: "진단형 — 사망과 진단이 함께 탈퇴", yaml: `meta:
   productName: 2대질병 진단보험
   kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 건강(진단)
+  terms:
+    - { term: 80세만기, pay: 10·15·20년납, age: 만15세 ~ 60세 }
+  payFreqs: [월납]
+  sumLimit: 1천만원 ~ 5천만원
+  renewal: 비갱신형
 contract:
   age: 40
   sex: M
@@ -100,6 +116,13 @@ ${NOTES}
   { id: "noRefund", label: "무해지환급형 암보험 (해지율 3%)", hint: "저해지·무해지 — 해지율과 환급률", yaml: `meta:
   productName: 무해지환급형 암보험
   kind: 무해지환급형
+product:
+  category: 생명보험 / 건강(암)
+  types: [1종(무해지환급형), 2종(표준형)]
+  terms:
+    - { term: 100세만기, pay: 10·20·30년납, age: 만15세 ~ 65세, ageF: 만15세 ~ 70세 }
+  payFreqs: [월납, 연납]
+  renewal: 비갱신형
 contract:
   age: 40
   sex: M
@@ -135,6 +158,12 @@ ${NOTES}
   { id: "waiverSupport", label: "보험료납입지원 3대질병", hint: "추가 납입면제 사유 — 80% 이상 장해", yaml: `meta:
   productName: 보험료납입지원 적용 3대질병보험
   kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 건강(진단)
+  terms:
+    - { label: 주계약, term: 80세만기, pay: 20년납, age: 만15세 ~ 60세 }
+    - { label: 보험료납입지원, term: 80세만기, pay: 20년납, age: 만15세 ~ 60세 }
+  payFreqs: [월납]
 contract:
   age: 40
   sex: M

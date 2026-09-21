@@ -184,26 +184,108 @@ function Card({ c, index, open, onToggle, move, remove }: { c: CardDef; index: n
 }
 
 // ── 카드 본문 ────────────────────────────────────────────────────────────────
+const PAY_FREQS = ["월납", "2개월납", "3개월납", "6개월납", "연납", "일시납"];
+/** "만15세 ~ 65세" → [15, 65]. "(80-납입기간)세" 처럼 식이면 null */
+const ageRange = (s: string): [number, number] | null => {
+  const m = /(\d+)\s*세?\s*[~∼～-]\s*(\d+)\s*세/.exec(s);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+};
+
 function ProductBody() {
+  const f = useForm();
+  const terms = list(f.get(["product", "terms"]));
+  const freqs = ((f.get(["product", "payFreqs"]) as unknown[] | undefined) ?? []).map(String);
+  const types = (f.get(["product", "types"]) as unknown[] | undefined) ?? [];
+  const female = terms.some((r) => str(r.ageF));
+  const setFreq = (x: string, on: boolean) => {
+    const next = [...PAY_FREQS.filter((k) => (k === x ? on : freqs.includes(k))), ...freqs.filter((k) => !PAY_FREQS.includes(k))];
+    f.set(["product", "payFreqs"], next.length ? next : undefined);
+  };
+  /** M02 시산 기준에서 한 줄 — 판매 범위를 적는 출발점 */
+  const fromContract = () => {
+    const c = (k: string) => num(f.get(["contract", k]));
+    const years = c("termYears"), end = years && c("age") !== undefined ? c("age")! + years - 1 : undefined;
+    // 만기 나이가 80·90·100세처럼 떨어지면 세만기, 아니면 년만기로 적는다 — 가입나이 범위는 사람이 적는다
+    const term = c("termAge") ? `${c("termAge")}세만기` : end && end >= 60 && end % 5 === 0 ? `${end}세만기` : years ? `${years}년만기` : "";
+    f.edit([{ path: ["product", "terms"], add: true, value: { term, pay: c("payYears") ? `${c("payYears")}년납` : "", age: "" } }]);
+  };
   return (
-    <Grid>
-      <F p={["meta", "productName"]} label="상품 이름" wide placeholder="예: 2대질병 진단보험" />
-      <F p={["meta", "insurer"]} label="회사" />
-      <F p={["meta", "kind"]} label="종류" dl="dl-kind" placeholder="표준형(완전 환급)" />
-      <F p={["meta", "version"]} label="판" />
-      <F p={["meta", "date"]} label="작성일" placeholder="비우면 오늘" />
-      <F p={["meta", "note"]} label="비고" kind="area" wide />
-    </Grid>
+    <div className="space-y-3">
+      <Grid>
+        <F p={["meta", "productName"]} label="상품 이름" wide placeholder="예: 2대질병 진단보험" />
+        <F p={["meta", "insurer"]} label="회사" />
+        <F p={["meta", "kind"]} label="종류" dl="dl-kind" placeholder="표준형(완전 환급)" />
+        <F p={["meta", "version"]} label="판" />
+        <F p={["meta", "date"]} label="작성일" placeholder="비우면 오늘" />
+        <F p={["meta", "note"]} label="비고" kind="area" wide />
+      </Grid>
+      <div data-path="product" className="sub space-y-3">
+        <p className="sub-title">가입 조건 <span>산출방법서 개요에 싣는 판매 범위(정보). 보험료는 M02 시산 기준 한 점으로 계산합니다.</span></p>
+        <Grid>
+          <F p={["product", "category"]} label="보험의 종류" dl="dl-category" placeholder="예: 생명보험 / 종신" />
+          <F p={["product", "renewal"]} label="갱신" dl="dl-renewal" placeholder="예: 비갱신형" />
+          <F p={["product", "sumLimit"]} label="보험가입금액 한도" wide placeholder="예: 1천만원 ~ 10억원" />
+        </Grid>
+        <div data-path="product.types">
+          <p className="fld-label">보험종목</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {types.map((_, i) => (
+              <span key={i} className="flex w-52 items-center gap-0.5">
+                <F p={["product", "types", i]} label="보험종목" bare keepEmpty placeholder="예: 1종(무해지환급형)" />
+                <Remove onClick={() => f.edit([{ path: ["product", "types", i] }])} />
+              </span>
+            ))}
+            <button type="button" className="btn" onClick={() => f.edit([{ path: ["product", "types"], add: true, value: "" }])}>＋ 종목</button>
+          </div>
+        </div>
+        <div data-path="product.payFreqs">
+          <p className="fld-label">보험료 납입주기</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {PAY_FREQS.map((x) => (
+              <label key={x} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
+                <input type="checkbox" className="accent-[var(--primary)]" checked={freqs.includes(x)} onFocus={() => f.select("product.payFreqs")} onChange={(e) => setFreq(x, e.target.checked)} />
+                {x}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div data-path="product.terms">
+          <p className="fld-label">보험기간 · 보험료 납입기간 · 가입나이</p>
+          <div className="term-grid mt-1 text-[11px] text-muted-foreground"><span>구분</span><span>보험기간</span><span>납입기간</span><span>{female ? "가입나이(남)" : "가입나이"}</span><span>가입나이(여)</span><span /></div>
+          {terms.map((_, i) => (
+            <div key={i} data-path={`product.terms[${i}]`} className="term-grid mt-1">
+              <F p={["product", "terms", i, "label"]} label="구분" bare placeholder="(전체)" />
+              <F p={["product", "terms", i, "term"]} label="보험기간" bare dl="dl-term" placeholder="80세만기" />
+              <F p={["product", "terms", i, "pay"]} label="납입기간" bare dl="dl-paylist" placeholder="10·20년납" />
+              <F p={["product", "terms", i, "age"]} label="가입나이" bare dl="dl-agerange" placeholder="만15세 ~ 60세" />
+              <F p={["product", "terms", i, "ageF"]} label="가입나이(여)" bare dl="dl-agerange" placeholder="(남자와 같음)" />
+              <Remove onClick={() => f.edit([{ path: ["product", "terms", i] }])} />
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <Add onClick={() => f.edit([{ path: ["product", "terms"], add: true, value: { term: "", pay: "", age: "" } }])}>＋ 행</Add>
+            <Add onClick={fromContract}>M02 시산 기준으로 한 줄</Add>
+          </div>
+          <p className="fld-hint mt-1">사업방법서의 판매 범위 표처럼 적습니다 — 예: 80세만기 · 10·15·20년납 · 만15세 ~ (80-납입기간)세. 구분은 담보·종목마다 다를 때만, 여자 칸은 남자와 다를 때만.</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function ContractBody() {
   const f = useForm();
   const age = num(f.get(["contract", "age"])), term = num(f.get(["contract", "termYears"])), sum = num(f.get(["contract", "sumAssured"]));
+  // 가입 조건(M01)의 가입나이 범위 밖이면 알린다 — "(80-납입기간)세" 같은 식은 건너뛴다
+  const female = f.get(["contract", "sex"]) === "F";
+  const ranges = list(f.get(["product", "terms"])).map((r) => ageRange(str(female && r.ageF ? r.ageF : r.age))).filter((x): x is [number, number] => !!x);
+  const outside = age !== undefined && ranges.length > 0 && !ranges.some(([a, b]) => age >= a && age <= b);
   return (
     <Grid>
+      <p className="fld-hint col-span-2">시산 기준 — 이 계약 한 점으로 보험료·책임준비금을 계산합니다(산출방법서의 &ldquo;기준: 남자 40세, 20년납 …&rdquo;). 판매 범위는 M01 가입 조건에 적습니다.</p>
       <Sel p={["contract", "sex"]} label="성별" options={[["M", "남"], ["F", "여"]]} hint="피보험자 — 위험률 표는 이 성별의 열을 씁니다" />
-      <F p={["contract", "age"]} label="가입나이" kind="num" unit="세" />
+      <F p={["contract", "age"]} label="가입나이" kind="num" unit="세"
+        hint={outside ? <span className="text-amber-700">가입 조건의 가입나이({ranges.map(([a, b]) => `${a}~${b}세`).join(", ")}) 밖입니다</span> : undefined} />
       <F p={["contract", "termYears"]} label="보험기간" kind="num" unit="년" hint={age !== undefined && term ? `${age + term - 1}세 만기` : "비우면 만기 나이로"} />
       <F p={["contract", "termAge"]} label="만기 나이" kind="num" unit="세" hint="보험기간 대신 적을 때" />
       <F p={["contract", "payYears"]} label="납입기간" kind="num" unit="년납" dl="dl-pay" />
@@ -549,15 +631,17 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, o
 
   const errM01 = bad(/^meta\./), errM02 = bad(/^contract\.|납입기간/), errM03 = bad(/^basis\.(?!waiver)|해지율/), errM06 = bad(/^사업비/);
   const cards: CardDef[] = [
-    { id: "M01", code: "M01", title: "상품 기본정보", paths: ["meta"], status: status(errM01, !!str(m.productName)), message: errM01,
-      summary: [str(m.productName) || "이름 없음", str(m.kind)],
-      help: "상품 이름·종류·작성일입니다. 산출방법서 표지(개요 표)에 들어갑니다.", body: <ProductBody /> },
-    { id: "M02", code: "M02", title: "계약조건", paths: ["contract"],
+    { id: "M01", code: "M01", title: "상품 기본정보", paths: ["meta", "product"], status: status(errM01, !!str(m.productName)), message: errM01,
+      summary: [str(m.productName) || "이름 없음", str(m.kind), sp.product?.terms?.length ? `가입 조건 ${sp.product.terms.length}행` : "",
+        sp.product?.payFreqs?.join("·") ?? ""],
+      help: "상품 이름·종류·작성일과 가입 조건(보험의 종류·보험종목·보험기간·납입기간·가입나이·납입주기·가입금액 한도·갱신)입니다. 가입 조건은 사업방법서의 판매 범위 표처럼 적어 산출방법서 개요에 싣는 정보이고, 보험료는 M02 시산 기준 한 점으로 계산합니다.",
+      body: <ProductBody /> },
+    { id: "M02", code: "M02", title: "계약조건 · 시산 기준", paths: ["contract"],
       status: status(errM02, num(c.age) !== undefined && !!str(c.sex) && (num(c.termYears) ?? num(c.termAge)) !== undefined && (num(c.payYears) ?? num(c.payAge)) !== undefined), message: errM02,
       summary: [sp.contract.age !== undefined ? `${sp.contract.age}세 ${sp.contract.sex === "F" ? "여" : "남"}` : "",
         `${sp.contract.termYears ? `${sp.contract.termYears}년` : sp.contract.termAge ? `${sp.contract.termAge}세` : "?"} 만기 / ${sp.contract.payYears ?? "?"}년납`,
         FREQS.find(([v]) => v === sp.contract.freq)?.[1] ?? ""],
-      help: "피보험자(성별·가입나이)와 보험기간·납입기간·납입주기입니다. 보험기간은 연수 또는 만기 나이 중 하나만 적어도 됩니다.", body: <ContractBody /> },
+      help: "보험료·책임준비금을 실제로 계산하는 계약 한 점(시산 기준)입니다 — 피보험자(성별·가입나이)와 보험기간·납입기간·납입주기를 하나씩. 보험기간은 연수 또는 만기 나이 중 하나만 적어도 됩니다. 판매 범위(여러 보험기간·가입나이)는 M01 가입 조건에 적습니다.", body: <ContractBody /> },
     { id: "M03", code: "M03", title: "이자율·저해지", paths: ["basis.interest", "basis.standardInterest", "basis.minGuaranteed", "basis.averagePublished", "basis.lapse", "basis.lowRatio"],
       status: status(errM03, sp.basis.interest !== undefined), message: errM03,
       summary: [sp.basis.interest !== undefined ? `i = ${pct(sp.basis.interest)}` : "", sp.basis.standardInterest !== undefined ? `표준 ${pct(sp.basis.standardInterest)}` : "",
@@ -665,6 +749,11 @@ function Lists() {
   return (
     <>
       {dl("dl-kind", ["표준형(완전 환급)", "저해지환급형", "무해지환급형"])}
+      {dl("dl-category", ["생명보험 / 종신", "생명보험 / 정기", "생명보험 / 건강(진단)", "생명보험 / 건강(암)", "장기손해보험 / 장기질병", "장기손해보험 / 장기상해"])}
+      {dl("dl-renewal", ["비갱신형", "갱신형 (10년 갱신)", "갱신형 (20년 갱신)"])}
+      {dl("dl-term", ["80세만기", "90세만기", "100세만기", "110세만기", "종신", "10년만기", "20년만기", "30년만기"])}
+      {dl("dl-paylist", ["전기납", "일시납", "10년납", "20년납", "30년납", "10·15·20년납", "10·20·30년납", "5·10·15·20년납"])}
+      {dl("dl-agerange", ["만15세 ~ 60세", "만15세 ~ 65세", "만15세 ~ 70세", "만15세 ~ (80-납입기간)세", "0세 ~ 60세", "20세 ~ 60세"])}
       {dl("dl-pay", [5, 7, 10, 12, 15, 20, 25, 30])}
       {dl("dl-unit", ["주계약", "특약1", "특약2"])}
       {dl("dl-group", ["계약체결비용", "계약관리비용", "수금비용"])}

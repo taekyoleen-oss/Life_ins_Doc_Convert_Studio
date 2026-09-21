@@ -146,6 +146,21 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(600);
   ok("＋ 진단형 → 카드 C02 와 산출방법서 담보 행", (await p.locator(".card[data-card=C1]").count()) === 1 && (await p.locator(".doc-body tr", { hasText: "담보 2" }).count()) >= 1);
 
+  // 10-1) M01 가입 조건(정보) → 산출방법서 개요 표 · M02 시산 기준과 따로
+  await p.click(".card[data-card=M01] .card-head");
+  await p.locator("[data-path='product.terms[1].age'] input").fill("만15세 ~ 55세");
+  await p.click("[data-path='product.payFreqs'] label:has-text('일시납') input");
+  await p.waitForTimeout(600);
+  const termRow = await p.locator(".doc-body tr", { hasText: "30년납" }).first().textContent();
+  const freqRow = await p.locator(".doc-body tr", { hasText: "보험료 납입주기" }).first().textContent();
+  ok("M01 가입 조건 칸 → 산출방법서 개요 가입 조건 표", termRow.includes("만15세 ~ 55세") && freqRow.includes("일시납"), `${termRow} / ${freqRow}`);
+  ok("시산 기준은 그대로 (피보험자 40세)", (await p.locator(".doc-body tr", { hasText: "피보험자" }).first().textContent()).includes("40세"));
+  await p.locator("[data-path='contract.age'] input").fill("70");
+  await p.waitForTimeout(300);
+  ok("M02 가입나이가 가입 조건 밖이면 알림", (await p.locator("[data-path='contract.age']").textContent()).includes("밖입니다"));
+  await p.locator("[data-path='contract.age'] input").fill("40");
+  await p.screenshot({ path: `${OUT}/s7b_product.png` });
+
   // 11) 위험률 표: CSV → 첫 행 열 이름 → 자동 잇기 → 산출방법서 위험률 표
   const csv = "연령,사망률(남),사망률(여),80% 이상 장해율,암발생률(남)\n40,0.00103,0.00052,0.0012,0.0021\n41,0.00112,0.00056,0.0013,0.0023\n42,0.00121,0.00061,0.0014,0.0025\n";
   await p.setInputFiles("input[accept='.csv,.tsv,.txt,.xlsx,.xls']", { name: "위험률.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });

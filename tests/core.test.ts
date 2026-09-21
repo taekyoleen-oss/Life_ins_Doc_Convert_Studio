@@ -116,6 +116,60 @@ describe("LaTeX", () => {
   });
 });
 
+describe("가입 조건 (정보) ↔ 시산 기준 (계약)", () => {
+  const md = (spec: ReturnType<typeof sample>["spec"]) => docToMarkdown(docOf(spec), spec.meta.productName);
+  it("조건 파일에서 읽고 산출방법서 개요에 두 표로 싣는다 — 남녀가 다르면 가입나이 두 칸", () => {
+    const { spec } = sample("whole");
+    expect(spec.product?.terms).toEqual([
+      { term: "110세만기", pay: "10·15·20년납", age: "만15세 ~ 65세" },
+      { term: "110세만기", pay: "30년납", age: "만15세 ~ 50세" },
+    ]);
+    const cover = docOf(spec)[0].blocks.filter((b) => b.t === "table").map((b) => (b.t === "table" ? b.head : []));
+    expect(cover).toContainEqual(["가입 조건", "내용"]);
+    expect(cover).toContainEqual(["보험기간", "보험료 납입기간", "가입나이"]);
+    const low = docOf(sample("noRefund").spec)[0].blocks.find((b) => b.t === "table" && b.head[0] === "보험기간");
+    expect(low?.t === "table" && low.head).toEqual(["보험기간", "보험료 납입기간", "가입나이(남)", "가입나이(여)"]);
+  });
+  it("LaTeX·Markdown 으로 내고 되읽으면 가입 조건이 그대로이고, 시산 기준(40세)을 흐리지 않는다", () => {
+    for (const s of SAMPLES) {
+      const spec = yamlToSpec(s.yaml).spec;
+      for (const back of [parseMethodDoc(latexToDoc(docToLatex(docOf(spec), spec.meta.productName))), parseMethodDoc(extractText(new TextEncoder().encode(md(spec))))]) {
+        expect(back.spec.product, s.id).toEqual(spec.product);
+        expect(back.spec.contract.age, s.id).toBe(40);
+        expect(back.spec.contract.termAge, s.id).toBeUndefined();
+      }
+    }
+  });
+  it("사업방법서 모양의 표(병합 칸·납입주기 칸)를 가입 조건으로 읽고, 계약으로 읽지 않는다", () => {
+    const doc = extractText(new TextEncoder().encode([
+      "무배당 알뜰건강보험", "",
+      "| 구분 | 보험기간 | 보험료납입기간 | 보험가입나이 | 보험료납입주기 |", "|---|---|---|---|---|",
+      "| 상해사망 | 80세만기 | 10년납 | 만15세 ~ (80-납입기간)세 | 월납 |",
+      "|  |  | 20년납 |  | 연납 |",
+      "| 뇌졸중진단비 | 100세만기 | 20년납 | 0세~60세 | 월납 |",
+    ].join("\n")));
+    const r = parseMethodDoc(doc);
+    expect(r.spec.product).toEqual({
+      terms: [
+        { label: "상해사망", term: "80세만기", pay: "10년납", age: "만15세 ~ (80-납입기간)세" },
+        { label: "상해사망", term: "80세만기", pay: "20년납", age: "만15세 ~ (80-납입기간)세" },
+        { label: "뇌졸중진단비", term: "100세만기", pay: "20년납", age: "0세~60세" },
+      ],
+      payFreqs: ["월납", "연납"],
+    });
+    expect([r.spec.contract.age, r.spec.contract.termAge, r.spec.contract.payYears]).toEqual([undefined, undefined, undefined]);
+  });
+  it("산출방법서에서 가입 조건을 고치면 [조건에 반영]으로 그것만 들어간다", () => {
+    const src = SAMPLES[0].yaml, spec = yamlToSpec(src).spec;
+    const tex = docToLatex(docOf(spec), spec.meta.productName).replace("만15세 \\textasciitilde{} 50세", "만15세 \\textasciitilde{} 55세");
+    const back = parseMethodDoc(latexToDoc(tex));
+    const { spec: merged, changes } = mergeSpec(spec, back.spec, back.evidence);
+    expect(changes).toEqual(["product: 가입 조건 2행 → 2행 갱신"]);
+    expect(merged.product?.terms?.[1].age).toBe("만15세 ~ 55세");
+    expect(patchYaml(src, merged)).toContain("# 가입나이");
+  });
+});
+
 // ── 실제 산출방법서 PDF → 조건 ──────────────────────────────────────────────
 const ROOT = "C:/Users/tklee/OneDrive - 코리안리재보험/0. 보험료 산출 방법서";
 function find(dirFrag: string, fileFrag: string): string {

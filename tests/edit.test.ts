@@ -9,7 +9,7 @@ describe("입력 화면 → 조건 파일 (editYaml)", () => {
   it("값 한 칸은 그 글자만 바꾼다 — 주석·줄 맞춤·다른 줄 그대로", () => {
     const next = editYaml(src, [{ path: ["basis", "interest"], value: "3%" }, { path: ["contract", "age"], value: 45 }]);
     expect(lineWith(next, /interest:/)).toBe("  interest: 3%      # 적용(예정)이율");
-    expect(lineWith(next, /age:/)).toBe("  age: 45             # 가입나이");
+    expect(lineWith(next, /^  age:/)).toBe("  age: 45             # 가입나이");
     const a = src.split("\n"), b = next.split("\n");
     expect(b.length).toBe(a.length);
     expect(b.filter((l, i) => l !== a[i])).toHaveLength(2);
@@ -45,6 +45,15 @@ describe("입력 화면 → 조건 파일 (editYaml)", () => {
     expect(errors).toEqual([]);
     expect(spec.formulas).toEqual([{ section: "보험료의 계산", label: "순보험료", text: "P = A / B" }]);
     expect(lineWith(next, /γ/)?.trim()).toBe("- { group: 수금비용, symbol: γ, basis: 영업보험료, rate: 2% }");
+  });
+  it("가입 조건 행·납입주기도 한 줄로 더한다", () => {
+    const next = editYaml(src, [
+      { path: ["product", "terms"], add: true, value: { term: "90세만기", pay: "20년납", age: "만15세 ~ 60세" } },
+      { path: ["product", "payFreqs"], value: ["월납", "연납", "일시납"] },
+    ]);
+    expect(lineWith(next, /90세만기/)?.trim()).toBe("- { term: 90세만기, pay: 20년납, age: 만15세 ~ 60세 }");
+    expect(lineWith(next, /payFreqs/)).toMatch(/payFreqs: \[ ?월납, 연납, 일시납 ?\]/);
+    expect(yamlToSpec(next).spec.product?.terms).toHaveLength(3);
   });
   it("목록 값을 바꿔도 한 줄 표기와 줄 끝 주석을 이어받는다", () => {
     const next = editYaml(src, [{ path: ["benefits", 0, "exitRateIds"], value: ["q"] }]);
