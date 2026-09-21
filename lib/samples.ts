@@ -1,3 +1,5 @@
+import { parseDocument } from "yaml";
+
 /**
  * 조건 샘플. 사용자가 고쳐 쓰는 견본이라 YAML 글 그대로 둔다(주석이 작성법 안내다).
  * 값은 flexible_insurance 설계기 레시피와 같다 — 두 앱의 산출방법서를 맞대어 볼 수 있게.
@@ -10,6 +12,9 @@ const EXPENSES = `expenses:           # 기호: α_S α_P β_S β_G β′ γ (�
   - { group: 계약관리비용, symbol: β_G, basis: 영업보험료, rate: 4.5%, phase: 납입중 }
   - { group: 계약관리비용, symbol: β′, basis: 매년 보험가입금액, rate: 1/1000, phase: 납입후 }
   - { group: 수금비용, symbol: γ, basis: 영업보험료, rate: 2.5% }`;
+
+/** 입력 화면의 [산출방법서형 6줄 넣기] — 자유설계보험 사업비(α_S·α_P·β_S·β_G·β′·γ)와 같은 기호 */
+export const EXPENSE_PRESET = (parseDocument(EXPENSES).toJS() as { expenses: Record<string, unknown>[] }).expenses;
 
 const NOTES = `surrender:
   deductionYears: 7

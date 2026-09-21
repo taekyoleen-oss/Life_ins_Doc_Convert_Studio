@@ -1,4 +1,4 @@
-import { Document, isMap, isScalar, isSeq, LineCounter, parseDocument, type Node } from "yaml";
+import { Document, isCollection, isMap, isNode, isScalar, isSeq, LineCounter, parseDocument, stringify, type Node } from "yaml";
 import { parseRate, parseTimes } from "../methoddoc/parse";
 import {
   emptySpec, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
@@ -322,5 +322,69 @@ export function patchYaml(src: string, next: MethodSpec): string {
   }
   for (const section of Object.keys(cur)) if (!(section in view)) doc.deleteIn([section]);
   styleFlow(doc);
+  return doc.toString({ lineWidth: 0 });
+}
+
+// ── 입력 화면에서 한 칸씩 고치기 ────────────────────────────────────────────
+export type YamlPath = (string | number)[];
+/** value 가 undefined 면 지운다. add 는 목록 끝에 붙인다 */
+export interface YamlEdit { path: YamlPath; value?: unknown; add?: boolean }
+
+/** ["rates", 0, "name"] → "rates[0].name" (산출방법서 블록·줄 범위와 같은 경로) */
+export const pathKey = (p: YamlPath) => p.map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k)).join("");
+
+/** 새로 만드는 항목 중 한 줄로 두는 것 — specToYaml 의 styleFlow 와 같은 관례 */
+const FLOW = /^(expenses|basis\.lapse)\[\d+\]$|\.(exitRateIds|steps|points)(\[\d+\])?$/;
+function markFlow(node: unknown, key: string) {
+  if (!isCollection(node)) return;
+  if (FLOW.test(key)) node.flow = true;
+  if (isMap(node)) for (const p of node.items) markFlow(p.value, `${key}.${isScalar(p.key) ? String(p.key.value) : String(p.key)}`);
+  else node.items.forEach((it, i) => markFlow(it, `${key}[${i}]`));
+}
+
+/**
+ * 입력 화면이 고친 값을 조건 파일에 넣는다 — 파일을 통째로 다시 쓰지 않는다.
+ * 값 한 칸만 바뀌면 그 글자만 바꿔 끼운다(주석·줄 맞춤·순서 그대로).
+ * 항목을 더하고 지우는 것처럼 모양이 바뀔 때만 문서 트리로 고친다(주석은 남고, 주석 앞 줄 맞춤만 한 칸으로 준다).
+ */
+export function editYaml(src: string, edits: YamlEdit[]): string {
+  try { return edits.reduce(editOne, src); }
+  catch { return src; }         // 맨 위가 목록·글자 같은, 칸으로 고칠 수 없는 파일 — 입력 화면이 먼저 막는다
+}
+
+function editOne(src: string, e: YamlEdit): string {
+  const doc = parseDocument(src);
+  if (doc.errors.length) return src;
+  const del = !e.add && e.value === undefined;
+  const old = doc.getIn(e.path, true);
+  const obj = e.value !== null && typeof e.value === "object";
+  if (!del && !e.add && !obj && isScalar(old) && old.range) {
+    const next = src.slice(0, old.range[0]) + stringify(e.value, { lineWidth: 0 }).trimEnd() + src.slice(old.range[1]);
+    const chk = parseDocument(next);
+    if (!chk.errors.length && chk.getIn(e.path) === e.value) return next;   // 흐름 표기 안의 "a, b" 처럼 깨지면 아래로
+  }
+  if (del) {
+    if (old === undefined) return src;              // 없는 칸 지우기 — 파일을 다시 쓰지 않는다
+    doc.deleteIn(e.path);
+    return doc.toString({ lineWidth: 0 });
+  }
+  // "reserve:" 처럼 비어 있는 윗 항목은 먼저 목록·표로 바꾼다
+  for (let i = 1; i < e.path.length; i++) {
+    const up = doc.getIn(e.path.slice(0, i), true);
+    if (isScalar(up) && up.value === null) doc.setIn(e.path.slice(0, i), doc.createNode(typeof e.path[i] === "number" ? [] : {}));
+  }
+  const node = obj ? doc.createNode(e.value) : e.value;
+  if (e.add) {
+    const list = doc.getIn(e.path, true);
+    if (isSeq(list)) { markFlow(node, pathKey([...e.path, list.items.length])); list.add(node); }
+    else { const seq = doc.createNode([e.value]); markFlow(seq, pathKey(e.path)); doc.setIn(e.path, seq); }   // 첫 항목이면 목록째 만든다
+  } else {
+    markFlow(node, pathKey(e.path));
+    if (isCollection(node) && isNode(old)) {       // 사용자가 둔 모양·주석을 이어받는다
+      if (isCollection(old)) node.flow = old.flow;
+      node.comment = old.comment; node.commentBefore = old.commentBefore;
+    }
+    doc.setIn(e.path, node);
+  }
   return doc.toString({ lineWidth: 0 });
 }

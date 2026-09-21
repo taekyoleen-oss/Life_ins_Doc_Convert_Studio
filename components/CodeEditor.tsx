@@ -35,6 +35,8 @@ const marksField = StateField.define<DecorationSet>({
 
 export interface EditorApi {
   scrollToLine(line: number): void;
+  /** 커서 자리에 글을 넣는다(고른 글은 바꾼다) — 수식·기호 견본 */
+  insert(text: string): void;
 }
 
 interface Props {
@@ -77,6 +79,7 @@ export default function CodeEditor({ value, onChange, language = "plain", mirror
         const line = v.state.doc.line(Math.max(1, Math.min(n, v.state.doc.lines)));
         v.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
       },
+      insert: (text) => { v.dispatch(v.state.replaceSelection(text), { scrollIntoView: true }); v.focus(); },
     };
     return () => { v.destroy(); view.current = null; if (apiRef) apiRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
