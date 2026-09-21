@@ -19,8 +19,17 @@ type Tab = "doc" | "latex" | "markdown" | "original";
 interface Buf { text: string; dirty: boolean }
 type Toast = { text: string; kind: "ok" | "warn" | "err" } | null;
 
-const STORE = "methoddoc:yaml";
-const readStore = () => { try { return localStorage.getItem(STORE); } catch { return null; } };
+const STORE = "life_ins_doc_convert_studio:yaml";
+const OLD_STORE = "methoddoc:yaml";            // 앱 이름을 바꾸기 전 자동 저장 키 — 한 번 옮겨 온다
+const readStore = () => {
+  try {
+    const now = localStorage.getItem(STORE);
+    if (now !== null) return now;
+    const old = localStorage.getItem(OLD_STORE);
+    if (old !== null) { localStorage.setItem(STORE, old); localStorage.removeItem(OLD_STORE); }
+    return old;
+  } catch { return null; }
+};
 const writeStore = (v: string) => { try { localStorage.setItem(STORE, v); } catch { /* 사생활 모드 등 — 자동 저장만 빠진다 */ } };
 
 /** 메뉴 항목을 고르면 <details> 를 닫는다 (그대로 두면 열린 목록이 편집기를 가린다) */
@@ -149,7 +158,7 @@ export default function Studio() {
     <div className="flex h-screen flex-col">
       {/* ── 머리 ── */}
       <header className="no-print flex items-center gap-2 border-b border-border bg-white px-4 py-2">
-        <h1 className="mr-2 font-title text-lg font-bold text-foreground">MethodDoc <span className="text-primary">Studio</span></h1>
+        <h1 className="mr-2 font-title text-lg font-bold text-foreground">Life_ins_Doc_Convert_<span className="text-primary">Studio</span></h1>
         <span className="mr-auto hidden text-xs text-muted-foreground md:inline">산출방법서 ↔ 조건 변환기</span>
         <button className="btn-primary" onClick={() => fileInput.current?.click()}>열기</button>
         <input ref={fileInput} type="file" accept={ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
@@ -246,7 +255,7 @@ function Help({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal-back no-print" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>MethodDoc Studio 사용법</h2>
+        <h2>Life_ins_Doc_Convert_Studio 사용법</h2>
         <ol>
           <li><b>조건 → 산출방법서</b> 왼쪽 조건(YAML)을 고치면 오른쪽 산출방법서가 바로 바뀝니다. 유지자수·납입자수·보험료·준비금 식은 조건에서 자동으로 만듭니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 값 옆 주석이 원문 위치·확신도이고, [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>

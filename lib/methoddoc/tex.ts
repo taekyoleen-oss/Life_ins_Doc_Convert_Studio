@@ -86,7 +86,7 @@ function cellTex(c: string | number): string {
 
 export function docToLatex(sections: DocSection[], title: string, today = new Date()): string {
   const L: string[] = [
-    "% 산출방법서 — MethodDoc Studio 에서 생성. XeLaTeX(kotex)로 조판한다: xelatex 파일.tex",
+    "% 산출방법서 — Life_ins_Doc_Convert_Studio 에서 생성. XeLaTeX(kotex)로 조판한다: xelatex 파일.tex",
     "\\documentclass[10pt,a4paper]{article}",
     "\\usepackage{kotex}",
     "\\usepackage{amsmath,amssymb}",

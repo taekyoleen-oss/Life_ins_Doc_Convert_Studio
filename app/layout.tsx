@@ -9,7 +9,7 @@ const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["lati
 const pretendard = localFont({ src: "../public/fonts/PretendardVariable.woff2", variable: "--font-pretendard", weight: "45 920", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "MethodDoc Studio — 산출방법서 ↔ 조건 변환기",
+  title: "Life_ins_Doc_Convert_Studio — 산출방법서 ↔ 조건 변환기",
   description: "조건(YAML·MethodSpec)을 입력하면 산출방법서가, 산출방법서(PDF·HWP·DOCX·LaTeX)를 넣으면 조건이 만들어집니다.",
 };
 

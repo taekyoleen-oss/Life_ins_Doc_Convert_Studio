@@ -1,4 +1,5 @@
-// MethodDoc Studio 동작 확인 — 선택 연결·파일 열기·LaTeX 반영
+// Life_ins_Doc_Convert_Studio 동작 확인 — 선택 연결·파일 열기·LaTeX 반영
+/* eslint-disable @typescript-eslint/no-require-imports -- node 로 바로 돌리는 CommonJS 스크립트 */
 const path = require("path"), fs = require("fs");
 const PW = path.join(process.env.LOCALAPPDATA, "npm-cache/_npx/9833c18b2d85bc59/node_modules/playwright-core/index.js");
 const CHROME = path.join(process.env.LOCALAPPDATA, "ms-playwright/chromium-1234/chrome-win64/chrome.exe");

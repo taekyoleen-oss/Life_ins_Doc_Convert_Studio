@@ -1,4 +1,7 @@
-# MethodDoc Studio — 에이전트 지침
+# Life_ins_Doc_Convert_Studio — 에이전트 지침
+
+(2026-09-21 까지 이름은 MethodDoc Studio 였다. `lib/methoddoc/`·`MethodSpec`·`parseMethodDoc` 은 앱 이름이 아니라
+flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대로 둔다.)
 
 산출방법서 ↔ 조건 변환 독립 웹앱. 설계: `docs/설계.md`. 서버·DB 없음(localStorage 자동 저장).
 

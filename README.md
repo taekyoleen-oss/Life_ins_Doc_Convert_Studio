@@ -1,4 +1,4 @@
-# MethodDoc Studio — 산출방법서 ↔ 조건 변환기
+# Life_ins_Doc_Convert_Studio — 산출방법서 ↔ 조건 변환기
 
 **조건을 넣으면 산출방법서가, 산출방법서를 넣으면 조건이 나오는** 독립 웹앱.
 왼쪽은 조건(YAML), 오른쪽은 그 조건으로 만든 산출방법서다(mdTeX Studio 와 같은 좌우 구성).
