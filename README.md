@@ -36,16 +36,16 @@ meta:     { productName: 종신보험, kind: 표준형(완전 환급) }
 basis:    { interest: 2.5%, standardInterest: 3.25%, waiver: false }
 rates:
   - { id: q,   name: 제7회 경험생명표 사망률, role: death }
-  - { id: k80, name: 80% 이상 장해율,        role: incidence }
+  - { id: r80, name: 80% 이상 장해율,        role: incidence }
 expenses:
   - { group: 계약체결비용, symbol: α_S, basis: 보험가입금액, rate: 1% }
 benefits:
-  - { id: b1, name: 사망·80% 이상 장해, role: death, amount: 100000000, endAge: 110, exitRateIds: [q, k80] }
+  - { id: b1, name: 사망·80% 이상 장해, role: death, amount: 100000000, endAge: 110, exitRateIds: [q, r80] }
 ```
 
 - 이율 `2.5%`, 사업비 `1.5/1000`, 배수 `1배` 처럼 실무 표기로 쓴다(읽을 때 소수로 바뀐다).
 - 위험률 유형: `death` 사망 · `incidence` 최초발생 · `recurring` 반복지급 · `waiver` 납입면제 · `other`.
-- 탈퇴 사유가 둘이면 유지자수·납입자수는 `l(1 − q − k + q·k/2)` — 따로 둔 납입면제율을 곱하지 않는다.
+- 탈퇴 사유가 둘이면 유지자수·납입자수는 `l(1 − q − r + q·r/2)` — 따로 둔 납입면제율을 곱하지 않는다.
 - 다른 앱과는 **MethodSpec JSON** 으로 주고받는다(`lib/methoddoc/spec.ts`).
 
 ## 구조

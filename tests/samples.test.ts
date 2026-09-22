@@ -78,7 +78,7 @@ describe("04·05·06 조건 파일 · 자유설계보험 JSON · 위험률 표",
     expect(sh.rows).toHaveLength(71);
     expect(autoMap(sh, yamlToSpec(SAMPLES[0].yaml).spec.rates)).toEqual([
       { to: "age" }, { to: "rate", rateId: "q", sex: "M" }, { to: "rate", rateId: "q", sex: "F" },
-      { to: "rate", rateId: "k80", sex: "M" }, { to: "rate", rateId: "k80", sex: "F" },
+      { to: "rate", rateId: "r80", sex: "M" }, { to: "rate", rateId: "r80", sex: "F" },
     ]);
   });
 });

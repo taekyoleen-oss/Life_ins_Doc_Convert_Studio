@@ -41,7 +41,7 @@ describe("스프레드시트 읽기", () => {
 });
 
 describe("열 → 조건 → 산출방법서", () => {
-  const { spec } = yamlToSpec(SAMPLES[0].yaml);   // 종신: q(사망률) · k80(80% 이상 장해율), 남자
+  const { spec } = yamlToSpec(SAMPLES[0].yaml);   // 종신: q(사망률) · r80(80% 이상 장해율), 남자
   const sheet = sheetFromText("붙여넣기", PASTE);
   const map = autoMap(sheet, spec.rates);
 
@@ -50,14 +50,14 @@ describe("열 → 조건 → 산출방법서", () => {
       { to: "age" },
       { to: "rate", rateId: "q", sex: "M" },
       { to: "rate", rateId: "q", sex: "F" },
-      { to: "rate", rateId: "k80" },
+      { to: "rate", rateId: "r80" },
       { to: "skip" },
     ]);
   });
   it("남·여 열은 두 벌 다 싣는다(RateRef.tables) — 자유설계보험이 계약정보 성별로 고른다", () => {
     const st = { sheet, map };
     expect(usedColumns(st, "q")).toEqual({ M: 1, F: 2 });
-    expect(usedColumns(st, "k80")).toEqual({ any: 3 });
+    expect(usedColumns(st, "r80")).toEqual({ any: 3 });
     const m = attachTables(spec, st);
     expect(m.rates[0].tables).toEqual({ M: { ages: [40, 41], values: [0.001, 0.0011] }, F: { ages: [40, 41], values: [0.0005, 0.0006] } });
     expect(m.rates[0].table).toEqual({ ages: [40, 41], values: [0.001, 0.0011], sex: "M" });   // 옛 소비자용 한 벌(남)

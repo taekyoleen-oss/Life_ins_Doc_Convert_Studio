@@ -19,7 +19,7 @@ describe("조건 파일(YAML)", () => {
     expect(spec.basis.interest).toBe(0.025);
     expect(spec.basis.standardInterest).toBe(0.0325);
     expect(spec.expenses.map((e) => e.rate ?? e.times)).toEqual([0.01, 1, 0.0015, 0.045, 0.001, 0.025]);
-    expect(spec.benefits[0].exitRateIds).toEqual(["q", "k80"]);
+    expect(spec.benefits[0].exitRateIds).toEqual(["q", "r80"]);
     expect(sample("noRefund").spec.basis.lowRatio).toBe(0);
   });
   it("조건 경로마다 줄 번호를 안다 (양쪽 대응 위치의 바탕)", () => {
@@ -51,15 +51,21 @@ describe("조건 파일(YAML)", () => {
 });
 
 describe("조건 → 산출식", () => {
-  it("종신: 사망·80% 장해를 한 담보로 — 유지자수·납입자수 = 1 − q − k + q·k/2, 급부 = 탈퇴 전부", () => {
+  it("종신: 사망·80% 장해를 한 담보로 — 유지자수·납입자수 = 1 − q − r + q·r/2, 급부 = 탈퇴 전부", () => {
     const f = generateFormulas(sample("whole").spec).find((x) => x.path?.split("|")[0] === "benefits[0]")!;
     expect(f.path).toBe("benefits[0]|rates[0]|rates[1]");        // 담보·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다
-    expect(f.text).toContain("유지자수  l_{x+t+1} = l_{x+t} × ( 1 − q_{x+t} − k_{x+t} + q_{x+t}·k_{x+t}/2 )");
-    expect(f.text).toContain("납입자수  l′_{x+t+1} = l′_{x+t} × ( 1 − q_{x+t} − k_{x+t} + q_{x+t}·k_{x+t}/2 )");
+    // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
+    expect(f.text).toContain("유지자수\nl_{x+t+1} = l_{x+t} × ( 1 − q_{x+t} − r_{x+t} + q_{x+t}·r_{x+t}/2 )");
+    expect(f.text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − q_{x+t} − r_{x+t} + q_{x+t}·r_{x+t}/2 )");
     expect(f.text).toContain("C_{x+t} = ( l_{x+t} − l_{x+t+1} )·v^{t+½}");
   });
   it("진단형은 급부 = 진단율, 무해지는 해지율 w·CSV, 납입지원은 추가 사유 f", () => {
-    expect(generateFormulas(sample("twoMajor").spec)[0].text).toContain("C_{x+t} = l_{x+t}·k_{x+t}·v^{t+½}");
+    expect(generateFormulas(sample("twoMajor").spec)[0].text).toContain("C_{x+t} = l_{x+t}·r_{x+t}·v^{t+½}");
+    // 납입주기는 k (mm 아님) — 연납 환산 납입기수·영업보험료·납입누계
+    const all = generateFormulas(sample("whole").spec).map((x) => x.text).join("\n");
+    expect(all).not.toMatch(/mm/);
+    expect(all).toContain("N* = k · [");
+    expect(all).toContain("β_S/k");
     const low = generateFormulas(sample("noRefund").spec);
     expect(low[0].text).toContain("w_{x+t}");
     expect(low.some((x) => x.label === "저해지·무해지환급형")).toBe(true);

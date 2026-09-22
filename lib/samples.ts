@@ -54,7 +54,7 @@ basis:
   waiver: false       # 납입만 면제되는 추가 사유가 없으면 false → 납입자수 = 유지자수
 rates:                # role: death 사망 · incidence 최초발생 · recurring 반복지급 · waiver 납입면제 · other 기타
 ${Q}
-  - id: k80
+  - id: r80
     name: 80% 이상 장해율
     role: incidence
     source: 써미트 2014-59호 80%이상 재해장해 + 질병장해발생율
@@ -66,7 +66,7 @@ benefits:
     trigger: 사망 또는 80% 이상 장해 시
     amount: 100000000
     endAge: 110
-    exitRateIds: [q, k80]   # 유지자수·납입자수 = 1 − q − k + q·k/2
+    exitRateIds: [q, r80]   # 유지자수·납입자수 = 1 − q − r + q·r/2
 ${NOTES}
 ` },
   { id: "twoMajor", label: "2대질병 진단보험 (80세 만기)", hint: "진단형 — 사망과 진단이 함께 탈퇴", yaml: `meta:
@@ -85,7 +85,7 @@ basis:
   waiver: false
 rates:
 ${Q}
-  - id: k2
+  - id: r2
     name: 2대질병 발생률
     role: incidence
     source: 무배당 예정 뇌출혈 + 급성심근경색증 발생률 (제공 자료)
@@ -97,8 +97,8 @@ benefits:
     trigger: 진단 확정 시
     amount: 30000000
     endAge: 80
-    rateId: k2
-    exitRateIds: [q, k2]
+    rateId: r2
+    exitRateIds: [q, r2]
 ${NOTES}
 ` },
   { id: "noRefund", label: "무해지환급형 암보험 (해지율 3%)", hint: "저해지·무해지 — 해지율과 환급률", yaml: `meta:
@@ -120,7 +120,7 @@ basis:
   lowRatio: 0%        # 납입기간 중 해지환급금 = 표준형 × 0%
 rates:
 ${Q}
-  - id: kc
+  - id: rc
     name: 암발생률
     role: incidence
     source: 보험개발원 생명장기제2024-112호 무배당 예정 경험 암발생률
@@ -133,8 +133,8 @@ benefits:
     amount: 50000000
     endAge: 100
     waitDays: 90
-    rateId: kc
-    exitRateIds: [q, kc]
+    rateId: rc
+    exitRateIds: [q, rc]
 ${NOTES}
 ` },
   { id: "waiverSupport", label: "보험료납입지원 3대질병", hint: "추가 납입면제 사유 — 80% 이상 장해", yaml: `meta:
@@ -152,7 +152,7 @@ basis:
   waiver: true        # 3대질병은 이미 탈퇴 사유 — 80% 이상 장해만 납입을 추가로 면제
 rates:
 ${Q}
-  - id: k3
+  - id: r3
     name: 3대질병 발생률
     role: incidence
     source: 암 + 뇌출혈 + 급성심근경색증 발생률
@@ -168,8 +168,8 @@ benefits:
     trigger: 진단 확정 시
     amount: 30000000
     endAge: 80
-    rateId: k3
-    exitRateIds: [q, k3]
+    rateId: r3
+    exitRateIds: [q, r3]
 ${NOTES}
 ` },
 ];

@@ -28,12 +28,12 @@ describe("입력 화면 → 조건 파일 (editYaml)", () => {
     expect(e.rate).toBeUndefined();
   });
   it("항목을 더하고 지운다 — 사업비 새 행은 한 줄(흐름 표기)", () => {
-    let next = editYaml(src, [{ path: ["rates"], add: true, value: { id: "kc", name: "암발생률", role: "incidence" } }]);
-    expect(yamlToSpec(next).spec.rates.map((r) => r.id)).toEqual(["q", "k80", "kc"]);
+    let next = editYaml(src, [{ path: ["rates"], add: true, value: { id: "rc", name: "암발생률", role: "incidence" } }]);
+    expect(yamlToSpec(next).spec.rates.map((r) => r.id)).toEqual(["q", "r80", "rc"]);
     next = editYaml(next, [{ path: ["expenses"], add: true, value: { group: "수금비용", symbol: "γ2", basis: "영업보험료", rate: "1%" } }]);
     expect(lineWith(next, /γ2/)?.trim()).toBe("- { group: 수금비용, symbol: γ2, basis: 영업보험료, rate: 1% }");
     next = editYaml(next, [{ path: ["rates", 1] }]);
-    expect(yamlToSpec(next).spec.rates.map((r) => r.id)).toEqual(["q", "kc"]);
+    expect(yamlToSpec(next).spec.rates.map((r) => r.id)).toEqual(["q", "rc"]);
     expect(next).toContain("# 적용(예정)이율");
   });
   it("없던 목록에 첫 항목을 더하면 목록을 만든다 (식·사업비)", () => {

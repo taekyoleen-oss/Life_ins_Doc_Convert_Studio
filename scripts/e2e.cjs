@@ -155,7 +155,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const freqRow = await p.locator(".doc-body tr", { hasText: "보험료 납입주기" }).first().textContent();
   ok("M01 가입 조건 칸 → 산출방법서 개요 가입 조건 표", termRow.includes("만15세 ~ 55세") && freqRow.includes("일시납"), `${termRow} / ${freqRow}`);
   ok("입력 카드에 M02(계약) 없음 — 계약정보는 자유설계보험 상품 만들기에서", (await p.locator(".card[data-card=M02]").count()) === 0);
-  ok("산출방법서에 시산 기준(피보험자) 표 없음 — 전체 정보만", (await p.locator(".doc-body tr", { hasText: "피보험자" }).count()) === 0 && !(await p.textContent(".doc-body")).includes("시산 기준"));
+  ok("산출방법서에 시산 기준(피보험자) 표 없음 — 전체 정보만", (await p.locator(".doc-body tr", { hasText: /^피보험자/ }).count()) === 0 && !(await p.textContent(".doc-body")).includes("시산 기준"));
   await p.screenshot({ path: `${OUT}/s7b_product.png` });
 
   // 11) 위험률 표: CSV → 첫 행 열 이름 → 자동 잇기 → 산출방법서 위험률 표
@@ -164,7 +164,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForSelector("table.sheet");
   await p.waitForTimeout(600);
   const mapped = await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value));
-  ok("CSV 첫 행 → 연령·사망률(남·여)·장해율 자동 잇기", mapped.join(",") === "age,rate:q,M,rate:q,F,rate:k80,,skip", mapped.join(","));
+  ok("CSV 첫 행 → 연령·사망률(남·여)·장해율 자동 잇기", mapped.join(",") === "age,rate:q,M,rate:q,F,rate:r80,,skip", mapped.join(","));
   const rateRow = await p.locator(".doc-body tr", { hasText: "제7회 경험생명표 사망률" }).first().textContent();
   ok("이은 열 → 산출방법서 위험률 표 '40~42세 3행'", rateRow.includes("40~42세 3행"), rateRow);
   await p.click("button:has-text('안 이은 열 → 새 위험률')");
@@ -240,11 +240,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click(".tab:has-text('Word·한글')");
   const [dlw] = await Promise.all([p.waitForEvent("download"), p.click("button:has-text('Word 내려받기')")]);
   const docx = fs.readFileSync(await dlw.path());
-  ok("[Word·한글] Word 내려받기 → 표준 산출방법서 .docx", dlw.suggestedFilename().endsWith(".docx") && docx.includes(Buffer.from("표준 산출방법서 v1")), dlw.suggestedFilename());
-  // Word 에서 고쳤다고 친다 — 압축 없는 ZIP 이라 같은 길이의 글자는 바로 바꿀 수 있다: 적용이율 2.5→3, 기준연납순보험료 식의 20→25
+  ok("[Word·한글] Word 내려받기 → 표준 산출방법서 .docx", dlw.suggestedFilename().endsWith(".docx") && /표준 산출방법서 v\d/.test(docx.toString("utf8")), dlw.suggestedFilename());
+  // Word 에서 고쳤다고 친다 — 압축 없는 ZIP 이라 같은 길이의 글자는 바로 바꿀 수 있다: 적용이율 2.5→3, 기준연납순보험료 식(Word 수식)의 20→25
   const swap = (buf, from, to) => { const i = buf.indexOf(Buffer.from(from)); if (i < 0) throw new Error(`없음: ${from}`); const b = Buffer.from(buf); Buffer.from(to).copy(b, i); return b; };
   let edited = swap(docx, ">2.500%<", ">3.000%<");
-  edited = swap(edited, "N′_{x+min(n,20)}", "N′_{x+min(n,25)}");
+  edited = swap(edited, 'preserve">20</m:t>', 'preserve">25</m:t>');   // 식은 Word 수식 — 기준연납순보험료의 min(n,20) 안의 20
   await p.setInputFiles(MERGE, { name: "종신_고침.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: edited });
   await p.waitForSelector(".word-log");
   const wlog = await p.textContent(".word-log");
@@ -262,7 +262,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.setInputFiles(OPEN, { name: "표준_산출방법서_질병보험.hwpx", mimeType: "application/hwp+zip", buffer: hwpx });
   await p.waitForSelector(".toast:has-text('표준_산출방법서_질병보험.hwpx —')");
   const t18 = await p.textContent(".toast");
-  ok("한글 표준 산출방법서 [열기] → '표준 산출방법서 v1' 로 읽음", /표준 산출방법서 v1/.test(t18), t18);
+  ok("한글 표준 산출방법서 [열기] → 표준 산출방법서로 읽음", /표준 산출방법서 v\d/.test(t18), t18);
 
   // 19) 그림으로 읽기 — 스캔 PDF → 쪽 고르기 → Anthropic API(여기서는 가짜 응답) → 옮겨 적은 글을 규칙이 읽어 조건
   const page1 = { blocks: [

@@ -340,7 +340,7 @@ function WaiverBody({ rates }: { rates: RateItem[] }) {
     <div className="space-y-2">
       <Check p={["basis", "waiver"]} label="추가 납입면제 사유 적용" />
       <p className="text-xs leading-relaxed text-muted-foreground">
-        납입자수 l′ 는 담보의 탈퇴 사유로 유지자수 l 과 똑같이 줄어듭니다(사망만이면 1 − q, 사망과 진단이면 1 − q − k + q·k/2).
+        납입자수 l′ 는 담보의 탈퇴 사유로 유지자수 l 과 똑같이 줄어듭니다(사망만이면 1 − q, 사망과 진단이면 1 − q − r + q·r/2).
         보장은 이어지고 납입만 면제되는 사유(예: 80% 이상 장해)가 있을 때만 켜고, 그 위험률을 &apos;납입면제&apos;로 표시합니다 — 따로 둔 납입면제율을 곱하지 않습니다.
       </p>
       {on && (

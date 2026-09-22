@@ -18,10 +18,10 @@ for (const sec of renderMethodDoc(withFormulas(spec))) for (const b of sec.block
 const hl = (from: number, to = from) => [...matchBlocks(blocks.map((b) => b.paths), pathsAtLines(ranges, from, to))].map((i) => blocks[i].text);
 
 describe("조건 줄 → 산출방법서 블록", () => {
-  it("이율 줄 → 이율 표의 그 행 + 현가율 + 계산기수", () => {
+  it("이율 줄 → 이율 표의 그 행 + 계산기수 (현가율 값은 싣지 않는다)", () => {
     const got = hl(lineOf(/^\s+interest:/));
     expect(got.some((t) => /^적용이율 i \| 2\.500%/.test(t))).toBe(true);
-    expect(got.some((t) => /현가율/.test(t))).toBe(true);
+    expect(got.some((t) => /0\.97/.test(t))).toBe(false);
     expect(got.some((t) => /D_\{x\+t\}/.test(t))).toBe(true);
     expect(got.some((t) => /표준이율/.test(t))).toBe(false);
   });
@@ -36,13 +36,13 @@ describe("조건 줄 → 산출방법서 블록", () => {
   });
   it("담보 안의 금액 줄 → 담보 표의 그 담보 행과 그 담보의 유지자수·납입자수 식", () => {
     const got = hl(lineOf(/amount: 100000000/));
-    expect(got.some((t) => /^사망·80% 이상 장해 \| 주계약/.test(t))).toBe(true);
-    expect(got.some((t) => /유지자수  l_\{x\+t\+1\}/.test(t))).toBe(true);
+    expect(got.some((t) => /^보장금액 \| 100,000,000원/.test(t))).toBe(true);    // 담보마다 세로 표
+    expect(got.some((t) => /l_\{x\+t\+1\} = l_\{x\+t\}/.test(t))).toBe(true);
   });
   it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 담보식", () => {
-    const got = hl(lineOf(/id: k80/));
-    expect(got.some((t) => /^80% 이상 장해율 \| k80 \| 최초발생/.test(t))).toBe(true);
-    expect(got.some((t) => /k_x : 80% 이상 장해율/.test(t))).toBe(true);
+    const got = hl(lineOf(/id: r80/));
+    expect(got.some((t) => /^80% 이상 장해율 \| r80 \| 최초발생/.test(t))).toBe(true);
+    expect(got.some((t) => /r_x : 80% 이상 장해율/.test(t))).toBe(true);
   });
 });
 

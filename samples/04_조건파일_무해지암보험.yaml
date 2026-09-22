@@ -20,7 +20,7 @@ rates:
     name: 제7회 경험생명표 사망률
     role: death
     source: 보험개발원 제7회 경험생명표 사망률
-  - id: kc
+  - id: rc
     name: 암발생률
     role: incidence
     source: 보험개발원 생명장기제2024-112호 무배당 예정 경험 암발생률
@@ -39,8 +39,8 @@ benefits:
     amount: 50000000
     endAge: 100
     waitDays: 90
-    rateId: kc
-    exitRateIds: [q, kc]
+    rateId: rc
+    exitRateIds: [q, rc]
 surrender:
   deductionYears: 7
   notes:
