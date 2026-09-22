@@ -19,15 +19,15 @@ describe("01 앱 양식 (종신보험) — 이 앱이 낸 산출방법서", () =
     const { spec, errors } = await open(`01_앱양식_종신보험_산출방법서.${ext}`);
     const want = yamlToSpec(SAMPLES[0].yaml).spec;
     expect(errors).toEqual([]);
-    expect([spec.meta.productName, spec.contract.age, spec.contract.termYears, spec.contract.payYears, spec.basis.interest, spec.basis.standardInterest])
-      .toEqual(["종신보험", 40, 71, 20, 0.025, 0.0325]);
+    expect([spec.meta.productName, spec.basis.interest, spec.basis.standardInterest]).toEqual(["종신보험", 0.025, 0.0325]);
+    expect(spec.contract).toEqual({});                  // 옛 문서의 "시산 기준" 표는 읽지 않는다
     expect(syms(spec)).toEqual(syms(want));
     expect(spec.benefits.map((b) => [b.name, b.amount, b.exitRateIds?.length])).toEqual([["사망·80% 이상 장해", 1e8, 2]]);
     expect(spec.product).toEqual(want.product);
   });
   it(".pdf 는 기초율·사업비는 읽고, 넓은 표(담보 9칸·가입 조건)는 표로 되살리지 못한다", async () => {
     const { spec } = await open("01_앱양식_종신보험_산출방법서.pdf");
-    expect([spec.basis.interest, spec.basis.standardInterest, spec.contract.age]).toEqual([0.025, 0.0325, 40]);
+    expect([spec.basis.interest, spec.basis.standardInterest]).toEqual([0.025, 0.0325]);
     expect(spec.expenses).toHaveLength(6);
     expect(spec.benefits).toHaveLength(0);
     expect(spec.product?.terms).toBeUndefined();
@@ -35,14 +35,14 @@ describe("01 앱 양식 (종신보험) — 이 앱이 낸 산출방법서", () =
 });
 
 describe("02 실무 양식 (든든건강보험) — 회사 산출방법서 모양", () => {
-  it.each(["md", "docx", "pdf"])(".%s: 이율·해지율·위험률·사업비·시산 기준을 읽고, 성별·납입주기·담보는 비워 둔다", async (ext) => {
+  it.each(["md", "docx", "pdf"])(".%s: 이율·해지율·위험률·사업비를 읽고, 담보는 비워 둔다 — 가입나이·기간(시산 기준)은 읽지 않는다", async (ext) => {
     const { spec, original } = await open(`02_실무양식_든든건강보험_산출방법서.${ext}`);
     expect(spec.meta.productName).toBe("무배당 든든건강보험");
     expect([spec.basis.interest, spec.basis.standardInterest, spec.basis.lapse?.[0].rate, spec.basis.lowRatio]).toEqual([0.0275, 0.0225, 0.03, 0]);
     expect(spec.rates.map((r) => r.name)).toEqual(["경험생명표 사망률", "무배당 예정 암발생률", "무배당 예정 뇌출혈발생률"]);
     expect(syms(spec)).toEqual(["α_S=0.008", "α_P=2.4배", "β_S=0.0005", "β_G=0.075", "β_S=0.0003", "β_기타=0.025"]);
-    expect([spec.contract.age, spec.contract.termAge, spec.contract.payYears]).toEqual([40, 100, 20]);
-    expect([spec.contract.sex, spec.contract.freq, spec.benefits.length]).toEqual([undefined, undefined, 0]);
+    expect(spec.contract).toEqual({});
+    expect(spec.benefits).toHaveLength(0);
     expect(original?.missing).toEqual([]);
   }, 60000);
 });
@@ -56,7 +56,7 @@ describe("03 사업방법서 발췌 — 판매 범위 표 → M01 가입 조건"
       ["2종(표준형)", "100세만기", "20년납", "만15세 ~ 65세"],
     ]);
     expect(spec.product?.payFreqs).toEqual(["월납", "연납"]);
-    expect(spec.contract.age).toBeUndefined();          // 판매 범위는 시산 기준이 아니다
+    expect(spec.contract).toEqual({});                  // 판매 범위는 시산 기준이 아니다
   });
 });
 

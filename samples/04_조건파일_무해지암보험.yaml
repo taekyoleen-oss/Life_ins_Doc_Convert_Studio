@@ -8,12 +8,6 @@ product:
     - { term: 100세만기, pay: 10·20·30년납, age: 만15세 ~ 65세, ageF: 만15세 ~ 70세 }
   payFreqs: [월납, 연납]
   renewal: 비갱신형
-contract:
-  age: 40
-  sex: M
-  termYears: 61
-  payYears: 20
-  freq: 12
 basis:
   interest: 2.5%
   standardInterest: 3.25%

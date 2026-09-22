@@ -7,9 +7,9 @@ const lineWith = (text: string, re: RegExp) => text.split("\n").find((l) => re.t
 
 describe("입력 화면 → 조건 파일 (editYaml)", () => {
   it("값 한 칸은 그 글자만 바꾼다 — 주석·줄 맞춤·다른 줄 그대로", () => {
-    const next = editYaml(src, [{ path: ["basis", "interest"], value: "3%" }, { path: ["contract", "age"], value: 45 }]);
+    const next = editYaml(src, [{ path: ["basis", "interest"], value: "3%" }, { path: ["basis", "standardInterest"], value: "3.5%" }]);
     expect(lineWith(next, /interest:/)).toBe("  interest: 3%      # 적용(예정)이율");
-    expect(lineWith(next, /^  age:/)).toBe("  age: 45             # 가입나이");
+    expect(lineWith(next, /standardInterest:/)).toBe("  standardInterest: 3.5%");
     const a = src.split("\n"), b = next.split("\n");
     expect(b.length).toBe(a.length);
     expect(b.filter((l, i) => l !== a[i])).toHaveLength(2);
@@ -19,7 +19,7 @@ describe("입력 화면 → 조건 파일 (editYaml)", () => {
     const next = editYaml(src, [{ path: ["expenses", 0, "basis"], value: "보험가입금액, 초년도" }]);
     expect(yamlToSpec(next).errors).toEqual([]);
     expect(yamlToSpec(next).spec.expenses[0].basis).toBe("보험가입금액, 초년도");
-    expect(next).toContain("# 가입나이");
+    expect(next).toContain("# 적용(예정)이율");
   });
   it("사업비 비율 ↔ 배수를 바꾼다 (두 칸을 한 번에)", () => {
     const next = editYaml(src, [{ path: ["expenses", 0, "rate"] }, { path: ["expenses", 0, "times"], value: "2배" }]);
@@ -34,7 +34,7 @@ describe("입력 화면 → 조건 파일 (editYaml)", () => {
     expect(lineWith(next, /γ2/)?.trim()).toBe("- { group: 수금비용, symbol: γ2, basis: 영업보험료, rate: 1% }");
     next = editYaml(next, [{ path: ["rates", 1] }]);
     expect(yamlToSpec(next).spec.rates.map((r) => r.id)).toEqual(["q", "kc"]);
-    expect(next).toContain("# 가입나이");
+    expect(next).toContain("# 적용(예정)이율");
   });
   it("없던 목록에 첫 항목을 더하면 목록을 만든다 (식·사업비)", () => {
     const next = editYaml("meta:\n  productName: A\n", [

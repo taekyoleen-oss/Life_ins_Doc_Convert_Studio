@@ -7,7 +7,7 @@ import type { MethodSpec, RateRef, RateRole, Sex } from "./methoddoc/spec";
  *
  * 표 자체는 조건 파일(YAML)에 싣지 않는다(길다). 이어 둔 열을 MethodSpec 의 RateRef.table 로 붙여
  * 산출방법서·JSON 에 넘긴다 — 자유설계보험(flexible_insurance)의 위험률 시트(A열 연령 + 위험률 열)가 이 표를 그대로 받는다.
- * MethodSpec 은 피보험자 한 사람(contract.sex) 기준이라, 남·여 열이 따로 있으면 계약 성별의 열을 쓴다.
+ * 남·여 열이 따로 있으면 두 벌 다 싣는다(RateRef.tables) — 계산하는 앱이 피보험자 성별로 고른다.
  */
 
 export interface Sheet { name: string; head: string[]; rows: string[][] }
@@ -165,57 +165,72 @@ export function sanitizeSheet(raw: unknown): SheetState | null {
   return { sheet: { name: String(sh.name ?? "위험률 표"), head, rows: sh.rows.map((r) => head.map((_, i) => String(r?.[i] ?? ""))) }, map };
 }
 
-/** 위험률마다 이어 둔 열 — 계약 성별 열 → 공통 열 → 첫 열 순으로 고른다 */
-export function pickColumn(st: SheetState, rateId: string, sex?: Sex): number {
-  const cols = st.map.flatMap((m, i) => (m.to === "rate" && m.rateId === rateId ? [{ m, i }] : []));
-  return (cols.find((c) => c.m.to === "rate" && c.m.sex === sex) ?? cols.find((c) => c.m.to === "rate" && !c.m.sex) ?? cols[0])?.i ?? -1;
+/** 위험률마다 실제로 쓰는 열 — 남 열 하나 · 여 열 하나, 성별 열이 없으면 공통 열(없으면 첫 열) 하나 */
+export function usedColumns(st: SheetState, rateId: string): { M?: number; F?: number; any?: number } {
+  const cols = st.map.flatMap((m, i) => (m.to === "rate" && m.rateId === rateId ? [{ sex: m.sex, i }] : []));
+  const M = cols.find((c) => c.sex === "M")?.i, F = cols.find((c) => c.sex === "F")?.i;
+  if (M !== undefined || F !== undefined) return { M, F };
+  return cols.length ? { any: (cols.find((c) => !c.sex) ?? cols[0]).i } : {};
 }
 
-/** 입력 화면의 위험률 칸에 보이는 연결 설명 — "표: B(남)·C(여)열 → 40~41세 2행 (남)" */
+const sexName = (s?: Sex) => (s === "M" ? "남" : s === "F" ? "여" : "");
+
+/** 입력 화면의 위험률 칸에 보이는 연결 설명 — "표: B(남)·C(여)열 → 40~41세 2행 · 남·여" */
 export function linkNote(st: SheetState | null, withTables: MethodSpec, rateId: string): string | undefined {
-  const sexName = (s?: Sex) => (s === "M" ? "남" : s === "F" ? "여" : "");
   const cols = st?.map.flatMap((m, i) => (m.to === "rate" && m.rateId === rateId ? [`${colLetter(i)}${m.sex ? `(${sexName(m.sex)})` : ""}`] : [])) ?? [];
   if (!cols.length) return undefined;
-  const t = withTables.rates.find((r) => r.id === rateId)?.table;
-  return `표: ${cols.join("·")}열 → ${t ? `${t.ages[0]}~${t.ages[t.ages.length - 1]}세 ${t.ages.length}행${t.sex ? ` (${sexName(t.sex)})` : ""}` : "연령 열을 정하면 붙습니다"}`;
+  const r = withTables.rates.find((x) => x.id === rateId);
+  const t = r?.tables?.M ?? r?.tables?.F ?? r?.table;
+  const who = r?.tables ? (["M", "F"] as const).filter((x) => r.tables?.[x]).map(sexName).join("·") : sexName(r?.table?.sex);
+  return `표: ${cols.join("·")}열 → ${t ? `${t.ages[0]}~${t.ages[t.ages.length - 1]}세 ${t.ages.length}행${who ? ` · ${who}` : ""}` : "연령 열을 정하면 붙습니다"}`;
 }
 
 /**
- * MethodSpec 의 위험률 표(RateRef.table) → 위험률 표 창. attachTables 의 반대 —
+ * MethodSpec 의 위험률 표(RateRef.tables · table) → 위험률 표 창. attachTables 의 반대 —
  * 자유설계보험 등이 낸 JSON 을 열 때 표를 잃지 않게 한다(조건 파일에는 표가 실리지 않으므로).
  */
 export function sheetFromSpec(spec: MethodSpec, name: string): SheetState | null {
-  const rates = spec.rates.filter((r) => r.table?.ages?.length);
-  if (!rates.length) return null;
-  const ages = [...new Set(rates.flatMap((r) => r.table!.ages))].sort((a, b) => a - b);
-  const sexName = (s?: Sex) => (s === "M" ? "(남)" : s === "F" ? "(여)" : "");
+  const cols = spec.rates.flatMap((r) => {
+    const both = (["M", "F"] as const).flatMap((x) => (r.tables?.[x]?.ages?.length ? [{ r, sex: x as Sex | undefined, t: r.tables[x]! }] : []));
+    return both.length ? both : r.table?.ages?.length ? [{ r, sex: r.table.sex, t: r.table }] : [];
+  });
+  if (!cols.length) return null;
+  const ages = [...new Set(cols.flatMap((c) => c.t.ages))].sort((a, b) => a - b);
   return {
     sheet: {
-      name, head: ["연령", ...rates.map((r) => `${r.name}${sexName(r.table!.sex)}`)],
-      rows: ages.map((a) => [String(a), ...rates.map((r) => { const i = r.table!.ages.indexOf(a); return i < 0 ? "" : String(r.table!.values[i]); })]),
+      name, head: ["연령", ...cols.map((c) => `${c.r.name}${c.sex ? `(${sexName(c.sex)})` : ""}`)],
+      rows: ages.map((a) => [String(a), ...cols.map((c) => { const i = c.t.ages.indexOf(a); return i < 0 ? "" : String(c.t.values[i]); })]),
     },
-    map: [{ to: "age" }, ...rates.map((r): ColMap => ({ to: "rate", rateId: r.id, ...(r.table!.sex ? { sex: r.table!.sex } : {}) }))],
+    map: [{ to: "age" }, ...cols.map((c): ColMap => ({ to: "rate", rateId: c.r.id, ...(c.sex ? { sex: c.sex } : {}) }))],
   };
 }
 
-/** 이어 둔 열을 RateRef.table 로 붙인 스펙. 연령 열이 없으면 그대로 */
+/** 이어 둔 열을 위험률 표로 붙인 스펙 — 남·여 열이 있으면 tables 에 두 벌(table 에는 남 → 여 한 벌). 연령 열이 없으면 그대로 */
 export function attachTables(spec: MethodSpec, st: SheetState | null): MethodSpec {
   const ageCol = st ? st.map.findIndex((m) => m.to === "age") : -1;
   if (!st || ageCol < 0) return spec;
-  let touched = false;
-  const rates = spec.rates.map((r) => {
-    const col = pickColumn(st, r.id, spec.contract.sex);
-    if (col < 0) return r;
+  const read = (col: number) => {
     const ages: number[] = [], values: number[] = [];
     for (const row of st.sheet.rows) {
       const a = cellNum(row[ageCol] ?? ""), v = cellNum(row[col] ?? "");
       if (a === null || v === null) continue;
       ages.push(a); values.push(v);
     }
-    if (!ages.length) return r;
+    return ages.length ? { ages, values } : undefined;
+  };
+  let touched = false;
+  const rates = spec.rates.map((r): RateRef => {
+    const u = usedColumns(st, r.id);
+    if (u.any !== undefined) {
+      const t = read(u.any);
+      if (!t) return r;
+      touched = true;
+      return { ...r, table: t };
+    }
+    const M = u.M !== undefined ? read(u.M) : undefined, F = u.F !== undefined ? read(u.F) : undefined;
+    if (!M && !F) return r;
     touched = true;
-    const m = st.map[col];
-    return { ...r, table: { ages, values, ...(m.to === "rate" && m.sex ? { sex: m.sex } : {}) } };
+    return { ...r, tables: { ...(M ? { M } : {}), ...(F ? { F } : {}) }, table: M ? { ...M, sex: "M" } : { ...F!, sex: "F" } };
   });
   return touched ? { ...spec, rates } : spec;
 }

@@ -37,7 +37,6 @@ const roleOf = (v: unknown): RateRole => {
   const byLabel = Object.entries(RATE_ROLE_LABEL).find(([, l]) => l === s)?.[0];
   return (byLabel as RateRole) ?? "other";
 };
-const FREQ: Record<string, number> = { 월납: 12, 연납: 1, "6개월납": 2, "3개월납": 4, 일시납: 1 };
 
 /** MethodSpec → 조건 파일에 보이는 모양(순서·표기 고정) */
 export function yamlView(spec: MethodSpec): Record<string, unknown> {
@@ -50,7 +49,6 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
       terms: spec.product.terms?.map((r) => clean({ label: r.label, term: r.term, pay: r.pay, age: r.age, ageF: r.ageF })),
       payFreqs: spec.product.payFreqs, sumLimit: spec.product.sumLimit, renewal: spec.product.renewal,
     }) : undefined,
-    contract: clean({ ...spec.contract }),
     basis: clean({
       interest: b.interest !== undefined ? pct(b.interest) : undefined,
       standardInterest: b.standardInterest !== undefined ? pct(b.standardInterest) : undefined,
@@ -135,7 +133,7 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
   const spec = emptySpec();
   const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
   const arr = (v: unknown) => (Array.isArray(v) ? v : []);
-  const m = obj(raw.meta), c = obj(raw.contract), b = obj(raw.basis);
+  const m = obj(raw.meta), b = obj(raw.basis);
 
   spec.meta = { productName: str(m.productName) ?? "" };
   for (const k of ["insurer", "kind", "version", "date", "note"] as const) if (str(m[k])) spec.meta[k] = str(m[k]);
@@ -155,11 +153,8 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
   for (const k of ["sumLimit", "renewal"] as const) if (str(pr[k])) product[k] = str(pr[k]);
   if (hasProduct(product)) spec.product = product;
 
-  for (const k of ["age", "termYears", "termAge", "payYears", "payAge", "sumAssured"] as const) { const v = num(c[k]); if (v !== undefined) spec.contract[k] = v; }
-  const sex = str(c.sex);
-  if (sex) spec.contract.sex = /^(F|여)/.test(sex) ? "F" : "M";
-  const freq = typeof c.freq === "string" ? FREQ[c.freq] ?? num(c.freq) : num(c.freq);
-  if (freq !== undefined) spec.contract.freq = freq;
+  // 시산 기준(contract)은 조건이 아니다 — 보험료를 계산하는 앱(자유설계보험 상품 만들기 M02 계약정보)이 정한다
+  if (raw.contract !== undefined) errors.push({ line: 0, message: "contract(시산 기준)는 쓰지 않습니다 — 가입나이·보험기간·납입기간은 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다. 이 줄들은 지워도 됩니다" });
 
   for (const k of ["interest", "standardInterest", "minGuaranteed", "averagePublished", "lowRatio"] as const) {
     if (b[k] === undefined) continue;
@@ -259,7 +254,11 @@ export function jsonToSpec(text: string): MethodSpec {
   // 표기를 한 번 거쳐 모양을 맞춘다(없는 칸 채우기·id 확인)
   const spec = toSpec(yamlView({ ...emptySpec(), ...raw, meta: { productName: "", ...raw.meta } } as MethodSpec) as Record<string, unknown>, errors);
   // 위험률 값 표는 조건 파일에 싣지 않지만 JSON 으로 받은 것은 살려 둔다
-  raw.rates?.forEach((r, i) => { if (r.table && spec.rates[i]) spec.rates[i].table = r.table; });
+  raw.rates?.forEach((r, i) => {
+    if (!spec.rates[i]) return;
+    if (r.table) spec.rates[i].table = r.table;
+    if (r.tables) spec.rates[i].tables = r.tables;
+  });
   return spec;
 }
 
@@ -293,9 +292,6 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
   if (took.has("product") && hasProduct(parsed.product) && productKey(out.product) !== productKey(parsed.product)) {
     changes.push(`product: 가입 조건 ${out.product?.terms?.length ?? 0}행 → ${parsed.product.terms?.length ?? 0}행 갱신`);
     out.product = parsed.product;
-  }
-  for (const k of ["age", "sex", "termYears", "termAge", "payYears", "freq", "sumAssured"] as const) {
-    setIf(`contract.${k}`, (s) => s.contract[k], (s, v) => { (s.contract as Record<string, unknown>)[k] = v; });
   }
   for (const k of ["interest", "standardInterest", "minGuaranteed", "averagePublished", "lowRatio", "waiver"] as const) {
     setIf(`basis.${k}`, (s) => s.basis[k], (s, v) => { (s.basis as Record<string, unknown>)[k] = v; });
@@ -367,7 +363,7 @@ export function patchYaml(src: string, next: MethodSpec): string {
     if (JSON.stringify(cur[section]) === JSON.stringify(value)) continue;
     const isObj = value && typeof value === "object" && !Array.isArray(value);
     if (isObj && cur[section] && typeof cur[section] === "object" && !Array.isArray(cur[section])) {
-      // meta·contract·basis 는 칸 단위로
+      // meta·basis 는 칸 단위로
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
         if (JSON.stringify((cur[section] as Record<string, unknown>)[k]) !== JSON.stringify(v)) doc.setIn([section, k], doc.createNode(v));
       }

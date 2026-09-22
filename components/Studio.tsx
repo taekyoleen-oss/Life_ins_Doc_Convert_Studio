@@ -35,7 +35,7 @@ type Toast = { text: string; kind: "ok" | "warn" | "err" } | null;
 interface Layout { split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[] }
 const PANES: PaneId[] = ["cond", "doc", "sheet"];
 const PANE_NAME: Record<PaneId, string> = { cond: "조건", doc: "산출방법서", sheet: "위험률 표" };
-const LAYOUT0: Layout = { split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M02"] };
+const LAYOUT0: Layout = { split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"] };
 
 const KEY = "life_ins_doc_convert_studio";
 const STORE = `${KEY}:yaml`;
@@ -507,7 +507,7 @@ export default function Studio() {
         {visible("sheet") && (
           <section className="no-print flex min-h-0 flex-col border-t border-border bg-white" style={{ flex: top ? `${layout.sheetH} 1 0` : "1 1 0" }}>
             <RateSheetPane state={sheet} onMap={(map) => setSheet((x) => (x ? { ...x, map } : x))} onText={pasteSheet} onFile={(f) => void openSheetFile(f)}
-              onClear={() => setSheet(null)} rates={s.rates} sex={s.contract.sex} onNewRates={addRates} highlight={leftSel} onPick={(p) => pickPaths(p, true)} tools={tools("sheet")} />
+              onClear={() => setSheet(null)} rates={s.rates} onNewRates={addRates} highlight={leftSel} onPick={(p) => pickPaths(p, true)} tools={tools("sheet")} />
           </section>
         )}
       </main>
@@ -555,7 +555,7 @@ function Help({ onClose }: { onClose: () => void }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Life_ins_Doc_Convert_Studio 사용법</h2>
         <ol>
-          <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M02 계약조건 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다.</li>
+          <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다. 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 산출방법서의 정보가 아니어서 이 앱에 두지 않고, 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
           <li><b>위험률 표</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽습니다. 열마다 [잇기]에서 연령·위험률·성별을 고르면 그 값 표가 산출방법서와 MethodSpec JSON 에 실립니다(남·여 열이 있으면 계약 성별의 열).</li>
           <li><b>수식·기호 견본</b> 산출방법서 탭의 [＋ 수식 더하기]는 견본 식을 조건에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>

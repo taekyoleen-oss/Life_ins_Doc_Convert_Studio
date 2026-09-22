@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { matchBlocks } from "@/lib/conditions/link";
 import { RATE_ROLE_LABEL, type RateRef, type RateRole, type Sex } from "@/lib/methoddoc/spec";
-import { baseName, colLetter, guessRole, hasNumbers, pickColumn, sexOf, type ColMap, type SheetState } from "@/lib/sheet";
+import { baseName, colLetter, guessRole, hasNumbers, sexOf, usedColumns, type ColMap, type SheetState } from "@/lib/sheet";
 
 const LIMIT = 400;            // 화면에 그리는 행 수 — 표에는 모두 들어간다
-const SEX: Record<string, string> = { M: "남", F: "여" };
 
 interface Props {
   state: SheetState | null;
@@ -16,8 +15,6 @@ interface Props {
   onClear: () => void;
   /** 조건의 위험률(M04) */
   rates: RateRef[];
-  /** 계약 성별 — 남·여 열 중 이 성별의 열을 표로 쓴다 */
-  sex?: Sex;
   /** 조건에 위험률을 더하고 새 id 를 돌려준다 */
   onNewRates: (items: { name: string; role: RateRole }[]) => string[];
   /** 왼쪽에서 고른 조건 경로 → 그 위험률에 이은 열을 표시 */
@@ -33,7 +30,7 @@ const NONE: ColMap[] = [];
  * 위험률 표 — 붙여넣기·CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽고, 열마다 조건(연령 · 위험률 · 성별)에 잇는다.
  * 이은 열은 RateRef.table 이 되어 산출방법서 위험률 표와 MethodSpec JSON(자유설계보험 입력)에 실린다.
  */
-export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, sex, onNewRates, highlight, onPick, tools }: Props) {
+export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, onNewRates, highlight, onPick, tools }: Props) {
   const file = useRef<HTMLInputElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
   const sh = state?.sheet, map = state?.map ?? NONE;
@@ -74,7 +71,7 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
   const linked = new Set(map.flatMap((m) => (m.to === "rate" ? [m.rateId] : [])));
   const cls = (i: number) => {
     const m = map[i];
-    const idle = m.to === "rate" && state && pickColumn(state, m.rateId, sex) !== i;
+    const idle = m.to === "rate" && state && !Object.values(usedColumns(state, m.rateId)).includes(i);
     return `${m.to === "age" ? "col-age" : m.to === "rate" ? (idle ? "col-idle" : "col-rate") : "col-skip"} ${hl.has(i) ? "col-hl" : ""}`;
   };
   const onPaste = (e: React.ClipboardEvent) => {
@@ -91,7 +88,7 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
         {sh ? (
           <span className="truncate text-muted-foreground">
             {sh.name} · {sh.rows.length}행 × {sh.head.length}열 · {ageCol >= 0 ? `연령 ${colLetter(ageCol)}열` : <span className="text-amber-700">연령 열을 정하세요</span>}
-            {" · "}위험률 {linked.size}개 연결{sex ? ` · 계약 성별(${SEX[sex]}) 열 사용` : ""}
+            {" · "}위험률 {linked.size}개 연결 · 남·여 열은 두 벌 다 싣습니다
           </span>
         ) : <span className="text-muted-foreground">연령 × 위험률 표를 올려 조건의 위험률에 잇습니다</span>}
         <span className="flex-1" />

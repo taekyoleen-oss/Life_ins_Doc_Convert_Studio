@@ -44,9 +44,6 @@ describe("조건 줄 → 산출방법서 블록", () => {
     expect(got.some((t) => /^80% 이상 장해율 \| k80 \| 최초발생/.test(t))).toBe(true);
     expect(got.some((t) => /k_x : 80% 이상 장해율/.test(t))).toBe(true);
   });
-  it("성별 줄 → 피보험자 행", () => {
-    expect(hl(lineOf(/sex: M/))).toEqual([expect.stringMatching(/^피보험자 \| 40세 남/)]);
-  });
 });
 
 describe("산출방법서 블록 → 조건 줄", () => {

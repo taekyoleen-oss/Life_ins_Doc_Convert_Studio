@@ -39,7 +39,7 @@ export const SAMPLES: Sample[] = [
 meta:
   productName: 종신보험
   kind: 표준형(완전 환급)
-product:              # 가입 조건 — 산출방법서에 싣는 판매 범위(정보). 산출은 아래 contract 한 점으로 한다
+product:              # 가입 조건 — 산출방법서에 싣는 판매 범위(정보). 계산할 계약 한 점은 자유설계보험 M02 계약정보에서 정한다
   category: 생명보험 / 종신
   types: [표준형(완전 환급)]
   terms:              # 보험기간 · 보험료 납입기간 · 가입나이 (사업방법서 표와 같은 모양)
@@ -48,12 +48,6 @@ product:              # 가입 조건 — 산출방법서에 싣는 판매 범�
   payFreqs: [월납, 연납]
   sumLimit: 1천만원 ~ 10억원
   renewal: 비갱신형
-contract:             # 시산 기준 — 보험료·책임준비금을 실제로 계산하는 계약 한 점
-  age: 40             # 가입나이
-  sex: M              # M 남 / F 여
-  termYears: 71       # 보험기간(년) — 110세 만기면 110 − 40 + 1
-  payYears: 20        # 보험료 납입기간
-  freq: 12            # 연 납입 횟수 (월납 12, 연납 1) — "월납" 이라고 써도 된다
 basis:
   interest: 2.5%      # 적용(예정)이율
   standardInterest: 3.25%
@@ -85,12 +79,6 @@ product:
   payFreqs: [월납]
   sumLimit: 1천만원 ~ 5천만원
   renewal: 비갱신형
-contract:
-  age: 40
-  sex: M
-  termYears: 41
-  payYears: 20
-  freq: 12
 basis:
   interest: 2.5%
   standardInterest: 3.25%
@@ -123,12 +111,6 @@ product:
     - { term: 100세만기, pay: 10·20·30년납, age: 만15세 ~ 65세, ageF: 만15세 ~ 70세 }
   payFreqs: [월납, 연납]
   renewal: 비갱신형
-contract:
-  age: 40
-  sex: M
-  termYears: 61
-  payYears: 20
-  freq: 12
 basis:
   interest: 2.5%
   standardInterest: 3.25%
@@ -164,12 +146,6 @@ product:
     - { label: 주계약, term: 80세만기, pay: 20년납, age: 만15세 ~ 60세 }
     - { label: 보험료납입지원, term: 80세만기, pay: 20년납, age: 만15세 ~ 60세 }
   payFreqs: [월납]
-contract:
-  age: 40
-  sex: M
-  termYears: 41
-  payYears: 20
-  freq: 12
 basis:
   interest: 2.5%
   standardInterest: 3.25%

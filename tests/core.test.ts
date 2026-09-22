@@ -111,12 +111,12 @@ describe("LaTeX", () => {
     expect(changes.join("\n")).toMatch(/basis\.interest: 2\.5% → 3%/);
     const next = patchYaml(src, merged);
     expect(next).toContain("interest: 3%");
-    expect(next).toContain("# 가입나이");                 // 사용자 주석 유지
+    expect(next).toContain("# 납입만 면제되는 추가 사유가 없으면");   // 고치지 않은 줄의 사용자 주석 유지
     expect(yamlToSpec(next).spec).toEqual(merged);
   });
 });
 
-describe("가입 조건 (정보) ↔ 시산 기준 (계약)", () => {
+describe("가입 조건 (정보) — 시산 기준(계약)은 읽지 않는다", () => {
   const md = (spec: ReturnType<typeof sample>["spec"]) => docToMarkdown(docOf(spec), spec.meta.productName);
   it("조건 파일에서 읽고 산출방법서 개요에 두 표로 싣는다 — 남녀가 다르면 가입나이 두 칸", () => {
     const { spec } = sample("whole");
@@ -130,13 +130,12 @@ describe("가입 조건 (정보) ↔ 시산 기준 (계약)", () => {
     const low = docOf(sample("noRefund").spec)[0].blocks.find((b) => b.t === "table" && b.head[0] === "보험기간");
     expect(low?.t === "table" && low.head).toEqual(["보험기간", "보험료 납입기간", "가입나이(남)", "가입나이(여)"]);
   });
-  it("LaTeX·Markdown 으로 내고 되읽으면 가입 조건이 그대로이고, 시산 기준(40세)을 흐리지 않는다", () => {
+  it("LaTeX·Markdown 으로 내고 되읽으면 가입 조건이 그대로이고, 시산 기준은 읽지 않는다(계산하는 앱의 계약정보)", () => {
     for (const s of SAMPLES) {
       const spec = yamlToSpec(s.yaml).spec;
       for (const back of [parseMethodDoc(latexToDoc(docToLatex(docOf(spec), spec.meta.productName))), parseMethodDoc(extractText(new TextEncoder().encode(md(spec))))]) {
         expect(back.spec.product, s.id).toEqual(spec.product);
-        expect(back.spec.contract.age, s.id).toBe(40);
-        expect(back.spec.contract.termAge, s.id).toBeUndefined();
+        expect(back.spec.contract, s.id).toEqual({});
       }
     }
   });
@@ -166,7 +165,7 @@ describe("가입 조건 (정보) ↔ 시산 기준 (계약)", () => {
     const { spec: merged, changes } = mergeSpec(spec, back.spec, back.evidence);
     expect(changes).toEqual(["product: 가입 조건 2행 → 2행 갱신"]);
     expect(merged.product?.terms?.[1].age).toBe("만15세 ~ 55세");
-    expect(patchYaml(src, merged)).toContain("# 가입나이");
+    expect(patchYaml(src, merged)).toContain("# 적용(예정)이율");
   });
 });
 

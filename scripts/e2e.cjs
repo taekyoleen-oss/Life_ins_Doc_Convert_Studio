@@ -26,7 +26,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForSelector(".doc-body h1");
   ok("첫 화면: 종신보험 산출방법서", (await p.textContent(".doc-body h1")).includes("종신보험"));
   ok("KaTeX 수식이 그려진다", (await p.locator(".doc-body .formula .katex").count()) >= 8);
-  ok("첫 화면: 왼쪽은 입력 카드, 아래는 위험률 표", (await p.locator(".form-body .card").count()) >= 9 && (await p.locator(".sheet-empty").count()) === 1);
+  ok("첫 화면: 왼쪽은 입력 카드, 아래는 위험률 표", (await p.locator(".form-body .card").count()) >= 8 && (await p.locator(".sheet-empty").count()) === 1);
   await p.screenshot({ path: `${OUT}/s1_first.png` });
   await p.click(".seg button:has-text('YAML')");           // 아래 1)~7)은 YAML 편집기로
   await p.waitForSelector(".cm-editor");
@@ -107,7 +107,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const y2 = await p.$$eval(".cm-editor", (eds) => [...eds[0].querySelectorAll(".cm-line")].map((e) => e.textContent).join("\n"));
   ok("LaTeX 수정 → 조건 반영: 이율 3.5%", /interest: 3\.5%/.test(y2), toast);
   ok("LaTeX 수정 → 조건 반영: 금액 7천만", /amount: 70000000/.test(y2));
-  ok("조건 파일 주석 유지", y2.includes("# 가입나이"));
+  ok("조건 파일 주석 유지", y2.includes("# 납입만 면제되는 추가 사유가 없으면"));
   await p.click("button.tab:has-text('산출방법서')");
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5_latex_applied.png` });
@@ -146,19 +146,16 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(600);
   ok("＋ 진단형 → 카드 C02 와 산출방법서 담보 행", (await p.locator(".card[data-card=C1]").count()) === 1 && (await p.locator(".doc-body tr", { hasText: "담보 2" }).count()) >= 1);
 
-  // 10-1) M01 가입 조건(정보) → 산출방법서 개요 표 · M02 시산 기준과 따로
-  await p.click(".card[data-card=M01] .card-head");
+  // 10-1) M01 가입 조건(정보) → 산출방법서 개요 표 · 계약(시산 기준)은 이 앱에 없다
+  if (!(await p.locator("[data-path='product.terms[1].age'] input").count())) await p.click(".card[data-card=M01] .card-head");   // M01 은 처음부터 펼쳐져 있다
   await p.locator("[data-path='product.terms[1].age'] input").fill("만15세 ~ 55세");
   await p.click("[data-path='product.payFreqs'] label:has-text('일시납') input");
   await p.waitForTimeout(600);
   const termRow = await p.locator(".doc-body tr", { hasText: "30년납" }).first().textContent();
   const freqRow = await p.locator(".doc-body tr", { hasText: "보험료 납입주기" }).first().textContent();
   ok("M01 가입 조건 칸 → 산출방법서 개요 가입 조건 표", termRow.includes("만15세 ~ 55세") && freqRow.includes("일시납"), `${termRow} / ${freqRow}`);
-  ok("시산 기준은 그대로 (피보험자 40세)", (await p.locator(".doc-body tr", { hasText: "피보험자" }).first().textContent()).includes("40세"));
-  await p.locator("[data-path='contract.age'] input").fill("70");
-  await p.waitForTimeout(300);
-  ok("M02 가입나이가 가입 조건 밖이면 알림", (await p.locator("[data-path='contract.age']").textContent()).includes("밖입니다"));
-  await p.locator("[data-path='contract.age'] input").fill("40");
+  ok("입력 카드에 M02(계약) 없음 — 계약정보는 자유설계보험 상품 만들기에서", (await p.locator(".card[data-card=M02]").count()) === 0);
+  ok("산출방법서에 시산 기준(피보험자) 표 없음 — 전체 정보만", (await p.locator(".doc-body tr", { hasText: "피보험자" }).count()) === 0 && !(await p.textContent(".doc-body")).includes("시산 기준"));
   await p.screenshot({ path: `${OUT}/s7b_product.png` });
 
   // 11) 위험률 표: CSV → 첫 행 열 이름 → 자동 잇기 → 산출방법서 위험률 표

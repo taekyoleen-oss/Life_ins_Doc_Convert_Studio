@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { attachTables, autoMap, baseName, cellNum, guessRole, parseDelimited, pickColumn, readXlsx, sanitizeSheet, sexOf, sheetFromSpec, sheetFromText } from "@/lib/sheet";
+import { attachTables, autoMap, baseName, cellNum, guessRole, parseDelimited, readXlsx, sanitizeSheet, sexOf, sheetFromSpec, sheetFromText, usedColumns } from "@/lib/sheet";
 import { yamlToSpec } from "@/lib/conditions/yaml";
 import { renderMethodDoc } from "@/lib/methoddoc/render";
+import { rateTable } from "@/lib/methoddoc/spec";
 import { SAMPLES } from "@/lib/samples";
 
 const PASTE = "연령\t사망률(남)\t사망률(여)\t80% 이상 장해율\t암발생률_여\n40\t0.00100\t0.00050\t1.2‰\t0.3%\n41\t0.00110\t0.00060\t1.3‰\t0.31%\n";
@@ -53,16 +54,25 @@ describe("열 → 조건 → 산출방법서", () => {
       { to: "skip" },
     ]);
   });
-  it("계약 성별의 열을 RateRef.table 로 붙인다 — 자유설계보험 위험률 시트가 받는 모양", () => {
+  it("남·여 열은 두 벌 다 싣는다(RateRef.tables) — 자유설계보험이 계약정보 성별로 고른다", () => {
     const st = { sheet, map };
-    expect(pickColumn(st, "q", "F")).toBe(2);
+    expect(usedColumns(st, "q")).toEqual({ M: 1, F: 2 });
+    expect(usedColumns(st, "k80")).toEqual({ any: 3 });
     const m = attachTables(spec, st);
-    expect(m.rates[0].table).toEqual({ ages: [40, 41], values: [0.001, 0.0011], sex: "M" });
+    expect(m.rates[0].tables).toEqual({ M: { ages: [40, 41], values: [0.001, 0.0011] }, F: { ages: [40, 41], values: [0.0005, 0.0006] } });
+    expect(m.rates[0].table).toEqual({ ages: [40, 41], values: [0.001, 0.0011], sex: "M" });   // 옛 소비자용 한 벌(남)
+    expect(rateTable(m.rates[0], "F")?.values).toEqual([0.0005, 0.0006]);
+    expect(m.rates[1].tables).toBeUndefined();
     expect(m.rates[1].table?.values[0]).toBeCloseTo(0.0012, 12);
-    const f = attachTables({ ...spec, contract: { ...spec.contract, sex: "F" } }, st);
-    expect(f.rates[0].table?.values).toEqual([0.0005, 0.0006]);
     const rows = renderMethodDoc(m).flatMap((s) => s.blocks).flatMap((b) => (b.t === "table" ? b.rows : []));
-    expect(rows.some((r) => r[0] === "제7회 경험생명표 사망률" && r[4] === "40~41세 2행")).toBe(true);
+    expect(rows.some((r) => r[0] === "제7회 경험생명표 사망률" && r[4] === "40~41세 2행 · 남·여")).toBe(true);
+  });
+  it("남·여 두 벌 → 위험률 표 창 → 다시 붙이면 같은 두 벌", () => {
+    const m = attachTables(spec, { sheet, map });
+    const st = sheetFromSpec(m, "a.json")!;
+    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률(남)", "제7회 경험생명표 사망률(여)", "80% 이상 장해율"]);
+    const bare = { ...m, rates: m.rates.map((r) => ({ ...r, table: undefined, tables: undefined })) };
+    expect(attachTables(bare, st).rates.map((r) => [r.table, r.tables])).toEqual(m.rates.map((r) => [r.table, r.tables]));
   });
   it("JSON 의 위험률 표 → 위험률 표 창 → 다시 붙이면 같은 표 (자유설계보험 JSON 을 열 때)", () => {
     const withT = { ...spec, rates: [

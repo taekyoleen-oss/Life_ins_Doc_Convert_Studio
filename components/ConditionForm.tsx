@@ -52,7 +52,6 @@ export const krw = (won?: number) => {
   const eok = Math.floor(won / 1e8), man = Math.round((won % 1e8) / 1e4);
   return `${eok ? `${eok}억` : ""}${man ? `${eok ? " " : ""}${man.toLocaleString("ko-KR")}만` : ""} 원`;
 };
-const FREQS: [number, string][] = [[12, "월납"], [4, "3개월납"], [2, "6개월납"], [1, "연납"]];
 const BEN_ROLES: [string, string, string][] = [
   ["incidence", "진단형 (최초발생)", "발생 시 정액 지급 후 그 담보 소멸 — 2대질병·3대질병·암 등"],
   ["death", "사망형", "사망 시 지급(종신·정기). 탈퇴 사유 전부에 같은 보험금"],
@@ -185,12 +184,6 @@ function Card({ c, index, open, onToggle, move, remove }: { c: CardDef; index: n
 
 // ── 카드 본문 ────────────────────────────────────────────────────────────────
 const PAY_FREQS = ["월납", "2개월납", "3개월납", "6개월납", "연납", "일시납"];
-/** "만15세 ~ 65세" → [15, 65]. "(80-납입기간)세" 처럼 식이면 null */
-const ageRange = (s: string): [number, number] | null => {
-  const m = /(\d+)\s*세?\s*[~∼～-]\s*(\d+)\s*세/.exec(s);
-  return m ? [Number(m[1]), Number(m[2])] : null;
-};
-
 function ProductBody() {
   const f = useForm();
   const terms = list(f.get(["product", "terms"]));
@@ -200,14 +193,6 @@ function ProductBody() {
   const setFreq = (x: string, on: boolean) => {
     const next = [...PAY_FREQS.filter((k) => (k === x ? on : freqs.includes(k))), ...freqs.filter((k) => !PAY_FREQS.includes(k))];
     f.set(["product", "payFreqs"], next.length ? next : undefined);
-  };
-  /** M02 시산 기준에서 한 줄 — 판매 범위를 적는 출발점 */
-  const fromContract = () => {
-    const c = (k: string) => num(f.get(["contract", k]));
-    const years = c("termYears"), end = years && c("age") !== undefined ? c("age")! + years - 1 : undefined;
-    // 만기 나이가 80·90·100세처럼 떨어지면 세만기, 아니면 년만기로 적는다 — 가입나이 범위는 사람이 적는다
-    const term = c("termAge") ? `${c("termAge")}세만기` : end && end >= 60 && end % 5 === 0 ? `${end}세만기` : years ? `${years}년만기` : "";
-    f.edit([{ path: ["product", "terms"], add: true, value: { term, pay: c("payYears") ? `${c("payYears")}년납` : "", age: "" } }]);
   };
   return (
     <div className="space-y-3">
@@ -220,7 +205,7 @@ function ProductBody() {
         <F p={["meta", "note"]} label="비고" kind="area" wide />
       </Grid>
       <div data-path="product" className="sub space-y-3">
-        <p className="sub-title">가입 조건 <span>산출방법서 개요에 싣는 판매 범위(정보). 보험료는 M02 시산 기준 한 점으로 계산합니다.</span></p>
+        <p className="sub-title">가입 조건 <span>산출방법서 개요에 싣는 판매 범위(정보). 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</span></p>
         <Grid>
           <F p={["product", "category"]} label="보험의 종류" dl="dl-category" placeholder="예: 생명보험 / 종신" />
           <F p={["product", "renewal"]} label="갱신" dl="dl-renewal" placeholder="예: 비갱신형" />
@@ -264,35 +249,11 @@ function ProductBody() {
           ))}
           <div className="flex flex-wrap gap-2">
             <Add onClick={() => f.edit([{ path: ["product", "terms"], add: true, value: { term: "", pay: "", age: "" } }])}>＋ 행</Add>
-            <Add onClick={fromContract}>M02 시산 기준으로 한 줄</Add>
           </div>
           <p className="fld-hint mt-1">사업방법서의 판매 범위 표처럼 적습니다 — 예: 80세만기 · 10·15·20년납 · 만15세 ~ (80-납입기간)세. 구분은 담보·종목마다 다를 때만, 여자 칸은 남자와 다를 때만.</p>
         </div>
       </div>
     </div>
-  );
-}
-
-function ContractBody() {
-  const f = useForm();
-  const age = num(f.get(["contract", "age"])), term = num(f.get(["contract", "termYears"])), sum = num(f.get(["contract", "sumAssured"]));
-  // 가입 조건(M01)의 가입나이 범위 밖이면 알린다 — "(80-납입기간)세" 같은 식은 건너뛴다
-  const female = f.get(["contract", "sex"]) === "F";
-  const ranges = list(f.get(["product", "terms"])).map((r) => ageRange(str(female && r.ageF ? r.ageF : r.age))).filter((x): x is [number, number] => !!x);
-  const outside = age !== undefined && ranges.length > 0 && !ranges.some(([a, b]) => age >= a && age <= b);
-  return (
-    <Grid>
-      <p className="fld-hint col-span-2">시산 기준 — 이 계약 한 점으로 보험료·책임준비금을 계산합니다(산출방법서의 &ldquo;기준: 남자 40세, 20년납 …&rdquo;). 판매 범위는 M01 가입 조건에 적습니다.</p>
-      <Sel p={["contract", "sex"]} label="성별" options={[["M", "남"], ["F", "여"]]} hint="피보험자 — 위험률 표는 이 성별의 열을 씁니다" />
-      <F p={["contract", "age"]} label="가입나이" kind="num" unit="세"
-        hint={outside ? <span className="text-amber-700">가입 조건의 가입나이({ranges.map(([a, b]) => `${a}~${b}세`).join(", ")}) 밖입니다</span> : undefined} />
-      <F p={["contract", "termYears"]} label="보험기간" kind="num" unit="년" hint={age !== undefined && term ? `${age + term - 1}세 만기` : "비우면 만기 나이로"} />
-      <F p={["contract", "termAge"]} label="만기 나이" kind="num" unit="세" hint="보험기간 대신 적을 때" />
-      <F p={["contract", "payYears"]} label="납입기간" kind="num" unit="년납" dl="dl-pay" />
-      <F p={["contract", "payAge"]} label="납입 만기 나이" kind="num" unit="세" hint="납입기간 대신 적을 때" />
-      <Sel p={["contract", "freq"]} label="납입주기" options={FREQS} />
-      <F p={["contract", "sumAssured"]} label="보험가입금액" kind="num" unit="원" hint={krw(sum)} />
-    </Grid>
   );
 }
 
@@ -404,7 +365,7 @@ function BenefitBody({ i, rates, spec }: { i: number; rates: RateItem[]; spec: M
   const exits = (f.get(at("exitRateIds")) as unknown[] | undefined)?.map(String) ?? [];
   const amount = num(f.get(at("amount"))), wait = num(f.get(at("waitDays")));
   const steps = list(f.get(at("steps"))), points = list(f.get(at("points")));
-  const age = num(f.get(["contract", "age"])) ?? 40, end = num(f.get(at("endAge"))) ?? 80;
+  const age = 40, end = num(f.get(at("endAge"))) ?? 80;       // 구간 첫 줄의 시작 나이 기본값
   const formula = useMemo(() => generateFormulas(spec).find((x) => x.path?.split("|")[0] === `benefits[${i}]`)?.text
     .split("\n").filter((l) => /유지자수|납입자수|급부/.test(l)) ?? [], [spec, i]);
   const toggleExit = (id: string, on: boolean) => f.set(at("exitRateIds"), rates.map((r) => r.id).filter((x) => (x === id ? on : exits.includes(x))));
@@ -612,7 +573,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, o
     select: (key) => onSelect([key]),
   };
 
-  const m = (raw.meta ?? {}) as Obj, c = (raw.contract ?? {}) as Obj, b = (raw.basis ?? {}) as Obj;
+  const m = (raw.meta ?? {}) as Obj, b = (raw.basis ?? {}) as Obj;
   const rates: RateItem[] = list(raw.rates).map((r, i) => {
     const id = str(r.id) || `r${i + 1}`;
     const role = (Object.keys(RATE_ROLE_LABEL).includes(str(r.role)) ? str(r.role) : spec.rates.find((x) => x.id === id)?.role ?? "other") as RateRole;
@@ -629,19 +590,13 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, o
   const sr = (raw.surrender ?? {}) as Obj, rs = (raw.reserve ?? {}) as Obj;
   const nNotes = (Array.isArray(sr.notes) ? sr.notes.length : 0) + (Array.isArray(rs.notes) ? rs.notes.length : 0);
 
-  const errM01 = bad(/^meta\./), errM02 = bad(/^contract\.|납입기간/), errM03 = bad(/^basis\.(?!waiver)|해지율/), errM06 = bad(/^사업비/);
+  const errM01 = bad(/^meta\.|^contract/), errM03 = bad(/^basis\.(?!waiver)|해지율/), errM06 = bad(/^사업비/);
   const cards: CardDef[] = [
     { id: "M01", code: "M01", title: "상품 기본정보", paths: ["meta", "product"], status: status(errM01, !!str(m.productName)), message: errM01,
       summary: [str(m.productName) || "이름 없음", str(m.kind), sp.product?.terms?.length ? `가입 조건 ${sp.product.terms.length}행` : "",
         sp.product?.payFreqs?.join("·") ?? ""],
-      help: "상품 이름·종류·작성일과 가입 조건(보험의 종류·보험종목·보험기간·납입기간·가입나이·납입주기·가입금액 한도·갱신)입니다. 가입 조건은 사업방법서의 판매 범위 표처럼 적어 산출방법서 개요에 싣는 정보이고, 보험료는 M02 시산 기준 한 점으로 계산합니다.",
+      help: "상품 이름·종류·작성일과 가입 조건(보험의 종류·보험종목·보험기간·납입기간·가입나이·납입주기·가입금액 한도·갱신)입니다. 가입 조건은 사업방법서의 판매 범위 표처럼 적어 산출방법서 개요에 싣는 정보입니다. 보험료를 계산할 계약 한 점(M02 계약정보 — 성별·가입나이·보험기간·납입기간·납입주기·가입금액)은 산출방법서의 정보가 아니어서 여기에 두지 않고, 자유설계보험 상품 만들기에서 기본값으로 시작해 고칩니다.",
       body: <ProductBody /> },
-    { id: "M02", code: "M02", title: "계약조건 · 시산 기준", paths: ["contract"],
-      status: status(errM02, num(c.age) !== undefined && !!str(c.sex) && (num(c.termYears) ?? num(c.termAge)) !== undefined && (num(c.payYears) ?? num(c.payAge)) !== undefined), message: errM02,
-      summary: [sp.contract.age !== undefined ? `${sp.contract.age}세 ${sp.contract.sex === "F" ? "여" : "남"}` : "",
-        `${sp.contract.termYears ? `${sp.contract.termYears}년` : sp.contract.termAge ? `${sp.contract.termAge}세` : "?"} 만기 / ${sp.contract.payYears ?? "?"}년납`,
-        FREQS.find(([v]) => v === sp.contract.freq)?.[1] ?? ""],
-      help: "보험료·책임준비금을 실제로 계산하는 계약 한 점(시산 기준)입니다 — 피보험자(성별·가입나이)와 보험기간·납입기간·납입주기를 하나씩. 보험기간은 연수 또는 만기 나이 중 하나만 적어도 됩니다. 판매 범위(여러 보험기간·가입나이)는 M01 가입 조건에 적습니다.", body: <ContractBody /> },
     { id: "M03", code: "M03", title: "이자율·저해지", paths: ["basis.interest", "basis.standardInterest", "basis.minGuaranteed", "basis.averagePublished", "basis.lapse", "basis.lowRatio"],
       status: status(errM03, sp.basis.interest !== undefined), message: errM03,
       summary: [sp.basis.interest !== undefined ? `i = ${pct(sp.basis.interest)}` : "", sp.basis.standardInterest !== undefined ? `표준 ${pct(sp.basis.standardInterest)}` : "",
@@ -754,7 +709,6 @@ function Lists() {
       {dl("dl-term", ["80세만기", "90세만기", "100세만기", "110세만기", "종신", "10년만기", "20년만기", "30년만기"])}
       {dl("dl-paylist", ["전기납", "일시납", "10년납", "20년납", "30년납", "10·15·20년납", "10·20·30년납", "5·10·15·20년납"])}
       {dl("dl-agerange", ["만15세 ~ 60세", "만15세 ~ 65세", "만15세 ~ 70세", "만15세 ~ (80-납입기간)세", "0세 ~ 60세", "20세 ~ 60세"])}
-      {dl("dl-pay", [5, 7, 10, 12, 15, 20, 25, 30])}
       {dl("dl-unit", ["주계약", "특약1", "특약2"])}
       {dl("dl-group", ["계약체결비용", "계약관리비용", "수금비용"])}
       {dl("dl-symbol", ["α_S", "α_P", "β_S", "β_G", "β′", "γ", "α", "β"])}
