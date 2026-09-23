@@ -169,7 +169,7 @@ function Card({ c, index, open, onToggle, move, remove }: { c: CardDef; index: n
           {move && <><button type="button" className="card-icon" onClick={() => move(-1)} title="위로">▲</button><button type="button" className="card-icon" onClick={() => move(1)} title="아래로">▼</button></>}
           {remove && <button type="button" className="card-icon hover:text-rose-700" onClick={remove} title="삭제">삭제</button>}
         </div>
-        <button type="button" className="card-toggle" aria-expanded={open} onClick={(e) => { e.stopPropagation(); onToggle(); }}>{open ? "▾ 접기" : "▸ 펼치기"}</button>
+        <button type="button" className="card-toggle" aria-expanded={open} aria-label={open ? "접기" : "펼치기"} title={open ? "접기" : "펼치기"} onClick={(e) => { e.stopPropagation(); onToggle(); }}>{open ? "︿" : "﹀"}</button>
       </header>
       {help && <div className="card-help">{c.help}</div>}
       {open && (
@@ -205,7 +205,7 @@ function ProductBody() {
         <F p={["meta", "note"]} label="비고" kind="area" wide />
       </Grid>
       <div data-path="product" className="sub space-y-3">
-        <p className="sub-title">가입 조건 <span>산출방법서 개요에 싣는 판매 범위(정보). 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</span></p>
+        <p className="sub-title">가입 조건 <span>판매 범위(정보) — 산출방법서 개요에 싣습니다. 계산할 계약 한 점(성별·나이·기간·금액)은 자유설계보험 M02 계약정보에서 정합니다.</span></p>
         <Grid>
           <F p={["product", "category"]} label="보험의 종류" dl="dl-category" placeholder="예: 생명보험 / 종신" />
           <F p={["product", "renewal"]} label="갱신" dl="dl-renewal" placeholder="예: 비갱신형" />
@@ -340,8 +340,7 @@ function WaiverBody({ rates }: { rates: RateItem[] }) {
     <div className="space-y-2">
       <Check p={["basis", "waiver"]} label="추가 납입면제 사유 적용" />
       <p className="text-xs leading-relaxed text-muted-foreground">
-        납입자수 l′ 는 담보의 탈퇴 사유로 유지자수 l 과 똑같이 줄어듭니다(사망만이면 1 − q, 사망과 진단이면 1 − q − r + q·r/2).
-        보장은 이어지고 납입만 면제되는 사유(예: 80% 이상 장해)가 있을 때만 켜고, 그 위험률을 &apos;납입면제&apos;로 표시합니다 — 따로 둔 납입면제율을 곱하지 않습니다.
+        납입자수 l′ 는 담보의 탈퇴 사유로 유지자수와 똑같이 줄어듭니다(1 − q − r + q·r/2). 보장은 이어지고 납입만 면제되는 사유(예: 80% 이상 장해)가 있을 때만 켜고 그 위험률을 &apos;납입면제&apos;로 표시합니다.
       </p>
       {on && (
         <div className="flex flex-wrap gap-2">

@@ -100,8 +100,8 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
       </div>
       {!sh ? (
         <div className="sheet-empty">
-          <p>Excel 에서 표를 복사해 아래 칸에 붙여넣거나(<b>Ctrl+V</b>) CSV·TSV·XLSX 파일을 올리세요. <b>첫 행은 열 이름</b>(예: 연령 · 사망률(남) · 사망률(여) · 암발생률)으로 읽고,
-            열 이름이 조건의 위험률과 겹치면 바로 잇습니다. 이은 열은 산출방법서 위험률 표와 MethodSpec JSON(자유설계보험 입력)에 실립니다.</p>
+          <p>Excel 표를 복사해 아래 칸에 붙여넣거나(<b>Ctrl+V</b>) CSV·XLSX 파일을 올리세요. <b>첫 행은 열 이름</b>(연령 · 사망률(남) · 사망률(여) · 암발생률 …) — 조건의 위험률 이름과 겹치면 바로 잇습니다.
+            산출방법서(PDF·Word·한글)에 든 별첨 위험률 표는 [열기]만 해도 여기로 들어옵니다.</p>
           <textarea className="inp h-24 font-mono text-xs" aria-label="위험률 표 붙여넣기" placeholder={"연령\t사망률(남)\t사망률(여)\n40\t0.00103\t0.00052\n41\t0.00112\t0.00056"} />
         </div>
       ) : (

@@ -336,9 +336,9 @@ export default function Studio() {
   return (
     <div className="flex h-screen flex-col">
       {/* ── 머리 ── */}
-      <header className="no-print flex items-center gap-2 border-b border-border bg-white px-4 py-2">
-        <h1 className="mr-2 font-title text-lg font-bold text-foreground">Life_ins_Doc_Convert_<span className="text-primary">Studio</span></h1>
-        <span className="mr-auto hidden text-xs text-muted-foreground lg:inline">산출방법서 ↔ 조건 변환기</span>
+      <header className="no-print z-10 flex items-center gap-2 border-b border-border bg-white/95 px-4 py-2 shadow-[0_1px_0_#0000000a] backdrop-blur">
+        <h1 className="mr-1 font-title text-lg font-bold tracking-tight text-foreground">Life_ins_Doc_Convert_<span className="text-primary">Studio</span></h1>
+        <span className="mr-auto hidden text-xs text-muted-foreground lg:inline">산출방법서 ↔ 조건</span>
         <div className="seg" role="group" aria-label="보기">
           <span className="seg-label">보기</span>
           {PANES.map((p) => (
@@ -357,19 +357,6 @@ export default function Studio() {
             <button onClick={() => loadSample(SAMPLES[2].yaml, "markdown")}>Markdown 산출방법서 고쳐 보기<small>무해지 암보험 — 해지율을 바꿔 보기</small></button>
           </div>
         </details>
-        <details className="menu">
-          <summary className="btn">표준 양식 ▾</summary>
-          <div className="menu-list right-0" onClick={closeMenu}>
-            <p className="menu-head">표준 산출방법서 — 상품별 견본 (Word · 한글)</p>
-            {STANDARDS.map((x) => [
-              <button key={`${x.id}-d`} onClick={() => download(`${standardFile(x)}.docx`, toStandardDocx(standardSpec(x)), DOCX_MIME)}>{standardFile(x)}.docx<small>{x.hint}</small></button>,
-              <button key={`${x.id}-h`} onClick={() => void downloadHwpx(standardFile(x))}>{standardFile(x)}.hwpx<small>한글</small></button>,
-            ])}
-            <p className="menu-head">지금 조건으로</p>
-            <button onClick={() => exporters.docx(specT)}>Word .docx — 표준 양식으로 내려받기<small>Word·한글에서 고친 뒤 아래로 올립니다</small></button>
-            <button onClick={() => mergeInput.current?.click()}>고친 Word·한글 올려 조건에 반영<small>바뀐 값·식·주석만 들어갑니다 (조건 주석 유지)</small></button>
-          </div>
-        </details>
         <input ref={mergeInput} aria-label="고쳐 반영할 파일" type="file" accept={ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void applyFile(f); e.target.value = ""; }} />
         <details className="menu">
           <summary className="btn">내보내기 ▾</summary>
@@ -380,6 +367,7 @@ export default function Studio() {
             <p className="menu-head">산출방법서</p>
             <button onClick={() => exporters.docx(specT)}>Word .docx<small>표준 산출방법서 — 한글에서도 열림 · 작성 안내 포함</small></button>
             <button onClick={() => exporters.docx(specT, false)}>Word .docx (작성 안내 없이)<small>출력·제출용</small></button>
+            <button onClick={() => mergeInput.current?.click()}>고친 Word·한글 올려 조건에 반영<small>바뀐 값·식·주석만 들어갑니다 — 상품별 견본은 [Word·한글] 탭</small></button>
             <button onClick={() => exporters.tex(sections, title, s)}>LaTeX .tex<small>xelatex 로 조판 (kotex)</small></button>
             <button onClick={() => exporters.md(sections, title, s)}>Markdown .md</button>
             <button onClick={() => exporters.html(sections, title, s)}>HTML .html<small>수식 포함 단독 파일</small></button>
@@ -399,10 +387,10 @@ export default function Studio() {
                   <b>조건</b>
                   <div className="seg" role="tablist" aria-label="조건 보기">
                     {(["form", "yaml"] as const).map((t) => (
-                      <button key={t} role="tab" aria-selected={layout.left === t} className={layout.left === t ? "seg-on" : ""} onClick={() => setLayout((l) => ({ ...l, left: t }))}>{t === "form" ? "입력" : "YAML"}</button>
+                      <button key={t} role="tab" aria-selected={layout.left === t} className={layout.left === t ? "seg-on" : ""} onClick={() => setLayout((l) => ({ ...l, left: t }))}
+                        title={t === "form" ? "카드의 칸을 채우면 조건 파일(YAML)에 들어갑니다" : "같은 조건을 MethodSpec 조건 파일로 봅니다"}>{t === "form" ? "입력" : "YAML"}</button>
                     ))}
                   </div>
-                  <span className="truncate text-muted-foreground">{layout.left === "form" ? "칸을 채우면 조건 파일(YAML)에 들어갑니다" : "MethodSpec 조건 파일"}</span>
                   <span className="flex-1" />
                   {syntaxErrors.length > 0 && <span className="truncate rounded bg-rose-100 px-1.5 text-rose-700">{syntaxErrors[0].line}줄: {syntaxErrors[0].message}</span>}
                   {tools("cond")}
@@ -428,7 +416,7 @@ export default function Studio() {
                 {tab === "doc" && (
                   <div className="print-block flex min-h-0 flex-1 flex-col">
                     <div className="no-print pane-head">
-                      <span className="truncate text-muted-foreground">조건으로 만든 산출방법서 — 블록을 누르면 왼쪽에서 그 조건이 표시됩니다</span>
+                      <span className="truncate text-muted-foreground">블록을 누르면 왼쪽에서 그 조건이 표시됩니다</span>
                       <span className="flex-1" />
                       <button className={`btn ${pal ? "btn-on" : ""}`} onClick={() => setPal((v) => !v)}>＋ 수식 더하기</button>
                     </div>
@@ -463,18 +451,18 @@ export default function Studio() {
                 {tab === "word" && (
                   <div className="thin-scroll min-h-0 flex-1 overflow-auto bg-white px-6 py-5 text-sm leading-7">
                     <h3 className="mb-1 text-base font-bold">Word·한글로 고치기 — 표준 산출방법서</h3>
-                    <ol className="word-steps">
-                      <li><b>내려받기</b> — 지금 조건을 표준 산출방법서(.docx)로 받습니다. 한글에서도 열리고, [다른 이름으로 저장 → HWPX] 하면 한글 문서가 됩니다.</li>
-                      <li><b>고치기</b> — 표의 값·행, <code>[식]</code> 아래 식 줄, <code>※</code> 설명을 고칩니다. 절 제목과 표 머리글은 그대로 둡니다. 식은 <code>l_{"{x+t}"}</code> 처럼 적거나 Word·한글 수식 편집기로 넣습니다.</li>
-                      <li><b>올리기</b> — 바뀐 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서 v2</code> 행이 있으면 식·주석·절까지(위험률·담보 행을 지운 것도), 없으면 값만 읽습니다. 별첨 위험률 값 표를 고치면 아래 위험률 표 창에 들어갑니다.</li>
-                      <li><b>출력</b> — Word(작성 안내 없이) 또는 PDF(인쇄 → PDF 저장, 수식이 조판되어 나옵니다).</li>
-                    </ol>
                     <div className="my-3 flex flex-wrap gap-2">
                       <button className="btn-primary" onClick={() => exporters.docx(specT)}>Word 내려받기</button>
                       <button className="btn-primary" onClick={() => mergeInput.current?.click()}>고친 Word·한글 올리기 → 조건에 반영</button>
                       <button className="btn" onClick={() => exporters.docx(specT, false)}>Word (작성 안내 없이)</button>
                       <button className="btn" onClick={print}>PDF 저장</button>
                     </div>
+                    <ol className="word-steps">
+                      <li><b>내려받기</b> — 지금 조건을 표준 산출방법서(.docx)로 받습니다. 한글에서도 열리고, [다른 이름으로 저장 → HWPX] 하면 한글 문서가 됩니다.</li>
+                      <li><b>고치기</b> — 표의 값·행, <code>[식]</code> 아래 식 줄, <code>※</code> 설명을 고칩니다. 절 제목과 표 머리글은 그대로 둡니다. 식은 <code>l_{"{x+t}"}</code> 처럼 적거나 Word·한글 수식 편집기로 넣습니다.</li>
+                      <li><b>올리기</b> — 바뀐 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서 v2</code> 행이 있으면 식·주석·절까지(위험률·담보 행을 지운 것도), 없으면 값만 읽습니다. 별첨 위험률 값 표를 고치면 아래 위험률 표 창에 들어갑니다.</li>
+                      <li><b>출력</b> — Word(작성 안내 없이) 또는 PDF(인쇄 → PDF 저장, 수식이 조판되어 나옵니다).</li>
+                    </ol>
                     {wordLog && (
                       <div className={`word-log ${wordLog.changes.length ? "" : "word-log-none"}`}>
                         <b>{wordLog.name}</b> — {wordLog.format ? `${wordLog.format} 로 읽음 (식·주석·절 포함)` : "표준 양식이 아님 — 표·본문 규칙으로 읽은 값만"}
@@ -484,7 +472,7 @@ export default function Studio() {
                         <p className="text-xs text-muted-foreground">어디서 읽었는지는 [원문] 탭에서 봅니다.</p>
                       </div>
                     )}
-                    <h4 className="mt-4 font-bold">상품별 표준 산출방법서</h4>
+                    <h4 className="mt-4 font-bold">상품별 표준 산출방법서 견본 (Word · 한글)</h4>
                     <table className="word-std">
                       <tbody>
                         {STANDARDS.map((x) => (
@@ -566,7 +554,7 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>위험률 표</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽습니다. 열마다 [잇기]에서 연령·위험률·성별을 고르면 그 값 표가 산출방법서와 MethodSpec JSON 에 실립니다(남·여 열이 있으면 계약 성별의 열).</li>
           <li><b>수식·기호 견본</b> 산출방법서 탭의 [＋ 수식 더하기]는 견본 식을 조건에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
           <li><b>그림으로 읽기</b> 스캔 PDF·PNG·JPG 를 열면 쪽을 골라 본인의 Anthropic API 키로 보냅니다. AI 는 쪽을 글로 옮겨 적기만 하고 값은 앱의 규칙이 읽습니다. 글자 있는 PDF 도 [원문] 탭에서 [그림으로 다시 읽기] 할 수 있습니다.</li>
-          <li><b>Word·한글로 고치기</b> [Word·한글] 탭이나 [표준 양식] 메뉴에서 표준 산출방법서(.docx · .hwpx)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다. [열기]로 올리면 조건 전체를 새로 만듭니다.</li>
+          <li><b>Word·한글로 고치기</b> [Word·한글] 탭에서 표준 산출방법서(.docx · .hwpx — 상품별 견본 포함)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다(지운 행·칸도 빠집니다). [열기]로 올리면 조건 전체를 새로 만듭니다.</li>
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
           <li><b>대응 위치</b> 왼쪽 칸·줄을 고르면 오른쪽에서 그 조건이 만든 곳(표의 행·수식·원문 근거·위험률 표의 열)이 노랗게, 오른쪽을 누르면 왼쪽 칸이 표시됩니다.</li>
           <li><b>화면 조절</b> 창 사이 막대를 끌어 크기를 바꾸고(두 번 누르면 처음 비율), 창마다 [⤢ 전체]·[– 숨기기], 위 [보기]에서 다시 켭니다.</li>

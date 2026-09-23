@@ -254,11 +254,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click(".tab:has-text('Word·한글')"); await p.screenshot({ path: `${OUT}/s11_word.png` }); await p.click(".tab:has-text('산출방법서')");
   ok("반영 뒤 산출방법서 적용이율 3.000% · 고친 식이 나온다", row17.includes("3.000%") && (await p.locator(".doc-body .formula", { hasText: "25" }).count()) >= 1, row17);
 
-  // 18) 표준 양식 메뉴 — 한글(.hwpx) 견본을 받아 [열기] → 표준 산출방법서로 읽는다
-  await p.click("details:has(summary:has-text('표준 양식')) summary");
-  const [dh] = await Promise.all([p.waitForEvent("download"), p.click(".menu-list button:has-text('표준_산출방법서_질병보험.hwpx')")]);
+  // 18) [Word·한글] 탭의 상품별 견본 — 한글(.hwpx) 견본을 받아 [열기] → 표준 산출방법서로 읽는다
+  await p.click(".tab:has-text('Word·한글')");
+  const [dh] = await Promise.all([p.waitForEvent("download"), p.click(".word-std tr:has-text('표준_산출방법서_질병보험') button:has-text('한글')")]);
   const hwpx = fs.readFileSync(await dh.path());
-  ok("[표준 양식] 표준_산출방법서_질병보험.hwpx 내려받기", dh.suggestedFilename() === "표준_산출방법서_질병보험.hwpx" && hwpx.length > 20000, `${hwpx.length}B`);
+  ok("[Word·한글] 표준_산출방법서_질병보험.hwpx 내려받기", dh.suggestedFilename() === "표준_산출방법서_질병보험.hwpx" && hwpx.length > 20000, `${hwpx.length}B`);
   await p.setInputFiles(OPEN, { name: "표준_산출방법서_질병보험.hwpx", mimeType: "application/hwp+zip", buffer: hwpx });
   await p.waitForSelector(".toast:has-text('표준_산출방법서_질병보험.hwpx —')");
   const t18 = await p.textContent(".toast");
