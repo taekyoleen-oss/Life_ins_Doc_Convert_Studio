@@ -3,7 +3,7 @@ import { parseMethodDoc } from "./methoddoc/parse";
 import type { Evidence } from "./methoddoc/spec";
 import { latexToDoc } from "./methoddoc/tex";
 import { jsonToSpec, specToYaml } from "./conditions/yaml";
-import { sheetFromSpec, type SheetState } from "./sheet";
+import { autoMap, sheetFromDoc, sheetFromSpec, type SheetState } from "./sheet";
 
 /** 불러온 산출방법서 원문 — 원문 탭과 근거 연결에 쓴다 */
 export interface Original {
@@ -34,8 +34,11 @@ export const ACCEPT = ".pdf,.docx,.hwp,.hwpx,.tex,.md,.txt,.yaml,.yml,.json,.png
 const ext = (name: string) => (name.split(".").pop() ?? "").toLowerCase();
 
 /** 산출방법서 문서 → 조건. 값마다 출처를 주석으로 달고, 못 찾은 항목을 머리말에 적는다 (그림으로 읽은 글도 이 길을 탄다) */
-export function fromDoc(name: string, doc: ExtractedDoc): { yaml: string; original: Original; format?: string } {
+export function fromDoc(name: string, doc: ExtractedDoc): { yaml: string; original: Original; format?: string; sheet?: SheetState } {
   const r = parseMethodDoc(doc, { fallbackName: name.replace(/\.[^.]+$/, "") });
+  // 별첨 위험률 값 표(연령 × 위험률)가 있으면 위험률 표 창으로 — 열 이름이 위험률 이름과 겹치면 바로 잇는다
+  const sh = sheetFromDoc(doc, name);
+  const sheet = sh ? { sheet: sh, map: autoMap(sh, r.spec.rates) } : undefined;
   // 원문 절(번호 체계로 자른 문단 묶음)은 PDF 에서 날짜·쪽번호가 제목으로 잡히는 잡음이 많다 — 원문은 [원문] 탭에 그대로 있으니 조건에는 싣지 않는다.
   // 표준 산출방법서는 절을 정해진 대로 읽었으므로 둔다
   if (!r.format) r.spec.sections = [];
@@ -45,7 +48,7 @@ export function fromDoc(name: string, doc: ExtractedDoc): { yaml: string; origin
     r.missing.length ? ` 못 찾은 항목: ${r.missing.join(", ")} — 직접 채워 주세요.` : "",
     r.evidence.some((e) => e.confidence === "low") ? " ⚠ 추정 값은 반드시 확인하세요." : "",
   ].filter(Boolean).join("\n");
-  return { yaml: specToYaml(r.spec, r.evidence, header), original: { name, doc, evidence: r.evidence, missing: r.missing }, format: r.format };
+  return { yaml: specToYaml(r.spec, r.evidence, header), original: { name, doc, evidence: r.evidence, missing: r.missing }, format: r.format, sheet };
 }
 
 export async function loadFile(file: File): Promise<Loaded> {
@@ -68,7 +71,9 @@ export async function loadFile(file: File): Promise<Loaded> {
     return { yaml, original, source: e === "md" ? { kind: "markdown", text } : undefined, message: `${file.name} — 산출방법서를 읽어 조건으로 옮겼습니다` };
   }
   const doc = await extractDoc(file.name, new Uint8Array(await file.arrayBuffer()));
-  const { yaml, original, format } = fromDoc(file.name, doc);
+  const { yaml, original, format, sheet } = fromDoc(file.name, doc);
   if (e === "pdf") { original.pdfUrl = URL.createObjectURL(file); original.file = file; }
-  return { yaml, original, message: `${file.name} — ${format ? `${format} · ` : ""}문단 ${doc.paragraphs.length}·표 ${doc.tables.length}에서 조건 ${original.evidence.length}개를 읽었습니다` };
+  const linked = sheet?.map.filter((m) => m.to === "rate").length ?? 0;
+  return { yaml, original, sheet, message: `${file.name} — ${format ? `${format} · ` : ""}문단 ${doc.paragraphs.length}·표 ${doc.tables.length}에서 조건 ${original.evidence.length}개를 읽었습니다${
+    sheet ? ` · 위험률 값 표 ${sheet.sheet.head.length - 1}열은 아래 위험률 표로(${linked}개 열을 조건의 위험률에 이음)` : ""}` };
 }

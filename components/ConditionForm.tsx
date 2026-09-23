@@ -8,7 +8,7 @@ import { parseRate, parseTimes } from "@/lib/methoddoc/parse";
 import { generateFormulas } from "@/lib/methoddoc/formulas";
 import { subSup } from "@/lib/methoddoc/render";
 import { RATE_ROLE_LABEL, type MethodSpec, type RateRole } from "@/lib/methoddoc/spec";
-import { guessRole } from "@/lib/sheet";
+import { guessRole, newRateId } from "@/lib/sheet";
 import { EXPENSE_PRESET } from "@/lib/samples";
 import { SECTION_OF } from "@/lib/snippets";
 import { formulaHtml } from "./DocPreview";
@@ -324,7 +324,7 @@ function RatesBody({ rates, used, tableNote }: { rates: RateItem[]; used: (id: s
           <p className={`mt-1 text-[11px] ${tableNote(r.id) ? "text-primary" : "text-muted-foreground"}`}>{tableNote(r.id) ?? "표 없음 — 아래 [위험률 표]에서 열을 이 위험률에 이으면 값 표가 붙습니다"}</p>
         </div>
       ))}
-      <Add onClick={() => f.edit([{ path: ["rates"], add: true, value: { id: uniqueId("k", rates.map((r) => r.id)), name: "새 위험률", role: "incidence" } }])}>＋ 위험률</Add>
+      <Add onClick={() => f.edit([{ path: ["rates"], add: true, value: { id: newRateId("incidence", rates.map((r) => r.id)), name: "새 위험률", role: "incidence" } }])}>＋ 위험률</Add>
     </div>
   );
 }

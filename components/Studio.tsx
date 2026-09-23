@@ -24,7 +24,7 @@ import type { RateRole } from "@/lib/methoddoc/spec";
 import { ACCEPT, fromDoc, loadFile, type Original } from "@/lib/load";
 import { DOCX_MIME, download, exporters } from "@/lib/export";
 import { STANDARDS, standardFile, standardSpec, toStandardDocx } from "@/lib/standards";
-import { attachTables, autoMap, linkNote, newRateId, sanitizeSheet, sheetFromFile, sheetFromText, type Sheet, type SheetState } from "@/lib/sheet";
+import { attachTables, autoMap, linkNote, newRateId, sanitizeSheet, sheetFromDoc, sheetFromFile, sheetFromSpec, sheetFromText, type Sheet, type SheetState } from "@/lib/sheet";
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 
 type Tab = "doc" | "latex" | "markdown" | "word" | "original";
@@ -265,7 +265,7 @@ export default function Studio() {
     const text = kind === "latex" ? (latex.dirty ? latex.text : genLatex) : (md.dirty ? md.text : genMd);
     const doc = kind === "latex" ? latexToDoc(text) : extractText(new TextEncoder().encode(text));
     const back = parseMethodDoc(doc, { fallbackName: parsed.spec.meta.productName });
-    const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence);
+    const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence, { standard: !!back.format });
     if (!changes.length) { setToast({ text: "조건으로 옮길 바뀐 값이 없습니다 — 문장 수정은 조건에 들어가지 않습니다(내려받아 보관하세요)", kind: "warn" }); return; }
     setYaml(patchYaml(yaml, spec));
     (kind === "latex" ? setLatex : setMd)({ text: "", dirty: false });
@@ -282,11 +282,17 @@ export default function Studio() {
       setToast({ text: `${file.name} 읽는 중…`, kind: "ok" });
       const doc = await extractDoc(file.name, new Uint8Array(await file.arrayBuffer()));
       const back = parseMethodDoc(doc, { fallbackName: parsed.spec.meta.productName });
-      const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence);
+      const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence, { standard: !!back.format });
+      // 별첨 위험률 값 표가 있고 지금 표(내보낸 모양)와 다르면 그 표로 바꾼다 — 문서에서 값을 고치거나 열을 더한 것
+      const sh = sheetFromDoc(doc, file.name);
+      const cur = sheetFromSpec(specT, "")?.sheet;
+      const newSheet = sh && JSON.stringify([sh.head, sh.rows]) !== JSON.stringify([cur?.head, cur?.rows]) ? { sheet: sh, map: autoMap(sh, spec.rates) } : null;
+      if (newSheet) changes.push(`위험률 값 표: ${sh!.head.length - 1}열 × ${sh!.rows.length}행 (별첨) → 위험률 표 창`);
       if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
       setOriginal({ name: file.name, doc, evidence: back.evidence, missing: back.missing });
-      setWordLog({ name: file.name, format: back.format, changes });
+      setWordLog({ name: file.name, format: back.format, changes: [...changes, ...back.warnings.map((w) => `⚠ ${w}`)] });
       setTab("word"); showPane("doc");
+      if (newSheet) { setSheet(newSheet); showPane("sheet"); }
       if (!changes.length) { setToast({ text: `${file.name} — 조건과 다른 값이 없습니다`, kind: "warn" }); return; }
       setYaml(patchYaml(yaml, spec));
       setToast({ text: `${file.name} — 조건 ${changes.length}건 반영${back.format ? "" : " (표준 양식이 아니어서 값만)"}`, kind: "ok" });
@@ -460,7 +466,7 @@ export default function Studio() {
                     <ol className="word-steps">
                       <li><b>내려받기</b> — 지금 조건을 표준 산출방법서(.docx)로 받습니다. 한글에서도 열리고, [다른 이름으로 저장 → HWPX] 하면 한글 문서가 됩니다.</li>
                       <li><b>고치기</b> — 표의 값·행, <code>[식]</code> 아래 식 줄, <code>※</code> 설명을 고칩니다. 절 제목과 표 머리글은 그대로 둡니다. 식은 <code>l_{"{x+t}"}</code> 처럼 적거나 Word·한글 수식 편집기로 넣습니다.</li>
-                      <li><b>올리기</b> — 바뀐 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서 v1</code> 행이 있으면 식·주석·절까지, 없으면 값만 읽습니다.</li>
+                      <li><b>올리기</b> — 바뀐 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서 v2</code> 행이 있으면 식·주석·절까지(위험률·담보 행을 지운 것도), 없으면 값만 읽습니다. 별첨 위험률 값 표를 고치면 아래 위험률 표 창에 들어갑니다.</li>
                       <li><b>출력</b> — Word(작성 안내 없이) 또는 PDF(인쇄 → PDF 저장, 수식이 조판되어 나옵니다).</li>
                     </ol>
                     <div className="my-3 flex flex-wrap gap-2">

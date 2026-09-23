@@ -1,4 +1,5 @@
-import { unzip } from "./methoddoc/extract";
+import { unzip, type ExtractedDoc } from "./methoddoc/extract";
+import { rateGrid } from "./methoddoc/render";
 import type { MethodSpec, RateRef, RateRole, Sex } from "./methoddoc/spec";
 
 /**
@@ -120,9 +121,9 @@ export function guessRole(head: string): RateRole {
   return "incidence";
 }
 
-/** 새 위험률 id — 유형의 관례 기호(q 사망 · k 발생 · g 반복 · f 면제 · w 해지)에 겹치지 않게 번호를 붙인다 */
+/** 새 위험률 id — 유형의 관례 기호(q 사망 · r 발생 · g 반복 · f 면제 · w 해지 — 산출식·기호의 정의와 같다)에 겹치지 않게 번호를 붙인다 */
 export function newRateId(role: RateRole, taken: string[]): string {
-  const base = { death: "q", incidence: "k", recurring: "g", waiver: "f", lapse: "w", other: "r" }[role];
+  const base = { death: "q", incidence: "r", recurring: "g", waiver: "f", lapse: "w", other: "o" }[role];
   let k = 1, id = base;
   while (taken.includes(id)) id = `${base}${++k}`;
   return id;
@@ -133,6 +134,25 @@ export const hasNumbers = (sheet: Sheet, col: number) => sheet.rows.some((r) => 
 
 const norm = (s: string) => s.toLowerCase().replace(/[\s()[\]_·.\-]/g, "");
 const isAgeHead = (h: string) => /^(연령|나이|가입나이|age|x)$/.test(norm(h)) || /연령|나이/.test(h);
+
+/**
+ * 산출방법서 문서 속 위험률 값 표(별첨: 첫 열이 연령, 나머지가 수) → 위험률 표 창.
+ * 쪽마다 나뉜 표는 열 이름으로 합치고, 같은 열 이름이 여러 표에 있으면 연령으로 잇는다. 그런 표가 없으면 null
+ */
+export function sheetFromDoc(doc: ExtractedDoc, name: string): Sheet | null {
+  const parts = doc.tables.filter((t) => t.head.length >= 2 && isAgeHead(t.head[0]) && t.rows.length >= 2
+    && t.rows.every((r) => Number.isInteger(cellNum(r[0] ?? ""))) && t.rows.some((r) => r.slice(1).some((c) => cellNum(c) !== null)));
+  if (!parts.length) return null;
+  const heads = [...new Set(parts.flatMap((t) => t.head.slice(1).map((h) => h.trim())).filter(Boolean))];
+  const byAge = new Map<number, string[]>();
+  for (const t of parts) for (const r of t.rows) {
+    const age = cellNum(r[0] ?? "")!;
+    const row = byAge.get(age) ?? heads.map(() => "");
+    t.head.slice(1).forEach((h, i) => { const v = (r[i + 1] ?? "").trim(); if (v && v !== "—") row[heads.indexOf(h.trim())] = v; });
+    byAge.set(age, row);
+  }
+  return { name, head: ["연령", ...heads], rows: [...byAge].sort((a, b) => a[0] - b[0]).map(([a, r]) => [String(a), ...r]) };
+}
 
 /** 열 이름으로 처음 잇기: 연령 열 하나, 이름이 같거나 겹치는 위험률 */
 export function autoMap(sheet: Sheet, rates: Pick<RateRef, "id" | "name">[]): ColMap[] {
@@ -190,18 +210,14 @@ export function linkNote(st: SheetState | null, withTables: MethodSpec, rateId: 
  * 자유설계보험 등이 낸 JSON 을 열 때 표를 잃지 않게 한다(조건 파일에는 표가 실리지 않으므로).
  */
 export function sheetFromSpec(spec: MethodSpec, name: string): SheetState | null {
-  const cols = spec.rates.flatMap((r) => {
-    const both = (["M", "F"] as const).flatMap((x) => (r.tables?.[x]?.ages?.length ? [{ r, sex: x as Sex | undefined, t: r.tables[x]! }] : []));
-    return both.length ? both : r.table?.ages?.length ? [{ r, sex: r.table.sex, t: r.table }] : [];
-  });
-  if (!cols.length) return null;
-  const ages = [...new Set(cols.flatMap((c) => c.t.ages))].sort((a, b) => a - b);
+  const g = rateGrid(spec);
+  if (!g) return null;
   return {
     sheet: {
-      name, head: ["연령", ...cols.map((c) => `${c.r.name}${c.sex ? `(${sexName(c.sex)})` : ""}`)],
-      rows: ages.map((a) => [String(a), ...cols.map((c) => { const i = c.t.ages.indexOf(a); return i < 0 ? "" : String(c.t.values[i]); })]),
+      name, head: ["연령", ...g.cols.map((c) => c.head)],
+      rows: g.ages.map((a) => [String(a), ...g.cols.map((c) => { const i = c.t.ages.indexOf(a); return i < 0 ? "" : String(c.t.values[i]); })]),
     },
-    map: [{ to: "age" }, ...cols.map((c): ColMap => ({ to: "rate", rateId: c.r.id, ...(c.sex ? { sex: c.sex } : {}) }))],
+    map: [{ to: "age" }, ...g.cols.map((c): ColMap => ({ to: "rate", rateId: c.r.id, ...(c.sex ? { sex: c.sex } : {}) }))],
   };
 }
 

@@ -17,7 +17,8 @@ flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대�
 - 위험률 남·여 열은 두 벌 다 `RateRef.tables` 로 싣는다(`table` 은 옛 소비자용 한 벌). 계산하는 앱이 `rateTable(r, sex)` 로 고른다.
 - **표준 산출방법서 v2** = 이 앱이 내는 산출방법서 모양(`render.ts` `STANDARD_FORMAT`). 개요 표 `양식` 행이 표시, 식은 `[식] 제목` + 설명 줄(위)·식 줄(아래) + `※ 덧붙임`(편집용 내보내기에만 — `kind: "label"`). `기호의 정의` 절(k = 납입주기, r = 발생률, ρ = 저해지 비율), 담보마다 세로 표. Word 는 식 줄을 독립 수식(`m:oMathPara`)으로 — 한글은 글 속 수식(`m:oMath`)을 버린다. 모양을 바꾸면 `parse.ts` `readStandard`·`standards/README.md` 를 같이 고치고, `STANDARDS_UPDATE=1` 로 `standards/*.docx` 를 다시 만들고, `.hwpx` 는 한글로 다시 저장한다(시험이 되읽어 확인). 판을 바꾸면 옛 판도 읽게 둔다.
 - 그림으로 읽기: 모델은 **옮겨 적기만**(`vision.ts`), 값은 `parseMethodDoc` 가 읽는다. API 키는 사용자가 앱에서 넣고 sessionStorage(고르면 localStorage)에만 — 내보내기·조건 파일에 절대 넣지 않는다. 실제 API 호출(비용)은 사용자 동의 없이 하지 않는다 — 시험은 가짜 ask·Playwright 경로 가로채기.
-- 위험률 표는 조건 파일에 싣지 않는다(localStorage). `attachTables` 가 이은 열을 `RateRef.tables`·`table` 로 붙인다.
+- 위험률 표는 조건 파일에 싣지 않는다(localStorage). `attachTables` 가 이은 열을 `RateRef.tables`·`table` 로 붙인다. 값 표가 붙은 위험률은 산출방법서 맨 뒤 "별첨 — 위험률 표"(`rateGrid`)로 나가고, 문서의 연령 × 값 표는 `sheetFromDoc` 이 위험률 표 창으로 가져온다(parse 는 `isRateValueTable` 로 뺀다).
+- 고친 산출방법서 반영(`mergeSpec`)은 표준 양식이면 지운 것도 뺀다(담보 칸·담보가 안 쓰는 위험률 행). 문서의 식이 고치기 전 조건의 자동 식과 같으면 사람이 고친 식이 아니다 — 조건에 남기지 않는다.
 - 결과는 자유설계보험(`../flexible_insurance`) 입력으로 쓸 수 있어야 한다: 카드 코드·모양은 그 빌더(`components/builder/steps.tsx`)와 맞추고, 주고받는 것은 MethodSpec JSON 뿐이다. 대응표는 `docs/설계.md` §6.
 
 ## 함정

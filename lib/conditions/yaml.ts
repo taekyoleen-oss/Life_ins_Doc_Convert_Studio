@@ -1,5 +1,6 @@
 import { Document, isCollection, isMap, isNode, isScalar, isSeq, LineCounter, parseDocument, stringify, type Node } from "yaml";
-import { parseRate, parseTimes } from "../methoddoc/parse";
+import { generateFormulas } from "../methoddoc/formulas";
+import { normFormula, parseRate, parseTimes } from "../methoddoc/parse";
 import {
   emptySpec, hasProduct, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
   type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole,
@@ -274,8 +275,9 @@ const productKey = (p?: ProductInfo) => JSON.stringify(p ? {
 /**
  * 되읽은 스펙(parsed)에서 근거가 있는 값만 지금 조건(current)에 덮는다.
  * 위험률은 이름으로 짝지어 id·값 표를 지키고, 담보가 가리키는 id 도 그에 맞춰 옮긴다.
+ * standard(표준 산출방법서를 읽음)면 위험률 표에서 지운 행도 조건에서 뺀다 — 담보가 쓰지 않는 것만. 다른 양식은 일부만 읽힐 수 있어 더하기만 한다.
  */
-export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evidence[]): MergeResult {
+export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evidence[], opt: { standard?: boolean } = {}): MergeResult {
   const out: MethodSpec = JSON.parse(JSON.stringify(current));
   const changes: string[] = [];
   const took = new Set(evidence.filter((e) => e.confidence !== "low").map((e) => e.path.replace(/\[\d+\].*$/, "")));
@@ -319,21 +321,36 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
   }
   if (took.has("benefits") && parsed.benefits.length) {
     const fix = (id?: string) => (id ? idMap.get(id) ?? id : id);
+    // 문서의 담보 표가 곧 담보다 — 문서에서 지운 칸(면책 "없음"·구간 주석 삭제)은 조건에서도 빠진다. id 와(문서에 없으면) 단위만 이어받는다
     const next = parsed.benefits.map((b) => {
       const prev = out.benefits.find((x) => x.name === b.name);
-      return { ...prev, ...b, id: prev?.id ?? b.id, rateId: fix(b.rateId), exitRateIds: b.exitRateIds?.map((x) => fix(x)!) };
+      const ben: BenefitSpec = { ...b, id: prev?.id ?? b.id, rateId: fix(b.rateId), exitRateIds: b.exitRateIds?.map((x) => fix(x)!) };
+      if (!ben.unit && prev?.unit) ben.unit = prev.unit;
+      return JSON.parse(JSON.stringify(ben)) as BenefitSpec;     // undefined 칸을 지워 비교·저장이 깔끔하게
     });
-    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.amount, b.endAge, b.rateId, b.exitRateIds, b.steps, b.points]));
+    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.amount, b.endAge, b.waitDays, b.trigger, b.rateId, b.exitRateIds, b.steps, b.points]));
     if (view(out.benefits) !== view(next)) { changes.push(`benefits: ${out.benefits.length}개 → ${next.length}개 갱신`); out.benefits = next; }
+  }
+  // 표준 양식의 위험률 표에서 지운 행 — 담보(갱신된)가 쓰지 않는 것만 뺀다
+  if (opt.standard && took.has("rates")) {
+    const kept = new Set(parsed.rates.map((r) => idMap.get(r.id) ?? r.id));
+    const used = new Set(out.benefits.flatMap((b) => [b.rateId, ...(b.exitRateIds ?? [])]).filter(Boolean));
+    const gone = out.rates.filter((r) => !kept.has(r.id) && !used.has(r.id));
+    if (gone.length) { changes.push(`rates: "${gone.map((r) => r.name).join('", "')}" 삭제`); out.rates = out.rates.filter((r) => !gone.includes(r)); }
   }
   // 표준 산출방법서에서만 오는 것 — 회사·판·비고, 식, 준비금·환급금 주석, 원문 절
   for (const k of ["insurer", "version", "date", "note"] as const) setIf(`meta.${k}`, (s) => s.meta[k], (s, v) => { s.meta[k] = v; });
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-  // 식은 문서에서 절 순서로 나온다 — 순서만 다른 것은 바뀐 게 아니다
+  // 식은 문서에서 절 순서로 나온다 — 순서만 다른 것은 바뀐 게 아니다.
+  // 문서의 식이 "고치기 전 조건"의 자동 식과 같으면(위험률·담보를 바꿔 새 자동 식과 달라졌을 뿐) 사람이 고친 식이 아니다 — 조건에 남기지 않는다
+  const autoCur = generateFormulas(current);
+  const stale = (f: MethodSpec["formulas"][number]) => autoCur.some((a) => a.section === f.section && a.label === f.label
+    && normFormula(a.text) === normFormula(f.text) && normFormula(a.note ?? "") === normFormula(f.note ?? ""));
+  const fresh = parsed.formulas.filter((f) => !stale(f));
   const fkey = (fs: MethodSpec["formulas"]) => fs.map((f) => JSON.stringify([f.section, f.label, f.text, f.note ?? ""])).sort();
-  if (took.has("formulas") && !same(fkey(out.formulas), fkey(parsed.formulas))) {
-    changes.push(`formulas: 조건의 식 ${out.formulas.length}개 → ${parsed.formulas.length}개 (${parsed.formulas.map((f) => f.label).join(", ") || "자동 식만"})`);
-    out.formulas = parsed.formulas;
+  if (took.has("formulas") && !same(fkey(out.formulas), fkey(fresh))) {
+    changes.push(`formulas: 조건의 식 ${out.formulas.length}개 → ${fresh.length}개 (${fresh.map((f) => f.label).join(", ") || "자동 식만"})`);
+    out.formulas = fresh;
   }
   if (took.has("reserve") && !same(out.reserve.notes, parsed.reserve.notes)) {
     changes.push(`reserve.notes: ${out.reserve.notes.length}줄 → ${parsed.reserve.notes.length}줄`);
