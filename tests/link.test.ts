@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderMethodDoc } from "@/lib/methoddoc/render";
 import { withFormulas } from "@/lib/methoddoc/formulas";
 import { yamlToSpec } from "@/lib/conditions/yaml";
-import { anchorsForPaths, linesOfPaths, matchBlocks, pathsAtLines, pathsForAnchors, splitPaths } from "@/lib/conditions/link";
+import { anchorsForPaths, diffPaths, linesOfPaths, matchBlocks, pathsAtLines, pathsForAnchors, splitPaths } from "@/lib/conditions/link";
 import { SAMPLES } from "@/lib/samples";
 
 const src = SAMPLES[0].yaml;
@@ -64,5 +64,15 @@ describe("원문 근거 ↔ 조건", () => {
     expect(anchorsForPaths(evidence, ["basis.interest"])).toEqual(new Set(["p-54"]));
     expect(anchorsForPaths(evidence, ["expenses"])).toEqual(new Set(["t-13"]));
     expect(pathsForAnchors(evidence, new Set(["t-13"]))).toEqual(["expenses[2]"]);
+  });
+});
+
+describe("바뀐 곳 — diffPaths", () => {
+  it("잎 경로만, 생기거나 없어진 항목은 그 경로", () => {
+    const a = { basis: { interest: "2.5%" }, rates: [{ id: "q", name: "사망률" }], formulas: undefined };
+    const b = { basis: { interest: "3%", waiver: true }, rates: [{ id: "q", name: "사망률" }, { id: "r2", name: "발생률" }], formulas: [{ label: "새 식" }] };
+    expect(diffPaths(a, b).sort()).toEqual(["basis.interest", "basis.waiver", "formulas", "rates[1]"]);
+    expect(diffPaths(b, b)).toEqual([]);
+    expect(diffPaths({ x: [1, 2] }, { x: [1] })).toEqual(["x[1]"]);
   });
 });

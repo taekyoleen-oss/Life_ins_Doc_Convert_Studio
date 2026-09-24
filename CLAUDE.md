@@ -41,5 +41,5 @@ node node_modules/eslint/bin/eslint.js .
 node node_modules/next/dist/bin/next build --turbopack
 ```
 
-브라우저 확인(47항목: 양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표·JSON 표 내보내기·열기·수식 견본·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
+브라우저 확인(52항목: 양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표·JSON 표 내보내기·열기·수식 견본·바뀐 곳 표시·되돌리기·메뉴 닫힘·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
 `node node_modules/next/dist/bin/next start --port 3217` 을 띄운 뒤 `OUT=<폴더> node scripts/e2e.cjs` — npx 로 받아 둔 playwright-core 와 chromium 을 쓴다.

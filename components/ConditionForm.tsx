@@ -25,7 +25,7 @@ import FormulaPalette from "./FormulaPalette";
 
 type Obj = Record<string, unknown>;
 type Status = "done" | "editing" | "error" | "optional";
-interface CardDef { id: string; code: string; title: string; paths: string[]; status: Status; summary: string[]; help: string; message?: string; body: ReactNode; benefit?: number }
+interface CardDef { id: string; code: string; title: string; paths: string[]; status: Status; summary: string[]; help: string; message?: string; body: ReactNode; benefit?: number; dirty?: boolean }
 
 interface Ctx {
   get(p: YamlPath): unknown;
@@ -157,6 +157,7 @@ function Card({ c, index, open, onToggle, move, remove }: { c: CardDef; index: n
             <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
             <h3 className="text-[14px] font-semibold">{c.title}</h3>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>{label}</span>
+            {c.dirty && <span className="chip-changed" title="연 뒤에 바뀐 칸이 있습니다">● 바뀜</span>}
           </div>
           {!open && c.summary.some(Boolean) && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -545,6 +546,8 @@ interface Props {
   onEdit: (edits: YamlEdit[]) => void;
   /** 오른쪽에서 고른 경로 → 이 칸들을 표시 */
   highlight: string[];
+  /** 마지막으로 연 조건과 다른 경로 → 바뀐 칸·카드 표시 */
+  changed: string[];
   /** 칸을 골랐을 때 */
   onSelect: (paths: string[]) => void;
   open: string[];
@@ -553,7 +556,7 @@ interface Props {
   onShowYaml: () => void;
 }
 
-export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, onSelect, open, setOpen, tableNote, onShowYaml }: Props) {
+export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, onShowYaml }: Props) {
   const { doc, syntax, raw } = useMemo(() => {
     const doc = parseDocument(yaml);
     const syntax = doc.errors[0] ?? (doc.contents !== null && !isMap(doc.contents)
@@ -630,6 +633,20 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, o
       summary: [nForm ? `식 ${nForm}개` : "자동 식만"],
       help: "유지자수·계산기수·보험료·준비금·해지환급금 식은 조건에서 자동으로 만듭니다. 여기에 적은 식은 그 뒤에 붙고, 절·제목이 같으면 자동 식을 바꿉니다.", body: <FormulasBody count={nForm} /> },
   ];
+
+  const touches = (paths: string[]) => changed.some((s) => paths.some((p) => under(s, p) || under(p, s)));
+  for (const c of cards) c.dirty = touches(c.paths);
+
+  // 바뀐 칸 표시 — 가장 안쪽(칸)만. 카드는 머리의 "바뀜" 딱지가 맡는다
+  useEffect(() => {
+    const root = box.current;
+    if (!root) return;
+    root.querySelectorAll(".form-changed").forEach((el) => el.classList.remove("form-changed"));
+    if (!changed.length) return;
+    const els = [...root.querySelectorAll<HTMLElement>("[data-path]")].filter((el) => !el.classList.contains("card") && touches(splitPaths(el.dataset.path)));
+    els.filter((el) => !els.some((o) => o !== el && el.contains(o))).forEach((el) => el.classList.add("form-changed"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changed, open, yaml]);
 
   // 오른쪽에서 고른 조건이 든 카드를 펼친다
   useEffect(() => {

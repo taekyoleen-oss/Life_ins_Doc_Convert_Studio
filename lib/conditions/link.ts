@@ -11,6 +11,28 @@ export const splitPaths = (p?: string | null) => (p ? p.split("|").filter(Boolea
 export const under = (child: string, parent: string) =>
   child === parent || child.startsWith(`${parent}.`) || child.startsWith(`${parent}[`);
 
+/**
+ * 두 조건(YAML 을 읽은 객체)의 다른 곳 — 잎 경로("basis.interest" · "formulas[0].text").
+ * 항목이 통째로 생기거나 없어지면 그 경로("benefits[1]"). 화면이 "바뀐 곳" 표시에 쓴다.
+ */
+export function diffPaths(a: unknown, b: unknown, path = ""): string[] {
+  if (a === b) return [];
+  const obj = (v: unknown) => !!v && typeof v === "object";
+  if (!obj(a) || !obj(b) || Array.isArray(a) !== Array.isArray(b)) return [path || "(root)"];
+  const out: string[] = [];
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const n = Math.max(a.length, b.length);
+    for (let i = 0; i < n; i++) out.push(...(i < a.length && i < b.length ? diffPaths(a[i], b[i], `${path}[${i}]`) : [`${path}[${i}]`]));
+    return out;
+  }
+  const A = a as Record<string, unknown>, B = b as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(A), ...Object.keys(B)])) {
+    const p = path ? `${path}.${k}` : k;
+    out.push(...(k in A && k in B ? diffPaths(A[k], B[k], p) : [p]));
+  }
+  return out;
+}
+
 /** 줄 범위 → 그 줄들에 걸친 가장 깊은 조건 경로들 */
 export function pathsAtLines(ranges: Map<string, [number, number]>, from: number, to: number): string[] {
   const hit = [...ranges].filter(([, [a, b]]) => a <= to && b >= from).map(([p]) => p);

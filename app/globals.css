@@ -12,6 +12,7 @@
   --border: #e2e5e9;
   --mirror: #fef3c7;
   --mirror-edge: #f59e0b;
+  --changed: #2e9e5b;
 }
 
 @theme inline {
@@ -110,6 +111,11 @@ textarea.inp { font-family: inherit; resize: vertical; }
 .exp-grid .inp { padding: 4px 6px; font-size: 12.5px; }
 .form-hl, .form-hl .inp, .form-hl.card { background: var(--mirror) !important; }
 .form-hl { box-shadow: inset 3px 0 0 var(--mirror-edge); border-radius: 8px; }
+/* 바뀐 곳 — 연 뒤에 입력·수정한 칸(초록 왼쪽 띠)과 카드 딱지 */
+.form-changed { box-shadow: inset 3px 0 0 var(--changed); border-radius: 8px; padding-left: 6px; margin-left: -6px; }
+.form-changed .inp { border-color: #a7dcc1; }
+.chip-changed { border-radius: 999px; background: #e6f6ee; color: #1e7f4e; padding: 1px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.changed-note { display: inline-flex; align-items: center; gap: 6px; color: #1e7f4e; font-weight: 600; }
 .formula-preview { overflow-x: auto; border-radius: 6px; background: #f6f7f9; padding: 2px 10px; }
 .formula-preview .katex-display { margin: 4px 0; text-align: left; }
 .formula-preview .katex-display > .katex { text-align: left; }
@@ -178,6 +184,9 @@ td.sheet-no { z-index: 1 !important; }
 .doc-linked:hover { outline: 1px dashed #c7d6e4; }
 .doc-hl, tr.doc-hl > td { background: var(--mirror) !important; }
 .doc-hl:not(tr) { box-shadow: inset 3px 0 0 var(--mirror-edge); }
+.doc-changed:not(tr) { box-shadow: inset 3px 0 0 var(--changed); }
+tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
+.doc-hl.doc-changed:not(tr) { box-shadow: inset 3px 0 0 var(--mirror-edge), inset 6px 0 0 var(--changed); }
 
 /* ---------- 원문 ---------- */
 .orig-list { list-style: none; padding: 0; margin: 0; }

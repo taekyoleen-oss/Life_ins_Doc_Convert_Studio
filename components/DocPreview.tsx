@@ -28,13 +28,15 @@ interface Props {
   title: string;
   /** 왼쪽에서 고른 조건 경로 */
   highlight: string[];
+  /** 마지막으로 연 조건과 다른 경로 → 그 조건이 만든 블록에 "바뀜" 표시 */
+  changed?: string[];
   /** 왼쪽에서 고른 경우 강조된 곳으로 스크롤 */
   follow: boolean;
   /** 미리보기에서 고른 블록의 조건 경로 (클릭이면 scroll=true) */
   onPick: (paths: string[], scroll: boolean) => void;
 }
 
-export default function DocPreview({ sections, title, highlight, follow, onPick }: Props) {
+export default function DocPreview({ sections, title, highlight, changed = [], follow, onPick }: Props) {
   const body = useRef<HTMLDivElement | null>(null);
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
@@ -55,6 +57,7 @@ export default function DocPreview({ sections, title, highlight, follow, onPick 
   }, [sections]);
 
   const hl = useMemo(() => matchBlocks(items.map((it) => splitPaths(it.path)), highlight), [items, highlight]);
+  const ch = useMemo(() => matchBlocks(items.map((it) => splitPaths(it.path)), changed), [items, changed]);
 
   useEffect(() => {
     if (!follow || !hl.size) return;
@@ -85,7 +88,7 @@ export default function DocPreview({ sections, title, highlight, follow, onPick 
     if (el) onPickRef.current(splitPaths(el.dataset.path), true);
   };
 
-  const cls = (i: number, base = "") => `${base} ${items[i].path ? "doc-linked" : ""} ${hl.has(i) ? "doc-hl" : ""}`.trim();
+  const cls = (i: number, base = "") => `${base} ${items[i].path ? "doc-linked" : ""} ${hl.has(i) ? "doc-hl" : ""} ${ch.has(i) ? "doc-changed" : ""}`.trim();
 
   return (
     <div ref={body} id="print-area" className="doc-body mx-auto max-w-[860px] px-8 py-6"

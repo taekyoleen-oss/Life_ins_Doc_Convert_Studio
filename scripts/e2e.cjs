@@ -192,13 +192,32 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("견본 '순보험료' → 조건 식 추가 → 산출방법서 수식 +1", (await p.locator(".doc-body .formula").count()) === before + 1);
   ok("M08 이 펼쳐지고 식 칸에 들어감", (await p.locator("[data-path='formulas[0].text'] textarea").inputValue()).includes("P = "));
   await p.screenshot({ path: `${OUT}/s9_palette.png` });
+  // 13-0) 바뀐 곳 표시 — 더한 식의 칸·카드 딱지·산출방법서 블록·상태줄
+  ok("바뀐 곳 표시: M08 카드 딱지 · 식 칸 · 산출방법서 식 블록 · 상태줄 개수",
+    (await p.locator("[data-card='M08'] .chip-changed").count()) === 1 && (await p.locator(".form-changed[data-path^='formulas[0]']").count()) >= 1
+    && (await p.locator(".doc-body .formula.doc-changed").count()) >= 1 && /바뀐 곳 \d+/.test(await p.textContent(".changed-note")));
+  // 13-1) 되돌리기 · 다시 — 더한 식이 빠졌다가 돌아온다 (Ctrl+Z 는 칸 밖에서)
+  await p.locator(".pane-tool", { hasText: "되돌리기" }).click();
+  await p.waitForTimeout(500);
+  ok("[↶ 되돌리기] → 더한 식이 빠진다", (await p.locator(".doc-body .formula").count()) === before && (await p.locator("[data-path='formulas[0].text']").count()) === 0);
+  await p.locator(".doc-body h1").click();
+  await p.keyboard.press("Control+Shift+Z");
+  await p.waitForTimeout(500);
+  ok("Ctrl+Shift+Z → 다시 실행", (await p.locator(".doc-body .formula").count()) === before + 1);
+  // 13-2) 메뉴는 바깥을 누르면 닫힌다
+  await p.click("details:has(summary:has-text('내보내기')) summary");
+  ok("[내보내기] 메뉴 열림", (await p.locator("details[open] .menu-list").count()) === 1);
+  await p.locator(".doc-body h1").click();
+  ok("바깥을 누르면 메뉴가 닫힌다", (await p.locator("details[open] .menu-list").count()) === 0);
 
   // 14) LaTeX 탭 견본 → 커서 자리에 기호
   await p.click("button.tab:has-text('LaTeX')");
   await p.waitForSelector(".cm-editor");
   await p.locator(".cm-editor .cm-line").nth(3).click();
-  if (!(await p.locator(".palette").count())) await p.click("button:has-text('수식·기호 견본')");
-  await p.locator(".palette .pal-sym", { hasText: "α" }).first().click();
+  // 왼쪽 [＋ 수식 더하기] 견본(식만)은 따로다 — 기호 줄이 있는 편집 탭 견본을 연다
+  const latexPane = p.locator("section:has(.cm-editor)").last();
+  if (!(await latexPane.locator(".palette .pal-sym").count())) await latexPane.locator("button:has-text('수식·기호 견본')").click();
+  await latexPane.locator(".palette .pal-sym", { hasText: "α" }).first().click();
   await p.waitForTimeout(300);
   ok("LaTeX 견본 α → 편집기에 \\alpha, 탭에 ●", (await p.locator(".cm-line", { hasText: "\\alpha" }).count()) >= 1 && (await p.locator("button.tab", { hasText: "LaTeX" }).textContent()).includes("●"));
   await p.click("button.tab:has-text('산출방법서')");

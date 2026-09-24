@@ -13,7 +13,7 @@ const VisionDialog = dynamic(() => import("./VisionDialog"), { ssr: false });
 import RateSheetPane from "./RateSheetPane";
 import { SAMPLES } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
-import { anchorsForPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
+import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
 import { withFormulas } from "@/lib/methoddoc/formulas";
 import { docToMarkdown, renderMethodDoc } from "@/lib/methoddoc/render";
 import { docToLatex, latexToDoc } from "@/lib/methoddoc/tex";
@@ -107,8 +107,52 @@ export default function Studio() {
   const [leftSel, setLeftSel] = useState<string[]>([]);    // 왼쪽(조건)에서 고른 경로 → 오른쪽 강조
   const [rightSel, setRightSel] = useState<string[]>([]);  // 오른쪽에서 고른 경로 → 왼쪽 줄·칸 강조
   const [follow, setFollow] = useState(false);
-  const [pal, setPal] = useState(false);                   // 수식·기호 견본
+  const [pal, setPal] = useState(false);                   // 수식·기호 견본 (LaTeX·Markdown 탭 — 커서 자리에)
+  const [palLeft, setPalLeft] = useState(false);           // 수식 더하기 (조건 창 — M08 식으로)
   const editor = useRef<EditorApi | null>(null);
+
+  // ── 되돌리기 — 조건(YAML)과 위험률 표의 스냅샷. 0.8초 안에 이어진 변경(칸에 타자)은 한 걸음으로 묶는다 ──
+  type Snap = { yaml: string; sheet: SheetState | null };
+  const hist = useRef<{ cur: Snap; past: Snap[]; future: Snap[]; at: number }>({ cur: { yaml: SAMPLES[0].yaml, sheet: null }, past: [], future: [], at: 0 });
+  const [histN, setHistN] = useState({ past: 0, future: 0 });
+  useEffect(() => {
+    const h = hist.current;
+    if (yaml === h.cur.yaml && sheet === h.cur.sheet) return;       // 되돌린 상태가 반영된 것 — 걸음을 만들지 않는다
+    const now = Date.now();
+    if (now - h.at > 800) { h.past.push(h.cur); if (h.past.length > 100) h.past.shift(); h.future = []; }
+    h.cur = { yaml, sheet }; h.at = now;
+    setHistN({ past: h.past.length, future: h.future.length });
+  }, [yaml, sheet]);
+  const restore = useCallback((dir: -1 | 1) => {
+    const h = hist.current;
+    const from = dir < 0 ? h.past : h.future, to = dir < 0 ? h.future : h.past;
+    const s = from.pop();
+    if (!s) return;
+    to.push(h.cur); h.cur = s; h.at = 0;
+    setYaml(s.yaml); setSheet(s.sheet);
+    setHistN({ past: h.past.length, future: h.future.length });
+    setToast({ text: dir < 0 ? `한 걸음 되돌렸습니다 (남은 ${h.past.length})` : "다시 실행했습니다", kind: "ok" });
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const el = e.target as HTMLElement;
+      // 입력칸·YAML 편집기 안에서는 그 칸의 되돌리기(글자 단위)가 먼저다 — 칸 밖에서 누를 때만 조건 전체를 되돌린다
+      if (el.closest("input, textarea, select, [contenteditable], .cm-editor")) return;
+      if (e.key === "z" || e.key === "Z") { e.preventDefault(); restore(e.shiftKey ? 1 : -1); }
+      else if (e.key === "y") { e.preventDefault(); restore(1); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [restore]);
+  // 열린 메뉴(샘플·내보내기)는 바깥을 누르거나 Esc 로 닫는다
+  useEffect(() => {
+    const close = (e: Event) => document.querySelectorAll<HTMLDetailsElement>("details.menu[open]").forEach((d) => {
+      if (e.type === "keydown" ? (e as KeyboardEvent).key === "Escape" : !d.contains(e.target as Node)) d.removeAttribute("open");
+    });
+    document.addEventListener("pointerdown", close); document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", close); };
+  }, []);
   const srcEditor = useRef<EditorApi | null>(null);        // LaTeX·Markdown 편집기 — 견본을 커서 자리에 넣는다
   const [toast, setToast] = useState<Toast>(null);
   const [help, setHelp] = useState(false);
@@ -126,6 +170,9 @@ export default function Studio() {
   const genMd = useMemo(() => docToMarkdown(sections, title), [sections, title]);
 
   const mirror = useMemo(() => linesOfPaths(parsed.ranges, rightSel), [parsed, rightSel]);
+  // 마지막으로 연(또는 표시를 지운) 조건과 다른 곳 — 입력 카드·산출방법서에 "바뀜" 표시
+  const rawOf = (y: string) => { const d = parseDocument(y); return d.errors.length ? null : (d.toJS() ?? {}); };
+  const changed = useMemo(() => { const a = rawOf(saved), b = rawOf(deferred); return a && b ? diffPaths(a, b) : []; }, [saved, deferred]);
   const errorLines = useMemo(() => syntaxErrors.map((e) => e.line), [syntaxErrors]);
   const origHl = useMemo(() => (original ? anchorsForPaths(original.evidence, leftSel) : new Set<string>()), [original, leftSel]);
 
@@ -211,7 +258,7 @@ export default function Studio() {
     onEdit([{ path: ["formulas"], add: true, value: { section: SECTION_OF[f.group] ?? "계산기수", label: f.label, text: f.text } }]);
     setLayout((l) => ({ ...l, left: "form", open: l.open.includes("M08") ? l.open : [...l.open, "M08"] }));
     setLeftSel([`formulas[${n}]`]); setRightSel([`formulas[${n}]`]); setFollow(true);
-    setToast({ text: `"${f.label}" 식을 조건 M08 에 더했습니다 — 왼쪽에서 고쳐 쓰세요`, kind: "ok" });
+    setToast({ text: `"${f.label}" 식을 조건 M08 에 더했습니다 — 아래 M08 카드에서 고쳐 쓰세요 (되돌리기 ↶)`, kind: "ok" });
   };
 
   // ── 열기 ─────────────────────────────────────────────────────────────────
@@ -391,13 +438,20 @@ export default function Studio() {
                         title={t === "form" ? "카드의 칸을 채우면 조건 파일(YAML)에 들어갑니다" : "같은 조건을 MethodSpec 조건 파일로 봅니다"}>{t === "form" ? "입력" : "YAML"}</button>
                     ))}
                   </div>
+                  <span className="pane-tools">
+                    <button className="pane-tool" disabled={!histN.past} onClick={() => restore(-1)} title="마지막 입력·변경을 되돌립니다 (Ctrl+Z — 칸 밖에서)">↶ 되돌리기{histN.past ? ` ${histN.past}` : ""}</button>
+                    <button className="pane-tool" disabled={!histN.future} onClick={() => restore(1)} title="되돌린 것을 다시 합니다 (Ctrl+Shift+Z)">↷ 다시</button>
+                  </span>
+                  <button className={`btn ${palLeft ? "btn-on" : ""}`} onClick={() => setPalLeft((v) => !v)} title="견본 식을 조건 M08 에 더합니다">＋ 수식 더하기</button>
                   <span className="flex-1" />
                   {syntaxErrors.length > 0 && <span className="truncate rounded bg-rose-100 px-1.5 text-rose-700">{syntaxErrors[0].line}줄: {syntaxErrors[0].message}</span>}
                   {tools("cond")}
                 </div>
+                {palLeft && <FormulaPalette onFormula={addFormula}
+                  hint="누르면 그 식을 조건(M08 수식 더하기)에 넣습니다 — 산출방법서의 알맞은 절에 붙고, 아래 M08 카드에서 고칩니다." />}
                 <div className="min-h-0 flex-1">
                   {layout.left === "form"
-                    ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} onSelect={onFormSelect}
+                    ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
@@ -416,14 +470,10 @@ export default function Studio() {
                 {tab === "doc" && (
                   <div className="print-block flex min-h-0 flex-1 flex-col">
                     <div className="no-print pane-head">
-                      <span className="truncate text-muted-foreground">블록을 누르면 왼쪽에서 그 조건이 표시됩니다</span>
-                      <span className="flex-1" />
-                      <button className={`btn ${pal ? "btn-on" : ""}`} onClick={() => setPal((v) => !v)}>＋ 수식 더하기</button>
+                      <span className="truncate text-muted-foreground">블록을 누르면 왼쪽에서 그 조건이 표시됩니다 — 식을 더하려면 왼쪽 [＋ 수식 더하기]</span>
                     </div>
-                    {pal && <FormulaPalette onFormula={addFormula}
-                      hint="누르면 그 식을 조건(M08 수식 더하기)에 넣어 산출방법서의 알맞은 절에 붙입니다. 식은 왼쪽 입력 화면에서 고칩니다." />}
                     <div className="thin-scroll min-h-0 flex-1 overflow-auto bg-white">
-                      <DocPreview sections={sections} title={title} highlight={leftSel} follow={follow} onPick={pickPaths} />
+                      <DocPreview sections={sections} title={title} highlight={leftSel} changed={changed} follow={follow} onPick={pickPaths} />
                     </div>
                   </div>
                 )}
@@ -510,6 +560,12 @@ export default function Studio() {
       <footer className="no-print flex flex-wrap items-center gap-3 border-t border-border bg-white px-4 py-1 text-xs text-muted-foreground">
         <span>담보 {s.benefits.length} · 위험률 {s.rates.length}{nTables ? ` (표 ${nTables})` : ""} · 사업비 {s.expenses.length}</span>
         {parsed.errors.filter((e) => !e.line).slice(0, 1).map((e, i) => <span key={i} className="text-amber-700">⚠ {e.message}</span>)}
+        {changed.length > 0 && (
+          <span className="changed-note" title={changed.slice(0, 12).join(", ") + (changed.length > 12 ? " …" : "")}>
+            ● 바뀐 곳 {changed.length}
+            <button className="pane-tool" onClick={() => setSaved(yaml)} title="지금 상태를 기준으로 삼아 바뀜 표시를 지웁니다">표시 지우기</button>
+          </span>
+        )}
         <span className="flex-1" />
         {leftSel.length > 0 && <span className="font-mono text-amber-700">{leftSel.slice(0, 3).join(", ")}{leftSel.length > 3 ? " …" : ""}</span>}
         <span>자동 저장됨</span>
@@ -552,7 +608,9 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다. 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 산출방법서의 정보가 아니어서 이 앱에 두지 않고, 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
           <li><b>위험률 표</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽습니다. 열마다 [잇기]에서 연령·위험률·성별을 고르면 그 값 표가 산출방법서와 MethodSpec JSON 에 실립니다(남·여 열이 있으면 계약 성별의 열).</li>
-          <li><b>수식·기호 견본</b> 산출방법서 탭의 [＋ 수식 더하기]는 견본 식을 조건에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
+          <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M08)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
+          <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
+          <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>
           <li><b>그림으로 읽기</b> 스캔 PDF·PNG·JPG 를 열면 쪽을 골라 본인의 Anthropic API 키로 보냅니다. AI 는 쪽을 글로 옮겨 적기만 하고 값은 앱의 규칙이 읽습니다. 글자 있는 PDF 도 [원문] 탭에서 [그림으로 다시 읽기] 할 수 있습니다.</li>
           <li><b>Word·한글로 고치기</b> [Word·한글] 탭에서 표준 산출방법서(.docx · .hwpx — 상품별 견본 포함)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다(지운 행·칸도 빠집니다). [열기]로 올리면 조건 전체를 새로 만듭니다.</li>
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
