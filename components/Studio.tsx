@@ -28,7 +28,7 @@ import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId,
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 import { buildPackage, isPackage, PACKAGE_EXT, readPackage } from "@/lib/package";
 import { RATE_SAMPLE_CSV } from "@/lib/rate-sample";
-import { sampleSheet } from "@/lib/sheet";
+import { sampleSheet, setCell, setHead } from "@/lib/sheet";
 
 /** 샘플은 조건 + 위험률 표 한 세트 — 견본 표에서 그 조건의 위험률과 이름이 맞는 열만 */
 const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, RATE_SAMPLE_CSV) });
@@ -103,8 +103,14 @@ export default function Studio() {
   const [recent, setRecent] = useState<Recent[]>([]);
   useEffect(() => {
     const s = readStore();
-    // 이어서 작업 — 처음이면 샘플 세트 그대로. 저장된 조건이 샘플 그대로인데 표만 없으면(옛 저장본) 샘플 표를 붙인다
-    if (s) { setYaml(s); setSaved(s); setSheet(sanitizeSheet(readJson(`${KEY}:sheet`)) ?? (s === SAMPLE0.yaml ? SAMPLE0.sheet : null)); }
+    // 이어서 작업 — 처음이면 샘플 세트 그대로. 저장된 조건에 표가 없으면(옛 저장본) 견본 표에서 그 조건의 위험률과 이름이 맞는 열을 붙여 준다 — 화면은 늘 조건 + 표 한 세트
+    if (s) {
+      setYaml(s); setSaved(s);
+      const stored = sanitizeSheet(readJson(`${KEY}:sheet`));
+      const fallback = stored ? null : s === SAMPLE0.yaml ? SAMPLE0.sheet : sampleSheet(yamlToSpec(s).spec.rates, RATE_SAMPLE_CSV);
+      setSheet(stored ?? fallback);
+      if (fallback && s !== SAMPLE0.yaml) setToast({ text: `위험률 표가 없어 견본 표(가상의 값)에서 이름이 맞는 ${fallback.sheet.head.length - 1}개 열을 이었습니다 — 실제 표를 올리거나 칸을 눌러 값을 고치세요`, kind: "warn" });
+    }
     setLayout(sanitizeLayout(readJson(`${KEY}:layout`)));
     setRecent(sanitizeRecent(readJson(`${KEY}:recent`)));
   }, []);
@@ -671,6 +677,8 @@ export default function Studio() {
           <section className="no-print flex min-h-0 flex-col border-t border-border bg-white" style={{ flex: top ? `${layout.sheetH} 1 0` : "1 1 0" }}>
             <RateSheetPane state={sheet} onMap={(map) => setSheet((x) => (x ? { ...x, map } : x))} onText={pasteSheet} onFile={(f) => void openSheetFile(f)}
               onClear={() => setSheet(null)} rates={s.rates} noTable={noTable} onNewRates={addRates}
+              onCell={(r, c, v) => setSheet((st) => (st ? setCell(st, r, c, v) : st))} onHead={(c, v) => setSheet((st) => (st ? setHead(st, c, v) : st))}
+              onRole={(id, role) => { const i = s.rates.findIndex((r) => r.id === id); if (i >= 0) onEdit([{ path: ["rates", i, "role"], value: role }]); }}
               onEmptyColumns={(ids) => { setSheet((st) => ids.reduce((acc, id) => addEmptyColumn(acc, s.rates.find((r) => r.id === id)!), st)); setToast({ text: `빈 열 ${ids.length}개를 만들었습니다 — 값을 붙여넣거나 Excel 에서 채워 다시 올리세요`, kind: "ok" }); }}
               highlight={leftSel} onPick={(p) => pickPaths(p, true)} tools={tools("sheet")} />
           </section>
@@ -728,7 +736,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <ol>
           <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다. 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 산출방법서의 정보가 아니어서 이 앱에 두지 않고, 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
-          <li><b>위험률 표 ↔ 조건 ↔ 계산</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽어 같은 이름의 위험률(M04)에 잇고, 조건에 없는 이름의 열은 새 위험률로 M04 에 더합니다(유형 확인). 거꾸로 M04 에서 위험률을 더하면 표에 그 이름의 빈 열이 생기고, 산출방법서에서 위험률을 더해 올려도 같습니다. 이은 값 표는 산출방법서 별첨과 MethodSpec JSON 에 실려 자유설계보험이 계약 성별의 표로 계산합니다 — 값 표가 없는 위험률은 상태줄에 &quot;표 없음&quot;으로 알리고 그쪽에서 0 이 됩니다. 순서: ① 샘플·산출방법서 열기 → ② 위험률 표 올리기 → ③ [내보내기 → MethodSpec .json] → 자유설계보험 /method 에서 열기.</li>
+          <li><b>위험률 표 ↔ 조건 ↔ 계산</b> 첫 화면부터 조건과 이어진 견본 표(가상의 값)가 들어 있습니다 — 칸을 누르면 값을, 머리를 두 번 누르면 열 이름을 고치고, 열마다 [잇기]에서 조건의 위험률·성별·유형을 고릅니다(유형은 M04 에 바로 반영). 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽어 같은 이름의 위험률(M04)에 잇고, 조건에 없는 이름의 열은 새 위험률로 M04 에 더합니다(유형 확인). 거꾸로 M04 에서 위험률을 더하면 표에 그 이름의 빈 열이 생기고, 산출방법서에서 위험률을 더해 올려도 같습니다. 이은 값 표는 산출방법서 별첨과 MethodSpec JSON 에 실려 자유설계보험이 계약 성별의 표로 계산합니다 — 값 표가 없는 위험률은 상태줄에 &quot;표 없음&quot;으로 알리고 그쪽에서 0 이 됩니다. 순서: ① 샘플·산출방법서 열기 → ② 위험률 표 올리기 → ③ [내보내기 → MethodSpec .json] → 자유설계보험 /method 에서 열기.</li>
           <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M08)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
           <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
           <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>

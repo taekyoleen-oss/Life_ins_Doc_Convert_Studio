@@ -7,7 +7,7 @@ import { parseMethodDoc } from "@/lib/methoddoc/parse";
 import { docToMarkdown, renderMethodDoc } from "@/lib/methoddoc/render";
 import { rateTable } from "@/lib/methoddoc/spec";
 import { SAMPLES } from "@/lib/samples";
-import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId, ratesWithoutTable, sheetFromDoc, sheetFromText, unlinkRate, unlinkedGroups, type SheetState } from "@/lib/sheet";
+import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId, ratesWithoutTable, setCell, setHead, sheetFromDoc, sheetFromText, unlinkRate, unlinkedGroups, type SheetState } from "@/lib/sheet";
 
 /**
  * 위험률 표 ↔ 조건(M04) ↔ 산출방법서 ↔ 계산 앱(JSON) 이 하나로 움직이는지 — samples/08_위험률표_종합_남녀.csv 로.
@@ -86,6 +86,25 @@ describe("조건에 더하면 표에 빈 열, 지우면 연결 해제", () => {
     expect(ids(st)).toEqual(["age", "q", "skip"]);
     expect(st.sheet.rows[0][2]).toBe("0.002");
     expect(unlinkRate(st, "없음")).toBe(st);
+  });
+});
+
+describe("표 창에서 바로 고치기 — 칸 값 · 열 이름", () => {
+  const spec = sample("twoMajor");
+  const sheet = sheetFromText("s", "연령\t제7회 경험생명표 사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
+  const st0: SheetState = { sheet, map: autoMap(sheet, spec.rates) };
+  it("값을 고치면 붙는 표(→ 산출방법서 별첨 · JSON)가 바뀌고, 수가 아니면 그 칸은 빠진다", () => {
+    const st = setCell(st0, 1, 2, "0.005");
+    expect(attachTables(spec, st).rates[1].table).toEqual({ ages: [40, 41], values: [0.002, 0.005] });
+    expect(attachTables(spec, setCell(st, 0, 2, "미정")).rates[1].table).toEqual({ ages: [41], values: [0.005] });
+    expect(setCell(st0, 9, 0, "x")).toBe(st0);
+    expect(setCell(st0, 0, 2, "0.002")).toBe(st0);                                   // 같은 값이면 그대로
+  });
+  it("열 이름을 고치면 머리글이 바뀌고 연결은 그대로 · 빈 이름은 무시", () => {
+    const st = setHead(st0, 2, " 2대질병 진단율 ");
+    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률", "2대질병 진단율"]);
+    expect(st.map).toEqual(st0.map);
+    expect(setHead(st0, 2, "  ")).toBe(st0);
   });
 });
 

@@ -205,6 +205,19 @@ export function addEmptyColumn(st: SheetState | null, rate: Pick<RateRef, "id" |
   };
 }
 
+/** 표 창에서 칸 하나를 고친다 — 값은 글자 그대로 두고(attachTables 가 수만 읽는다) 새 표를 돌려준다 */
+export function setCell(st: SheetState, row: number, col: number, value: string): SheetState {
+  if (!st.sheet.rows[row] || col < 0 || col >= st.sheet.head.length || st.sheet.rows[row][col] === value) return st;
+  return { ...st, sheet: { ...st.sheet, rows: st.sheet.rows.map((r, i) => (i === row ? r.map((c, j) => (j === col ? value : c)) : r)) } };
+}
+
+/** 열 이름을 고친다 — 이름은 잇기(autoMap)와 별첨 표 머리글에 쓰인다 */
+export function setHead(st: SheetState, col: number, name: string): SheetState {
+  const v = name.trim();
+  if (!v || st.sheet.head[col] === v || col < 0 || col >= st.sheet.head.length) return st;
+  return { ...st, sheet: { ...st.sheet, head: st.sheet.head.map((h, i) => (i === col ? v : h)) } };
+}
+
 /** 조건에서 지운 위험률 — 그 열은 잇지 않은 상태로(열과 값은 남긴다) */
 export function unlinkRate(st: SheetState | null, id: string): SheetState | null {
   if (!st || !st.map.some((m) => m.to === "rate" && m.rateId === id)) return st;
@@ -219,7 +232,7 @@ export const ratesWithoutTable = (withTables: MethodSpec) =>
  * 샘플 조건에 딸려 오는 위험률 표 — 견본 CSV 에서 그 조건의 위험률과 이름이 맞는 열만(연령 + 이은 열) 남긴다.
  * 첫 화면·[샘플] 이 조건·산출방법서·위험률 표를 한 세트로 보여 주기 위한 것. 맞는 열이 없으면 null
  */
-export function sampleSheet(rates: Pick<RateRef, "id" | "name">[], csv: string, name = "샘플 위험률 표"): SheetState | null {
+export function sampleSheet(rates: Pick<RateRef, "id" | "name">[], csv: string, name = "견본 위험률 표(가상의 값)"): SheetState | null {
   const sh = sheetFromText(name, csv);
   const map = autoMap(sh, rates);
   const keep = map.flatMap((m, i) => (m.to === "skip" ? [] : [i]));

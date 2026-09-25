@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { matchBlocks } from "@/lib/conditions/link";
 import { RATE_ROLE_LABEL, type RateRef, type RateRole, type Sex } from "@/lib/methoddoc/spec";
 import { baseName, colLetter, guessRole, hasNumbers, sexOf, usedColumns, type ColMap, type SheetState } from "@/lib/sheet";
@@ -20,6 +20,10 @@ interface Props {
   /** 값 표가 없는 조건의 위험률 — 빈 열을 만들어 값을 붙여넣게 안내한다 */
   noTable: RateRef[];
   onEmptyColumns: (ids: string[]) => void;
+  /** 표 창에서 바로 고치기 — 칸 값(누르면 입력) · 열 이름(머리를 두 번 누르면) · 이은 위험률의 유형(조건 M04 로) */
+  onCell: (row: number, col: number, value: string) => void;
+  onHead: (col: number, name: string) => void;
+  onRole: (rateId: string, role: RateRole) => void;
   /** 왼쪽에서 고른 조건 경로 → 그 위험률에 이은 열을 표시 */
   highlight: string[];
   onPick: (paths: string[]) => void;
@@ -33,10 +37,25 @@ const NONE: ColMap[] = [];
  * 위험률 표 — 붙여넣기·CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽고, 열마다 조건(연령 · 위험률 · 성별)에 잇는다.
  * 이은 열은 RateRef.table 이 되어 산출방법서 위험률 표와 MethodSpec JSON(자유설계보험 입력)에 실린다.
  */
-export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, noTable, onNewRates, onEmptyColumns, highlight, onPick, tools }: Props) {
+export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, noTable, onNewRates, onEmptyColumns, onCell, onHead, onRole, highlight, onPick, tools }: Props) {
   const file = useRef<HTMLInputElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
   const sh = state?.sheet, map = state?.map ?? NONE;
+  // 고치는 중인 칸 — 행 −1 은 머리(열 이름)
+  const [edit, setEdit] = useState<{ r: number; c: number } | null>(null);
+  const commit = (v: string) => {
+    if (!edit) return;
+    if (edit.r < 0) onHead(edit.c, v); else onCell(edit.r, edit.c, v.trim());
+    setEdit(null);
+  };
+  const editor = (init: string) => (
+    <input className="sheet-inp" autoFocus defaultValue={init} aria-label="칸 고치기"
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); const v = e.currentTarget.value; commit(v); if (e.key === "Tab" && edit && edit.r >= 0) setEdit({ r: edit.r, c: Math.min(edit.c + 1, (sh?.head.length ?? 1) - 1) }); }
+        else if (e.key === "Escape") setEdit(null);
+      }} />
+  );
 
   const colPaths = useMemo(() => map.map((m) => {
     const i = m.to === "rate" ? rates.findIndex((r) => r.id === m.rateId) : -1;
@@ -91,7 +110,7 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
         {sh ? (
           <span className="truncate text-muted-foreground">
             {sh.name} · {sh.rows.length}행 × {sh.head.length}열 · {ageCol >= 0 ? `연령 ${colLetter(ageCol)}열` : <span className="text-amber-700">연령 열을 정하세요</span>}
-            {" · "}위험률 {linked.size}개 연결 · 남·여 열은 두 벌 다 싣습니다
+            {" · "}위험률 {linked.size}개 연결 · 칸을 누르면 값을, 머리를 두 번 누르면 열 이름을 고칩니다
           </span>
         ) : <span className="text-muted-foreground">연령 × 위험률 표를 올려 조건의 위험률에 잇습니다</span>}
         <span className="flex-1" />
@@ -121,8 +140,9 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
               <tr>
                 <th className="sheet-no">#</th>
                 {sh.head.map((h, i) => (
-                  <th key={i} className={`sheet-name ${cls(i)}`} onClick={() => colPaths[i].length && onPick(colPaths[i])} title={colPaths[i].length ? "누르면 이 열을 이은 위험률을 조건·산출방법서에서 표시합니다" : undefined}>
-                    <span className="font-mono text-[10px] text-muted-foreground">{colLetter(i)}</span> {h}
+                  <th key={i} className={`sheet-name ${cls(i)}`} onClick={() => colPaths[i].length && onPick(colPaths[i])} onDoubleClick={() => setEdit({ r: -1, c: i })}
+                    title={`${colPaths[i].length ? "누르면 이 열을 이은 위험률을 조건·산출방법서에서 표시합니다 · " : ""}두 번 누르면 열 이름을 고칩니다`}>
+                    <span className="font-mono text-[10px] text-muted-foreground">{colLetter(i)}</span> {edit?.r === -1 && edit.c === i ? editor(h) : h}
                   </th>
                 ))}
               </tr>
@@ -145,6 +165,11 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
                           <option value="">남녀 공통</option><option value="M">남</option><option value="F">여</option>
                         </select>
                       )}
+                      {m.to === "rate" && known && (
+                        <select value={rates.find((r) => r.id === m.rateId)!.role} onChange={(e) => onRole(m.rateId, e.target.value as RateRole)} className="sheet-role mt-0.5" aria-label={`${h} 열 위험률 유형`} title="이은 위험률의 유형 — 조건 M04 에 바로 반영됩니다">
+                          {Object.entries(RATE_ROLE_LABEL).map(([k, l]) => <option key={k} value={k}>유형: {l}</option>)}
+                        </select>
+                      )}
                     </th>
                   );
                 })}
@@ -154,7 +179,11 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
               {sh.rows.slice(0, LIMIT).map((r, ri) => (
                 <tr key={ri}>
                   <td className="sheet-no">{ri + 2}</td>
-                  {r.map((c, ci) => <td key={ci} className={cls(ci)}>{c}</td>)}
+                  {r.map((c, ci) => (
+                    <td key={ci} className={`${cls(ci)} sheet-cell`} onClick={() => setEdit({ r: ri, c: ci })} title="누르면 값을 고칩니다 (Enter 확정 · Tab 다음 칸 · Esc 취소)">
+                      {edit?.r === ri && edit.c === ci ? editor(c) : c}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

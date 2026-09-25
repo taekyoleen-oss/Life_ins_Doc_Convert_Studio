@@ -144,7 +144,7 @@ textarea.inp { font-family: inherit; resize: vertical; }
 .sheet-no { position: sticky; left: 0; z-index: 3 !important; background: #f4f6f8 !important; color: #a3a9b0; font-size: 10.5px; text-align: center !important; }
 td.sheet-no { z-index: 1 !important; }
 .sheet-name { cursor: pointer; }
-.sheet-sel { display: block; width: 100%; min-width: 120px; border: 1px solid #d5dae0; border-radius: 4px; background: #fff; font-size: 11.5px; padding: 1px 2px; }
+.sheet-sel, .sheet-role { display: block; width: 100%; min-width: 120px; border: 1px solid #d5dae0; border-radius: 4px; background: #fff; font-size: 11.5px; padding: 1px 2px; }
 .sheet .col-age { background: #eef3f8; }
 .sheet thead .col-age { background: #dfe9f3; }
 .sheet .col-rate { background: #f3f9f4; }
@@ -152,6 +152,10 @@ td.sheet-no { z-index: 1 !important; }
 .sheet .col-idle { color: #a3a9b0; }
 .sheet .col-skip { color: #b3bac2; }
 .sheet .col-hl { background: var(--mirror) !important; box-shadow: inset 2px 0 0 var(--mirror-edge); }
+.sheet td.sheet-cell { cursor: text; }
+.sheet td.sheet-cell:hover { outline: 1px solid #b9d3e8; outline-offset: -1px; }
+.sheet-inp { width: 100%; min-width: 72px; border: 1px solid var(--primary); border-radius: 4px; padding: 0 4px; font: inherit; text-align: right; background: #fff; outline: 2px solid #4a90c233; }
+.sheet thead .sheet-inp { text-align: left; font-weight: 600; }
 
 /* ---------- CodeMirror ---------- */
 .cm-editor { height: 100%; font-size: 13.5px; background: transparent; }

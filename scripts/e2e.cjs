@@ -188,6 +188,22 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(600);
   const sels2 = await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value));
   ok("위험률을 지우면 그 열은 '쓰지 않음' (값은 남음)", sels2.at(-1) === "skip" && (await p.$$eval("table.sheet th.sheet-name", (els) => els.length)) === heads.length, sels2.join(","));
+  // 11-2) 표 창에서 바로 고치기 — 칸 값(→ 별첨 표) · 열 이름 · 이은 위험률의 유형(→ 조건 M04 · 산출방법서)
+  await p.locator("table.sheet tbody tr").nth(2).locator("td.sheet-cell").nth(3).click();        // 42세 · D열(80% 이상 장해율) 0.0014
+  await p.fill(".sheet-inp", "0.00999"); await p.keyboard.press("Enter");
+  await p.waitForTimeout(700);
+  ok("칸을 눌러 값 고침 → 산출방법서 별첨 표에 반영", (await p.locator(".doc-body section:last-of-type tbody tr").nth(2).textContent()).includes("0.00999"));
+  await p.locator("table.sheet th.sheet-name").nth(4).dblclick();
+  await p.fill(".sheet-inp", "암 발생률(남)"); await p.keyboard.press("Enter");
+  await p.waitForTimeout(400);
+  ok("머리를 두 번 눌러 열 이름 고침", (await p.locator("table.sheet th.sheet-name").nth(4).textContent()).includes("암 발생률(남)"));
+  const roleSel = p.locator("table.sheet select.sheet-role").nth(3);                               // E열(암발생률)에 이은 위험률
+  await roleSel.selectOption("recurring");
+  await p.waitForTimeout(700);
+  ok("열의 [유형] 고침 → 조건 M04 의 유형 칸과 산출방법서 위험률 표", (await p.locator(".doc-body tr", { hasText: "암발생률" }).first().textContent()).includes("반복지급")
+    && (await p.locator("[data-path='rates[2].role'] select").inputValue()) === "recurring");
+  await roleSel.selectOption("incidence");
+  await p.waitForTimeout(400);
   await p.locator("th.sheet-name", { hasText: "사망률(남)" }).click();
   await p.waitForTimeout(500);
   const hlSheet = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 20)));
