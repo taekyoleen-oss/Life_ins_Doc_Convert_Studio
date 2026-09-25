@@ -26,6 +26,22 @@ import { DOCX_MIME, download, exporters } from "@/lib/export";
 import { STANDARDS, standardFile, standardSpec, toStandardDocx } from "@/lib/standards";
 import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId, ratesWithoutTable, sanitizeSheet, sheetFromDoc, sheetFromFile, sheetFromSpec, sheetFromText, unlinkRate, unlinkedGroups, type Sheet, type SheetState } from "@/lib/sheet";
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
+import { buildPackage, isPackage, PACKAGE_EXT, readPackage } from "@/lib/package";
+import { RATE_SAMPLE_CSV } from "@/lib/rate-sample";
+import { sampleSheet } from "@/lib/sheet";
+
+/** 샘플은 조건 + 위험률 표 한 세트 — 견본 표에서 그 조건의 위험률과 이름이 맞는 열만 */
+const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, RATE_SAMPLE_CSV) });
+const SAMPLE0 = sampleSet(SAMPLES[0].yaml);
+/** 최근 작업 — 패키지로 저장·연 것과 연 파일. 조건·위험률 표를 그대로 두어 바로 되살린다 */
+interface Recent { id: string; name: string; at: number; product: string; yaml: string; sheet: SheetState | null }
+const RECENT_MAX = 12;
+const sanitizeRecent = (raw: unknown): Recent[] => (Array.isArray(raw) ? raw : []).flatMap((r) => {
+  const x = r as Partial<Recent>;
+  return typeof x?.yaml === "string" && typeof x.name === "string"
+    ? [{ id: String(x.id ?? x.at ?? Math.random()), name: x.name, at: Number(x.at) || 0, product: String(x.product ?? ""), yaml: x.yaml, sheet: sanitizeSheet(x.sheet ?? null) }] : [];
+}).slice(0, RECENT_MAX);
+const when = (t: number) => new Date(t).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 type Tab = "doc" | "latex" | "markdown" | "word" | "original";
 type PaneId = "cond" | "doc" | "sheet";
@@ -83,12 +99,22 @@ export default function Studio() {
   const [yaml, setYaml] = useState(SAMPLES[0].yaml);
   const [saved, setSaved] = useState(SAMPLES[0].yaml);            // 마지막으로 연 내용 — 덮어쓰기 확인용
   const [layout, setLayout] = useState<Layout>(LAYOUT0);
-  const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [sheet, setSheet] = useState<SheetState | null>(SAMPLE0.sheet);
+  const [recent, setRecent] = useState<Recent[]>([]);
   useEffect(() => {
     const s = readStore();
-    if (s) { setYaml(s); setSaved(s); }
+    // 이어서 작업 — 처음이면 샘플 세트 그대로. 저장된 조건이 샘플 그대로인데 표만 없으면(옛 저장본) 샘플 표를 붙인다
+    if (s) { setYaml(s); setSaved(s); setSheet(sanitizeSheet(readJson(`${KEY}:sheet`)) ?? (s === SAMPLE0.yaml ? SAMPLE0.sheet : null)); }
     setLayout(sanitizeLayout(readJson(`${KEY}:layout`)));
-    setSheet(sanitizeSheet(readJson(`${KEY}:sheet`)));
+    setRecent(sanitizeRecent(readJson(`${KEY}:recent`)));
+  }, []);
+  const pushRecent = useCallback((name: string, y: string, sh: SheetState | null) => {
+    setRecent((list) => {
+      const product = yamlToSpec(y).spec.meta.productName;
+      const next = [{ id: `${Date.now()}`, name, at: Date.now(), product, yaml: y, sheet: sh }, ...list.filter((r) => r.name !== name)].slice(0, RECENT_MAX);
+      writeJson(`${KEY}:recent`, next);
+      return next;
+    });
   }, []);
   useEffect(() => { const t = setTimeout(() => writeStore(yaml), 500); return () => clearTimeout(t); }, [yaml]);
   useEffect(() => { const t = setTimeout(() => writeJson(`${KEY}:layout`, layout), 300); return () => clearTimeout(t); }, [layout]);
@@ -113,7 +139,7 @@ export default function Studio() {
 
   // ── 되돌리기 — 조건(YAML)과 위험률 표의 스냅샷. 0.8초 안에 이어진 변경(칸에 타자)은 한 걸음으로 묶는다 ──
   type Snap = { yaml: string; sheet: SheetState | null };
-  const hist = useRef<{ cur: Snap; past: Snap[]; future: Snap[]; at: number }>({ cur: { yaml: SAMPLES[0].yaml, sheet: null }, past: [], future: [], at: 0 });
+  const hist = useRef<{ cur: Snap; past: Snap[]; future: Snap[]; at: number }>({ cur: { yaml: SAMPLE0.yaml, sheet: SAMPLE0.sheet }, past: [], future: [], at: 0 });
   const [histN, setHistN] = useState({ past: 0, future: 0 });
   useEffect(() => {
     const h = hist.current;
@@ -299,9 +325,11 @@ export default function Studio() {
     if (SHEET_EXT.test(file.name)) { await openSheetFile(file); return; }
     if (yaml !== saved && !window.confirm("지금 조건에 고친 내용이 있습니다. 새 파일로 바꿀까요?")) return;
     if (IMAGE_EXT.test(file.name)) { setVision({ file, reason: "그림 파일입니다." }); return; }
+    if (file.name.toLowerCase().endsWith(PACKAGE_EXT)) { await openPackage(file); return; }
     try {
       setToast({ text: `${file.name} 읽는 중…`, kind: "ok" });
       const r = await loadFile(file);
+      pushRecent(file.name, r.yaml, r.sheet ?? null);
       if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
       setYaml(r.yaml); setSaved(r.yaml);
       setOriginal(r.original ?? null);
@@ -330,13 +358,51 @@ export default function Studio() {
     return () => { window.removeEventListener("dragover", over); window.removeEventListener("dragleave", leave); window.removeEventListener("drop", drop); };
   }, []);
 
+  // ── 패키지(.lidpkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로 저장하고 연다 · 최근 작업 ──
+  const packageName = () => `${(s.meta.productName || "상품").replace(/[^\w가-힣]+/g, "_")}_패키지${PACKAGE_EXT}`;
+  const savePackage = () => {
+    if (syntaxErrors.length) { setToast({ text: `조건 파일 ${syntaxErrors[0].line}번째 줄 오류를 먼저 고쳐 주세요`, kind: "err" }); return; }
+    const name = packageName();
+    download(name, buildPackage({ yaml, sheet, spec: specT }), "application/zip");
+    pushRecent(name, yaml, sheet);
+    setSaved(yaml);
+    const parts = ["조건", "산출방법서(Word·Markdown)", "MethodSpec JSON", ...(sheet?.map.some((m) => m.to === "rate") ? ["위험률 표"] : [])];
+    setToast({ text: `${name} — ${parts.join(" · ")}${noTable.length ? ` (값 표 없는 위험률 ${noTable.length}개는 그대로)` : ""} 를 한 파일로 저장했습니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다`, kind: "ok" });
+  };
+  const openPackage = async (file: File) => {
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      if (!isPackage(buf)) throw new Error(`${file.name} 은(는) 패키지(.lidpkg)가 아닙니다`);
+      const r = await readPackage(buf);
+      if (r.yaml === undefined) throw new Error("패키지에 조건(조건.yaml · MethodSpec.json)이 없습니다");
+      restoreSet(file.name, r.yaml, r.sheet ?? null);
+      pushRecent(file.name, r.yaml, r.sheet ?? null);
+      setToast({ text: `${file.name} — ${r.meta.product || r.meta.name} · 위험률 ${r.meta.rates}개${r.sheet ? ` · 위험률 표 ${r.sheet.sheet.head.length - 1}열` : " · 위험률 표 없음"} (${new Date(r.meta.savedAt).toLocaleString("ko-KR")} 저장)`, kind: "ok" });
+    } catch (e) { setToast({ text: errText(e), kind: "err" }); }
+  };
+  /** 조건 + 위험률 표를 한 세트로 바꾼다 — 패키지·최근 작업·샘플이 모두 이 길 */
+  const restoreSet = (name: string, y: string, sh: SheetState | null) => {
+    if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
+    setYaml(y); setSaved(y); setSheet(sh); setOriginal(null);
+    setLatex({ text: "", dirty: false }); setMd({ text: "", dirty: false });
+    setLeftSel([]); setRightSel([]); setTab("doc"); showPane("doc");
+    if (sh) showPane("sheet");
+  };
+  const openRecent = (r: Recent) => {
+    if (yaml !== saved && !window.confirm("지금 조건에 고친 내용이 있습니다. 최근 작업으로 바꿀까요?")) return;
+    restoreSet(r.name, r.yaml, r.sheet);
+    setToast({ text: `${r.name} (${when(r.at)}) 을(를) 불러왔습니다`, kind: "ok" });
+  };
+  const packageInput = useRef<HTMLInputElement | null>(null);
+
   const loadSample = (y: string, to: Tab = "doc") => {
     if (yaml !== saved && !window.confirm("지금 조건에 고친 내용이 있습니다. 샘플로 바꿀까요?")) return;
-    setYaml(y); setSaved(y); setOriginal(null);
+    const set = sampleSet(y);
+    setYaml(y); setSaved(y); setOriginal(null); setSheet(set.sheet);
     setLatex({ text: "", dirty: false }); setMd({ text: "", dirty: false });
     setLeftSel([]); setRightSel([]); setTab(to);
     showPane("doc");
-    setToast({ text: to === "doc" ? "샘플 조건을 열었습니다 — 왼쪽을 고쳐 보세요" : `샘플 산출방법서(${to === "latex" ? "LaTeX" : "Markdown"})를 열었습니다 — 값을 고친 뒤 [조건에 반영]`, kind: "ok" });
+    setToast({ text: to === "doc" ? `샘플 세트를 열었습니다 — 조건·산출방법서·위험률 표${set.sheet ? `(${set.sheet.sheet.head.length - 1}열)` : ""}. 왼쪽을 고쳐 보세요` : `샘플 산출방법서(${to === "latex" ? "LaTeX" : "Markdown"})를 열었습니다 — 값을 고친 뒤 [조건에 반영]`, kind: "ok" });
   };
 
   // ── LaTeX·Markdown 을 고쳐 조건에 반영 ───────────────────────────────────
@@ -436,9 +502,21 @@ export default function Studio() {
         <button className="btn-primary" onClick={() => fileInput.current?.click()}>열기</button>
         <input ref={fileInput} aria-label="열 파일" type="file" accept={`${ACCEPT},.csv,.tsv,.xlsx`} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
         <details className="menu">
+          <summary className="btn">패키지 ▾</summary>
+          <div className="menu-list right-0" onClick={closeMenu}>
+            <p className="menu-head">조건 · 산출방법서 · 위험률 표를 한 파일로 ({PACKAGE_EXT})</p>
+            <button onClick={savePackage}>패키지로 저장<small>{packageName()} — 조건 YAML · 산출방법서 Word/Markdown · MethodSpec JSON{sheet?.map.some((m) => m.to === "rate") ? " · 위험률 표 CSV" : " (위험률 표 없음)"}</small></button>
+            <button onClick={() => packageInput.current?.click()}>패키지 열기…<small>{PACKAGE_EXT} — 든 것을 그대로 되살립니다 ([열기]나 끌어다 놓기도 됩니다)</small></button>
+            <p className="menu-head">최근 작업 {recent.length ? `(${recent.length})` : "— 아직 없음"}</p>
+            {recent.map((r) => <button key={r.id} onClick={() => openRecent(r)}>{r.name}<small>{r.product || "(이름 없음)"} · {when(r.at)}{r.sheet ? ` · 위험률 표 ${r.sheet.sheet.head.length - 1}열` : ""}</small></button>)}
+            {recent.length > 0 && <button onClick={() => { setRecent([]); writeJson(`${KEY}:recent`, null); }}><small>최근 작업 목록 지우기</small></button>}
+          </div>
+        </details>
+        <input ref={packageInput} aria-label="열 패키지" type="file" accept={PACKAGE_EXT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openPackage(f); e.target.value = ""; }} />
+        <details className="menu">
           <summary className="btn">샘플 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
-            <p className="menu-head">조건 샘플</p>
+            <p className="menu-head">샘플 세트 — 조건 · 산출방법서 · 위험률 표(가상의 값)</p>
             {SAMPLES.map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
             <p className="menu-head">산출방법서 샘플</p>
             <button onClick={() => loadSample(SAMPLES[0].yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>이율·금액을 고친 뒤 [조건에 반영]</small></button>
@@ -614,7 +692,7 @@ export default function Studio() {
         <span>자동 저장됨</span>
       </footer>
 
-      {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
+      {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>패키지(.lidpkg) · PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
       {toast && <div className={`toast toast-${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       {help && <Help onClose={() => setHelp(false)} />}
       {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
@@ -659,6 +737,7 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
           <li><b>대응 위치</b> 왼쪽 칸·줄을 고르면 오른쪽에서 그 조건이 만든 곳(표의 행·수식·원문 근거·위험률 표의 열)이 노랗게, 오른쪽을 누르면 왼쪽 칸이 표시됩니다.</li>
           <li><b>화면 조절</b> 창 사이 막대를 끌어 크기를 바꾸고(두 번 누르면 처음 비율), 창마다 [⤢ 전체]·[– 숨기기], 위 [보기]에서 다시 켭니다.</li>
+          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서(Word·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lidpkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[열기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
           <li><b>다른 앱과 연동</b> [내보내기 → MethodSpec .json] 은 자유설계보험(flexible_insurance) 등이 읽는 중립 형식입니다(위험률 표 포함). 그 JSON 을 여기서 [열기] 해도 됩니다.</li>
         </ol>
         <p className="text-xs text-muted-foreground">조건 표기: 이율 <code>2.5%</code> · 사업비 <code>1.5/1000</code> · 배수 <code>1배</code> · 위험률 유형 death / incidence / recurring / waiver / lapse / other.</p>

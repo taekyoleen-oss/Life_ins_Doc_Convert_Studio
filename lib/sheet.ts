@@ -215,6 +215,18 @@ export function unlinkRate(st: SheetState | null, id: string): SheetState | null
 export const ratesWithoutTable = (withTables: MethodSpec) =>
   withTables.rates.filter((r) => r.role !== "lapse" && !(r.tables?.M?.ages.length || r.tables?.F?.ages.length || r.table?.ages.length));
 
+/**
+ * 샘플 조건에 딸려 오는 위험률 표 — 견본 CSV 에서 그 조건의 위험률과 이름이 맞는 열만(연령 + 이은 열) 남긴다.
+ * 첫 화면·[샘플] 이 조건·산출방법서·위험률 표를 한 세트로 보여 주기 위한 것. 맞는 열이 없으면 null
+ */
+export function sampleSheet(rates: Pick<RateRef, "id" | "name">[], csv: string, name = "샘플 위험률 표"): SheetState | null {
+  const sh = sheetFromText(name, csv);
+  const map = autoMap(sh, rates);
+  const keep = map.flatMap((m, i) => (m.to === "skip" ? [] : [i]));
+  if (!map.some((m) => m.to === "rate")) return null;
+  return { sheet: { name, head: keep.map((i) => sh.head[i]), rows: sh.rows.map((r) => keep.map((i) => r[i])) }, map: keep.map((i) => map[i]) };
+}
+
 /** 저장본을 믿지 않는다 — 모양이 어긋나면 null */
 export function sanitizeSheet(raw: unknown): SheetState | null {
   const s = raw as Partial<SheetState> | null;

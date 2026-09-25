@@ -17,4 +17,6 @@ const cols = [
 const fmt = (v) => v.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
 const lines = [["연령", ...cols.map((c) => c[0])].join(","), ...ages.map((x) => [x, ...cols.map(([, f]) => fmt(Math.min(f(x), 0.5)))].join(","))];
 writeFileSync("samples/08_위험률표_종합_남녀.csv", "﻿" + lines.join("\n") + "\n");
-console.log(`wrote ${ages.length} rows × ${cols.length} columns`);
+// 앱에 든 같은 표 — 첫 화면·샘플이 위험률 표까지 한 세트로 열리게
+writeFileSync("lib/rate-sample.ts", `/** 생성 파일 — scripts/make-rate-sample.mjs. samples/08_위험률표_종합_남녀.csv 와 같은 가상의 위험률 표(실제 경험률 아님) */\nexport const RATE_SAMPLE_CSV = ${JSON.stringify(lines.join("\n"))};\n`);
+console.log(`wrote ${ages.length} rows × ${cols.length} columns (csv + lib/rate-sample.ts)`);

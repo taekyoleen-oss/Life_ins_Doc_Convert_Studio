@@ -22,11 +22,16 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   p.on("dialog", (d) => { d.accept().catch(() => {}); });      // 덮어쓰기·지우기 확인은 모두 "예"
   await p.goto("http://localhost:3217", { waitUntil: "networkidle" });
   await p.evaluate(() => localStorage.clear());
+  await p.waitForTimeout(900);                                   // 자동 저장 타이머(300·500ms)가 지난 뒤 한 번 더 지운다
+  await p.evaluate(() => localStorage.clear());
   await p.reload({ waitUntil: "networkidle" });
   await p.waitForSelector(".doc-body h1");
+  const OPEN = "input[aria-label='열 파일']", MERGE = "input[aria-label='고쳐 반영할 파일']";
   ok("첫 화면: 종신보험 산출방법서", (await p.textContent(".doc-body h1")).includes("종신보험"));
   ok("KaTeX 수식이 그려진다", (await p.locator(".doc-body .formula .katex").count()) >= 8);
-  ok("첫 화면: 왼쪽은 입력 카드, 아래는 위험률 표", (await p.locator(".form-body .card").count()) >= 8 && (await p.locator(".sheet-empty").count()) === 1);
+  const heads0 = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent.replace(/^[A-Z]\s*/, "").trim()));
+  ok("첫 화면: 왼쪽은 입력 카드, 아래는 위험률 표까지 한 세트(연령·사망률 남·여·장해율)", (await p.locator(".form-body .card").count()) >= 8 && heads0.join(",") === "연령,사망률(남),사망률(여),80% 이상 장해율", heads0.join(","));
+  ok("첫 화면: 산출방법서에 별첨 위험률 표 · 상태줄 '표 없음' 없음", (await p.locator(".doc-body h2", { hasText: "별첨" }).count()) === 1 && !(await p.textContent("footer")).includes("표 없음"));
   await p.screenshot({ path: `${OUT}/s1_first.png` });
   await p.click(".seg button:has-text('YAML')");           // 아래 1)~7)은 YAML 편집기로
   await p.waitForSelector(".cm-editor");
@@ -114,7 +119,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
 
   // ── 입력 화면 · 위험률 표 · 수식 견본 · 화면 조절 ──────────────────────────
   await p.click("summary:has-text('샘플')");
-  await p.click(".menu-list button:has-text('종신보험')");
+  await p.click("details[open] .menu-list button:has-text('종신보험')");
   await p.click(".seg button:has-text('입력')");
   await p.waitForSelector(".form-body .card");
 
@@ -196,6 +201,26 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const t0 = spec.rates[0].table;
   ok("MethodSpec JSON 에 위험률 표(RateRef.table)", t0 && t0.ages.length === 3 && t0.sex === "M" && t0.values[0] === 0.00103, JSON.stringify(t0));
 
+  // 12-1) 패키지(.lidpkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로 저장 → 다른 샘플로 바꾼 뒤 열면 그대로 · 최근 작업에 남는다
+  const before12 = { heads: await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent)), sels: await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value)), h1: await p.textContent(".doc-body h1") };
+  await p.click("summary:has-text('패키지')");
+  const [dp] = await Promise.all([p.waitForEvent("download"), p.click("details[open] .menu-list button:has-text('패키지로 저장')")]);
+  const pkg = fs.readFileSync(await dp.path());
+  ok("[패키지로 저장] → 종신보험_패키지.lidpkg (ZIP: package.json · 조건.yaml · 위험률표.csv · MethodSpec.json · 산출방법서.md · .docx)",
+    dp.suggestedFilename() === "종신보험_패키지.lidpkg" && pkg.slice(0, 2).toString("latin1") === "PK" && ["package.json", "위험률표.csv", "산출방법서.docx"].every((n) => pkg.includes(Buffer.from(n))), dp.suggestedFilename());
+  await p.click("summary:has-text('샘플')"); await p.click("details[open] .menu-list button:has-text('2대질병')");
+  await p.waitForTimeout(500);
+  ok("다른 샘플 세트로 바뀜(2대질병 + 그 위험률 표)", (await p.textContent(".doc-body h1")).includes("2대질병") && (await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent))).some((h) => h.includes("2대질병")));
+  await p.setInputFiles(OPEN, { name: "종신보험_패키지.lidpkg", mimeType: "application/zip", buffer: pkg });
+  await p.waitForSelector(".toast:has-text('종신보험_패키지.lidpkg —')");
+  await p.waitForTimeout(500);
+  const after12 = { heads: await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent)), sels: await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value)), h1: await p.textContent(".doc-body h1") };
+  ok("패키지 [열기] → 조건·산출방법서·위험률 표(열 연결까지)가 저장 때 그대로", JSON.stringify(after12) === JSON.stringify(before12), JSON.stringify(after12).slice(0, 200));
+  await p.click("summary:has-text('패키지')");
+  ok("[패키지] 메뉴의 최근 작업에 남는다", (await p.locator("details[open] .menu-list button", { hasText: "종신보험_패키지.lidpkg" }).count()) >= 1);
+  await p.keyboard.press("Escape");                              // 열린 메뉴가 산출방법서 제목을 가리므로 Esc 로 닫는다
+  ok("Esc 로 메뉴가 닫힌다", (await p.locator("details[open] .menu-list").count()) === 0);
+
   // 13) 수식 견본 → 조건 식(M08) → 산출방법서
   const before = await p.locator(".doc-body .formula").count();
   await p.click("button:has-text('＋ 수식 더하기')");
@@ -264,7 +289,6 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     (await p.locator("th.sheet-name", { hasText: "사망률(남)" }).count()) === 1 && fiRow.includes("40~42세 3행"), fiRow);
 
   // 17) 표준 산출방법서 — Word 로 받아 고친 뒤 올리면 바뀐 값·식만 조건에 (조건을 통째로 바꾸지 않는다)
-  const OPEN = "input[aria-label='열 파일']", MERGE = "input[aria-label='고쳐 반영할 파일']";
   await p.click("details:has(summary:has-text('샘플')) summary");
   await p.click("details:has(summary:has-text('샘플')) .menu-list button:has-text('종신보험 (')");
   await p.waitForSelector(".doc-body h1:has-text('종신보험')");
