@@ -201,23 +201,23 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const t0 = spec.rates[0].table;
   ok("MethodSpec JSON 에 위험률 표(RateRef.table)", t0 && t0.ages.length === 3 && t0.sex === "M" && t0.values[0] === 0.00103, JSON.stringify(t0));
 
-  // 12-1) 패키지(.lidpkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로 저장 → 다른 샘플로 바꾼 뒤 열면 그대로 · 최근 작업에 남는다
+  // 12-1) 패키지(.lifepkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로 저장 → 다른 샘플로 바꾼 뒤 열면 그대로 · 최근 작업에 남는다
   const before12 = { heads: await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent)), sels: await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value)), h1: await p.textContent(".doc-body h1") };
   await p.click("summary:has-text('패키지')");
   const [dp] = await Promise.all([p.waitForEvent("download"), p.click("details[open] .menu-list button:has-text('패키지로 저장')")]);
   const pkg = fs.readFileSync(await dp.path());
-  ok("[패키지로 저장] → 종신보험_패키지.lidpkg (ZIP: package.json · 조건.yaml · 위험률표.csv · MethodSpec.json · 산출방법서.md · .docx)",
-    dp.suggestedFilename() === "종신보험_패키지.lidpkg" && pkg.slice(0, 2).toString("latin1") === "PK" && ["package.json", "위험률표.csv", "산출방법서.docx"].every((n) => pkg.includes(Buffer.from(n))), dp.suggestedFilename());
+  ok("[패키지로 저장] → 종신보험_패키지.lifepkg (ZIP: package.json · 조건.yaml · 위험률표.csv · MethodSpec.json · 산출방법서.md · .docx)",
+    dp.suggestedFilename() === "종신보험_패키지.lifepkg" && pkg.slice(0, 2).toString("latin1") === "PK" && ["package.json", "위험률표.csv", "산출방법서.docx"].every((n) => pkg.includes(Buffer.from(n))), dp.suggestedFilename());
   await p.click("summary:has-text('샘플')"); await p.click("details[open] .menu-list button:has-text('2대질병')");
   await p.waitForTimeout(500);
   ok("다른 샘플 세트로 바뀜(2대질병 + 그 위험률 표)", (await p.textContent(".doc-body h1")).includes("2대질병") && (await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent))).some((h) => h.includes("2대질병")));
-  await p.setInputFiles(OPEN, { name: "종신보험_패키지.lidpkg", mimeType: "application/zip", buffer: pkg });
-  await p.waitForSelector(".toast:has-text('종신보험_패키지.lidpkg —')");
+  await p.setInputFiles(OPEN, { name: "종신보험_패키지.lifepkg", mimeType: "application/zip", buffer: pkg });
+  await p.waitForSelector(".toast:has-text('종신보험_패키지.lifepkg —')");
   await p.waitForTimeout(500);
   const after12 = { heads: await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent)), sels: await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value)), h1: await p.textContent(".doc-body h1") };
   ok("패키지 [열기] → 조건·산출방법서·위험률 표(열 연결까지)가 저장 때 그대로", JSON.stringify(after12) === JSON.stringify(before12), JSON.stringify(after12).slice(0, 200));
   await p.click("summary:has-text('패키지')");
-  ok("[패키지] 메뉴의 최근 작업에 남는다", (await p.locator("details[open] .menu-list button", { hasText: "종신보험_패키지.lidpkg" }).count()) >= 1);
+  ok("[패키지] 메뉴의 최근 작업에 남는다", (await p.locator("details[open] .menu-list button", { hasText: "종신보험_패키지.lifepkg" }).count()) >= 1);
   await p.keyboard.press("Escape");                              // 열린 메뉴가 산출방법서 제목을 가리므로 Esc 로 닫는다
   ok("Esc 로 메뉴가 닫힌다", (await p.locator("details[open] .menu-list").count()) === 0);
 

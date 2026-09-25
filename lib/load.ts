@@ -29,7 +29,7 @@ export interface Loaded {
   message: string;
 }
 
-export const ACCEPT = ".pdf,.docx,.hwp,.hwpx,.tex,.md,.txt,.yaml,.yml,.json,.png,.jpg,.jpeg,.lidpkg";
+export const ACCEPT = ".pdf,.docx,.hwp,.hwpx,.tex,.md,.txt,.yaml,.yml,.json,.png,.jpg,.jpeg,.lifepkg";
 
 const ext = (name: string) => (name.split(".").pop() ?? "").toLowerCase();
 

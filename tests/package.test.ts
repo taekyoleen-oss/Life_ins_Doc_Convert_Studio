@@ -6,7 +6,7 @@ import { RATE_SAMPLE_CSV } from "@/lib/rate-sample";
 import { SAMPLES } from "@/lib/samples";
 import { attachTables, sampleSheet } from "@/lib/sheet";
 
-/** 패키지(.lidpkg): 조건 · 산출방법서 · 위험률 표 한 파일 — 저장 → 열기 왕복, 위험률 표 없는 패키지, 샘플 세트 */
+/** 패키지(.lifepkg): 조건 · 산출방법서 · 위험률 표 한 파일 — 저장 → 열기 왕복, 위험률 표 없는 패키지, 샘플 세트 */
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 
 describe("패키지 저장 → 열기", () => {

@@ -8,7 +8,7 @@ import { docTitle, toStandardDocx } from "./standards";
 import { parseDelimited, sanitizeSheet, type ColMap, type SheetState } from "./sheet";
 
 /**
- * 패키지(.lidpkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로.
+ * 패키지(.lifepkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로.
  * 압축하지 않은 ZIP 이라 이름을 .zip 으로 바꾸면 안에 든 파일을 그대로 꺼내 쓸 수 있다:
  *   package.json      무엇이 들었는지 (양식 · 이름 · 저장 시각 · 위험률 표의 열 연결)
  *   조건.yaml         조건 파일 그대로(주석 포함) — 다시 열 때 이것을 쓴다
@@ -17,7 +17,7 @@ import { parseDelimited, sanitizeSheet, type ColMap, type SheetState } from "./s
  *   산출방법서.md · 산출방법서.docx   조건에서 만든 산출방법서(사람이 읽는 용 — 열 때는 쓰지 않는다)
  * 한 부분이 없어도(위험률 표가 없는 조건 등) 패키지가 된다 — 든 것만 되살린다.
  */
-export const PACKAGE_EXT = ".lidpkg";
+export const PACKAGE_EXT = ".lifepkg";
 export const PACKAGE_FORMAT = "Life_ins_Doc_Convert_Studio 패키지 v1";
 const F = { meta: "package.json", yaml: "조건.yaml", csv: "위험률표.csv", json: "MethodSpec.json", md: "산출방법서.md", docx: "산출방법서.docx" } as const;
 
@@ -66,7 +66,7 @@ export async function readPackage(buf: Uint8Array): Promise<{ meta: PackageMeta;
   const files = await unzip(buf);
   const text = (n: string) => { const f = files.get(n); return f ? new TextDecoder().decode(f).replace(/^﻿/, "") : undefined; };
   const metaText = text(F.meta);
-  if (!metaText) throw new Error("패키지(.lidpkg)가 아닙니다 — package.json 이 없습니다");
+  if (!metaText) throw new Error("패키지(.lifepkg)가 아닙니다 — package.json 이 없습니다");
   const meta = JSON.parse(metaText) as PackageMeta;
   if (!/Life_ins_Doc_Convert_Studio 패키지/.test(meta.format ?? "")) throw new Error(`모르는 패키지 양식입니다: ${meta.format}`);
   let yaml = text(F.yaml);

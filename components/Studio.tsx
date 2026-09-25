@@ -358,7 +358,7 @@ export default function Studio() {
     return () => { window.removeEventListener("dragover", over); window.removeEventListener("dragleave", leave); window.removeEventListener("drop", drop); };
   }, []);
 
-  // ── 패키지(.lidpkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로 저장하고 연다 · 최근 작업 ──
+  // ── 패키지(.lifepkg) — 조건 · 산출방법서 · 위험률 표를 한 파일로 저장하고 연다 · 최근 작업 ──
   const packageName = () => `${(s.meta.productName || "상품").replace(/[^\w가-힣]+/g, "_")}_패키지${PACKAGE_EXT}`;
   const savePackage = () => {
     if (syntaxErrors.length) { setToast({ text: `조건 파일 ${syntaxErrors[0].line}번째 줄 오류를 먼저 고쳐 주세요`, kind: "err" }); return; }
@@ -372,7 +372,7 @@ export default function Studio() {
   const openPackage = async (file: File) => {
     try {
       const buf = new Uint8Array(await file.arrayBuffer());
-      if (!isPackage(buf)) throw new Error(`${file.name} 은(는) 패키지(.lidpkg)가 아닙니다`);
+      if (!isPackage(buf)) throw new Error(`${file.name} 은(는) 패키지(.lifepkg)가 아닙니다`);
       const r = await readPackage(buf);
       if (r.yaml === undefined) throw new Error("패키지에 조건(조건.yaml · MethodSpec.json)이 없습니다");
       restoreSet(file.name, r.yaml, r.sheet ?? null);
@@ -692,7 +692,7 @@ export default function Studio() {
         <span>자동 저장됨</span>
       </footer>
 
-      {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>패키지(.lidpkg) · PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
+      {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>패키지(.lifepkg) · PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
       {toast && <div className={`toast toast-${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       {help && <Help onClose={() => setHelp(false)} />}
       {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
@@ -737,7 +737,7 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
           <li><b>대응 위치</b> 왼쪽 칸·줄을 고르면 오른쪽에서 그 조건이 만든 곳(표의 행·수식·원문 근거·위험률 표의 열)이 노랗게, 오른쪽을 누르면 왼쪽 칸이 표시됩니다.</li>
           <li><b>화면 조절</b> 창 사이 막대를 끌어 크기를 바꾸고(두 번 누르면 처음 비율), 창마다 [⤢ 전체]·[– 숨기기], 위 [보기]에서 다시 켭니다.</li>
-          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서(Word·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lidpkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[열기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
+          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서(Word·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lifepkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[열기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
           <li><b>다른 앱과 연동</b> [내보내기 → MethodSpec .json] 은 자유설계보험(flexible_insurance) 등이 읽는 중립 형식입니다(위험률 표 포함). 그 JSON 을 여기서 [열기] 해도 됩니다.</li>
         </ol>
         <p className="text-xs text-muted-foreground">조건 표기: 이율 <code>2.5%</code> · 사업비 <code>1.5/1000</code> · 배수 <code>1배</code> · 위험률 유형 death / incidence / recurring / waiver / lapse / other.</p>
