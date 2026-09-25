@@ -170,6 +170,51 @@ export function autoMap(sheet: Sheet, rates: Pick<RateRef, "id" | "name">[]): Co
   });
 }
 
+// ── 조건 ↔ 표를 유기적으로 — 표를 올리면 조건에, 조건에 더하면 표에 ─────────────
+/**
+ * 아직 잇지 않은 수 열 가운데 조건에 같은 이름의 위험률이 없는 것 — 성별을 뺀 이름마다 하나(남·여 열은 한 위험률).
+ * 표를 올릴 때 이것들을 새 위험률로 조건에 더한다(유형은 이름으로 어림 — 사람이 확인).
+ */
+export function unlinkedGroups(st: SheetState, rates: Pick<RateRef, "id" | "name">[]): { name: string; role: RateRole; cols: number[] }[] {
+  const byName = new Map<string, number[]>();
+  st.map.forEach((m, i) => {
+    if (m.to !== "skip" || !hasNumbers(st.sheet, i)) return;
+    const name = baseName(st.sheet.head[i]);
+    if (rates.some((r) => r.name === name)) return;
+    byName.set(name, [...(byName.get(name) ?? []), i]);
+  });
+  return [...byName].map(([name, cols]) => ({ name, role: guessRole(name), cols }));
+}
+
+/** 이름마다 정해진 위험률 id 로 그 열들을 잇는다 — unlinkedGroups 의 짝 */
+export function linkGroups(st: SheetState, groups: { cols: number[] }[], ids: string[]): SheetState {
+  const map = [...st.map];
+  groups.forEach((g, k) => { if (ids[k]) for (const i of g.cols) map[i] = { to: "rate", rateId: ids[k], ...(sexOf(st.sheet.head[i]) ? { sex: sexOf(st.sheet.head[i]) } : {}) }; });
+  return { ...st, map };
+}
+
+/**
+ * 조건에 더한 위험률의 빈 열 — 값은 사람이 붙여넣는다. 연령 열이 없거나 이미 그 위험률의 열이 있으면 그대로.
+ * 표가 없을 때는 만들지 않는다(표를 올리면 autoMap 이 이름으로 잇는다)
+ */
+export function addEmptyColumn(st: SheetState | null, rate: Pick<RateRef, "id" | "name">): SheetState | null {
+  if (!st || !st.map.some((m) => m.to === "age") || st.map.some((m) => m.to === "rate" && m.rateId === rate.id)) return st;
+  return {
+    sheet: { ...st.sheet, head: [...st.sheet.head, rate.name], rows: st.sheet.rows.map((r) => [...r, ""]) },
+    map: [...st.map, { to: "rate", rateId: rate.id }],
+  };
+}
+
+/** 조건에서 지운 위험률 — 그 열은 잇지 않은 상태로(열과 값은 남긴다) */
+export function unlinkRate(st: SheetState | null, id: string): SheetState | null {
+  if (!st || !st.map.some((m) => m.to === "rate" && m.rateId === id)) return st;
+  return { ...st, map: st.map.map((m): ColMap => (m.to === "rate" && m.rateId === id ? { to: "skip" } : m)) };
+}
+
+/** 값 표가 없는(열이 없거나 열이 비어 있는) 위험률 — 계산하는 앱에서 0 이 된다. 화면이 알려 준다 */
+export const ratesWithoutTable = (withTables: MethodSpec) =>
+  withTables.rates.filter((r) => r.role !== "lapse" && !(r.tables?.M?.ages.length || r.tables?.F?.ages.length || r.table?.ages.length));
+
 /** 저장본을 믿지 않는다 — 모양이 어긋나면 null */
 export function sanitizeSheet(raw: unknown): SheetState | null {
   const s = raw as Partial<SheetState> | null;
@@ -202,7 +247,8 @@ export function linkNote(st: SheetState | null, withTables: MethodSpec, rateId: 
   const r = withTables.rates.find((x) => x.id === rateId);
   const t = r?.tables?.M ?? r?.tables?.F ?? r?.table;
   const who = r?.tables ? (["M", "F"] as const).filter((x) => r.tables?.[x]).map(sexName).join("·") : sexName(r?.table?.sex);
-  return `표: ${cols.join("·")}열 → ${t ? `${t.ages[0]}~${t.ages[t.ages.length - 1]}세 ${t.ages.length}행${who ? ` · ${who}` : ""}` : "연령 열을 정하면 붙습니다"}`;
+  const age = st?.map.some((m) => m.to === "age");
+  return `표: ${cols.join("·")}열 → ${t ? `${t.ages[0]}~${t.ages[t.ages.length - 1]}세 ${t.ages.length}행${who ? ` · ${who}` : ""}` : age ? "값이 비어 있습니다 — 아래 표에 붙여넣으세요" : "연령 열을 정하면 붙습니다"}`;
 }
 
 /**

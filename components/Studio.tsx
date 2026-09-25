@@ -20,11 +20,11 @@ import { docToLatex, latexToDoc } from "@/lib/methoddoc/tex";
 import { ExtractError, extractDoc, extractText, type ExtractedDoc } from "@/lib/methoddoc/extract";
 import { IMAGE_EXT } from "@/lib/pages";
 import { parseMethodDoc } from "@/lib/methoddoc/parse";
-import type { RateRole } from "@/lib/methoddoc/spec";
+import type { MethodSpec, RateRole } from "@/lib/methoddoc/spec";
 import { ACCEPT, fromDoc, loadFile, type Original } from "@/lib/load";
 import { DOCX_MIME, download, exporters } from "@/lib/export";
 import { STANDARDS, standardFile, standardSpec, toStandardDocx } from "@/lib/standards";
-import { attachTables, autoMap, linkNote, newRateId, sanitizeSheet, sheetFromDoc, sheetFromFile, sheetFromSpec, sheetFromText, type Sheet, type SheetState } from "@/lib/sheet";
+import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId, ratesWithoutTable, sanitizeSheet, sheetFromDoc, sheetFromFile, sheetFromSpec, sheetFromText, unlinkRate, unlinkedGroups, type Sheet, type SheetState } from "@/lib/sheet";
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 
 type Tab = "doc" | "latex" | "markdown" | "word" | "original";
@@ -218,7 +218,32 @@ export default function Studio() {
   }, [original, pickPaths]);
 
   // ── 입력 화면·위험률 표 → 조건 파일 ──────────────────────────────────────
-  const onEdit = useCallback((edits: YamlEdit[]) => setYaml((y) => editYaml(y, edits)), []);
+  /**
+   * 조건과 위험률 표를 함께 — M04 에서 위험률을 더하면 표에 그 이름의 빈 열(값을 붙여넣을 자리)이 생기고,
+   * 지우면 그 열의 연결이 풀린다. 산출방법서·JSON·계산 앱이 모두 이 연결에 기댄다
+   */
+  const onEdit = useCallback((edits: YamlEdit[]) => {
+    setYaml((y) => {
+      const raw = parseDocument(y).toJS() as { rates?: { id?: unknown; name?: unknown }[] } | null;
+      for (const e of edits) {
+        if (e.path[0] !== "rates") continue;
+        const v = e.value as { id?: unknown; name?: unknown } | undefined;
+        if (e.add && e.path.length === 1 && v?.id) setSheet((st) => addEmptyColumn(st, { id: String(v.id), name: String(v.name ?? v.id) }));
+        else if (!e.add && e.value === undefined && e.path.length === 2) { const id = raw?.rates?.[Number(e.path[1])]?.id; if (id) setSheet((st) => unlinkRate(st, String(id))); }
+      }
+      return editYaml(y, edits);
+    });
+  }, []);
+  /** 문서를 반영해 위험률이 늘거나 줄었을 때 표도 맞춘다 */
+  const syncSheetRates = (before: MethodSpec["rates"], after: MethodSpec["rates"]) => {
+    const was = new Set(before.map((r) => r.id)), now = new Set(after.map((r) => r.id));
+    setSheet((st) => {
+      let next = st;
+      for (const r of after) if (!was.has(r.id)) next = addEmptyColumn(next, r);
+      for (const r of before) if (!now.has(r.id)) next = unlinkRate(next, r.id);
+      return next;
+    });
+  };
   const setOpen = useCallback((f: (o: string[]) => string[]) => setLayout((l) => ({ ...l, open: f(l.open) })), []);
   const tableNote = useCallback((id: string) => linkNote(sheet, specT, id), [sheet, specT]);
 
@@ -230,19 +255,27 @@ export default function Studio() {
     const ids: string[] = [];
     for (const it of items) ids.push(newRateId(it.role, [...taken, ...ids]));
     if (items.length) {
-      setYaml(editYaml(yaml, items.map((it, k) => ({ path: ["rates"], add: true, value: { id: ids[k], name: it.name, role: it.role } }))));
+      setYaml((y) => editYaml(y, items.map((it, k) => ({ path: ["rates"], add: true, value: { id: ids[k], name: it.name, role: it.role } }))));
       setToast({ text: `위험률 ${items.map((x) => x.name).join(", ")} 을(를) 조건(M04)에 더했습니다 — 유형을 확인하세요`, kind: "ok" });
     }
     return ids;
   };
 
+  /**
+   * 표를 올리면 열 이름으로 조건의 위험률에 잇고, 조건에 없는 이름의 수 열은 새 위험률로 조건에 더해 잇는다 —
+   * 사용자는 표만 올리면 된다(유형은 이름으로 어림하므로 M04 에서 확인 · 되돌리기 가능)
+   */
   const loadSheet = (sh: Sheet) => {
     if (sheet && sheet.map.some((m) => m.to !== "skip") && !window.confirm("지금 위험률 표와 연결을 새 표로 바꿀까요?")) return;
-    const map = autoMap(sh, parsed.spec.rates);
-    setSheet({ sheet: sh, map });
+    let st: SheetState = { sheet: sh, map: autoMap(sh, parsed.spec.rates) };
+    const groups = unlinkedGroups(st, parsed.spec.rates);
+    const ids = groups.length ? addRates(groups.map((g) => ({ name: g.name, role: g.role }))) : [];
+    if (ids.length) st = linkGroups(st, groups, ids);
+    setSheet(st);
     showPane("sheet");
-    const n = map.filter((m) => m.to === "rate").length;
-    setToast({ text: `${sh.name}: ${sh.rows.length}행 × ${sh.head.length}열 — 첫 행을 열 이름으로 읽고 ${n}개 열을 조건의 위험률에 이었습니다`, kind: "ok" });
+    const n = new Set(st.map.flatMap((m) => (m.to === "rate" ? [m.rateId] : []))).size;
+    const age = st.map.some((m) => m.to === "age");
+    setToast({ text: `${sh.name}: ${sh.rows.length}행 × ${sh.head.length}열 — 위험률 ${n}개에 이었습니다${ids.length ? ` (${groups.map((g) => g.name).join(", ")} 은(는) 조건 M04 에 새로 더함 — 유형을 확인하세요)` : ""}${age ? "" : " · 연령 열을 [잇기]에서 정하세요"}`, kind: age ? "ok" : "warn" });
   };
   const openSheetFile = async (f: File) => {
     try { loadSheet(await sheetFromFile(f)); } catch (e) { setToast({ text: errText(e), kind: "err" }); }
@@ -315,6 +348,7 @@ export default function Studio() {
     const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence, { standard: !!back.format });
     if (!changes.length) { setToast({ text: "조건으로 옮길 바뀐 값이 없습니다 — 문장 수정은 조건에 들어가지 않습니다(내려받아 보관하세요)", kind: "warn" }); return; }
     setYaml(patchYaml(yaml, spec));
+    syncSheetRates(parsed.spec.rates, spec.rates);
     (kind === "latex" ? setLatex : setMd)({ text: "", dirty: false });
     setToast({ text: `조건 ${changes.length}건 반영 — ${changes.slice(0, 3).join(" · ")}${changes.length > 3 ? " …" : ""}`, kind: "ok" });
   };
@@ -342,6 +376,7 @@ export default function Studio() {
       if (newSheet) { setSheet(newSheet); showPane("sheet"); }
       if (!changes.length) { setToast({ text: `${file.name} — 조건과 다른 값이 없습니다`, kind: "warn" }); return; }
       setYaml(patchYaml(yaml, spec));
+      if (!newSheet) syncSheetRates(parsed.spec.rates, spec.rates);
       setToast({ text: `${file.name} — 조건 ${changes.length}건 반영${back.format ? "" : " (표준 양식이 아니어서 값만)"}`, kind: "ok" });
     } catch (e) {
       setToast({ text: errText(e), kind: "err" });
@@ -379,6 +414,12 @@ export default function Studio() {
     ...(original ? [["original", `원문 · ${original.name}`] as [Tab, string]] : [])];
   const top = visible("cond") || visible("doc");
   const nTables = specT.rates.filter((r) => r.table).length;
+  const noTable = ratesWithoutTable(specT);
+  /** 계산 앱으로 넘기기 전에 값 표가 빠진 위험률을 알린다 — 그대로 넘기면 그쪽에서 0 으로 들어간다 */
+  const exportJson = () => {
+    exporters.json(specT);
+    if (noTable.length) setToast({ text: `내보냈습니다. 값 표가 없는 위험률 ${noTable.map((r) => r.name).join(", ")} 은(는) 자유설계보험에서 0 으로 들어갑니다 — 아래 위험률 표에 값을 붙여넣으면 이어집니다`, kind: "warn" });
+  };
 
   return (
     <div className="flex h-screen flex-col">
@@ -410,7 +451,7 @@ export default function Studio() {
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">조건 (다른 앱에서 읽기)</p>
             <button onClick={() => exporters.yaml(yaml, s)}>조건 파일 .yaml</button>
-            <button onClick={() => exporters.json(specT)}>MethodSpec .json<small>자유설계보험(flexible_insurance) 등 다른 앱 입력 · 위험률 표 {nTables}개 포함</small></button>
+            <button onClick={exportJson}>MethodSpec .json<small>자유설계보험(flexible_insurance) 등 다른 앱 입력 · 위험률 표 {nTables}개 포함{noTable.length ? ` · 표 없는 위험률 ${noTable.length}개` : ""}</small></button>
             <p className="menu-head">산출방법서</p>
             <button onClick={() => exporters.docx(specT)}>Word .docx<small>표준 산출방법서 — 한글에서도 열림 · 작성 안내 포함</small></button>
             <button onClick={() => exporters.docx(specT, false)}>Word .docx (작성 안내 없이)<small>출력·제출용</small></button>
@@ -452,7 +493,7 @@ export default function Studio() {
                 <div className="min-h-0 flex-1">
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
-                        open={layout.open} setOpen={setOpen} tableNote={tableNote} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))} />
+                        open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
@@ -551,14 +592,16 @@ export default function Studio() {
         {visible("sheet") && (
           <section className="no-print flex min-h-0 flex-col border-t border-border bg-white" style={{ flex: top ? `${layout.sheetH} 1 0` : "1 1 0" }}>
             <RateSheetPane state={sheet} onMap={(map) => setSheet((x) => (x ? { ...x, map } : x))} onText={pasteSheet} onFile={(f) => void openSheetFile(f)}
-              onClear={() => setSheet(null)} rates={s.rates} onNewRates={addRates} highlight={leftSel} onPick={(p) => pickPaths(p, true)} tools={tools("sheet")} />
+              onClear={() => setSheet(null)} rates={s.rates} noTable={noTable} onNewRates={addRates}
+              onEmptyColumns={(ids) => { setSheet((st) => ids.reduce((acc, id) => addEmptyColumn(acc, s.rates.find((r) => r.id === id)!), st)); setToast({ text: `빈 열 ${ids.length}개를 만들었습니다 — 값을 붙여넣거나 Excel 에서 채워 다시 올리세요`, kind: "ok" }); }}
+              highlight={leftSel} onPick={(p) => pickPaths(p, true)} tools={tools("sheet")} />
           </section>
         )}
       </main>
 
       {/* ── 상태 ── */}
       <footer className="no-print flex flex-wrap items-center gap-3 border-t border-border bg-white px-4 py-1 text-xs text-muted-foreground">
-        <span>담보 {s.benefits.length} · 위험률 {s.rates.length}{nTables ? ` (표 ${nTables})` : ""} · 사업비 {s.expenses.length}</span>
+        <span>담보 {s.benefits.length} · 위험률 {s.rates.length}{nTables ? ` (표 ${nTables})` : ""}{noTable.length && s.rates.length ? <span className="text-amber-700" title={noTable.map((r) => r.name).join(", ")}> · 표 없음 {noTable.length}</span> : null} · 사업비 {s.expenses.length}</span>
         {parsed.errors.filter((e) => !e.line).slice(0, 1).map((e, i) => <span key={i} className="text-amber-700">⚠ {e.message}</span>)}
         {changed.length > 0 && (
           <span className="changed-note" title={changed.slice(0, 12).join(", ") + (changed.length > 12 ? " …" : "")}>
@@ -607,7 +650,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <ol>
           <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다. 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 산출방법서의 정보가 아니어서 이 앱에 두지 않고, 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
-          <li><b>위험률 표</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽습니다. 열마다 [잇기]에서 연령·위험률·성별을 고르면 그 값 표가 산출방법서와 MethodSpec JSON 에 실립니다(남·여 열이 있으면 계약 성별의 열).</li>
+          <li><b>위험률 표 ↔ 조건 ↔ 계산</b> 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽어 같은 이름의 위험률(M04)에 잇고, 조건에 없는 이름의 열은 새 위험률로 M04 에 더합니다(유형 확인). 거꾸로 M04 에서 위험률을 더하면 표에 그 이름의 빈 열이 생기고, 산출방법서에서 위험률을 더해 올려도 같습니다. 이은 값 표는 산출방법서 별첨과 MethodSpec JSON 에 실려 자유설계보험이 계약 성별의 표로 계산합니다 — 값 표가 없는 위험률은 상태줄에 &quot;표 없음&quot;으로 알리고 그쪽에서 0 이 됩니다. 순서: ① 샘플·산출방법서 열기 → ② 위험률 표 올리기 → ③ [내보내기 → MethodSpec .json] → 자유설계보험 /method 에서 열기.</li>
           <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M08)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
           <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
           <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>

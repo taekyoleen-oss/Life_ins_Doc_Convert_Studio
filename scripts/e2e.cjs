@@ -164,13 +164,25 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForSelector("table.sheet");
   await p.waitForTimeout(600);
   const mapped = await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value));
-  ok("CSV 첫 행 → 연령·사망률(남·여)·장해율 자동 잇기", mapped.join(",") === "age,rate:q,M,rate:q,F,rate:r80,,skip", mapped.join(","));
+  ok("CSV 첫 행 → 연령·사망률(남·여)·장해율은 이름으로 잇고, 조건에 없는 '암발생률' 은 새 위험률로 조건에 더해 잇는다",
+    /^age,rate:q,M,rate:q,F,rate:r80,,rate:r\w*,M$/.test(mapped.join(",")), mapped.join(","));
   const rateRow = await p.locator(".doc-body tr", { hasText: "제7회 경험생명표 사망률" }).first().textContent();
   ok("이은 열 → 산출방법서 위험률 표 '40~42세 3행'", rateRow.includes("40~42세 3행"), rateRow);
-  await p.click("button:has-text('안 이은 열 → 새 위험률')");
-  await p.waitForTimeout(700);
   const cancer = await p.locator(".doc-body tr", { hasText: "암발생률" }).first().textContent().catch(() => "");
-  ok("안 이은 열 → 조건에 새 위험률 '암발생률' + 표", cancer.includes("40~42세 3행"), cancer);
+  ok("새 위험률 '암발생률' 이 조건·산출방법서에 표와 함께", cancer.includes("40~42세 3행") && (await p.locator("[data-card='M04'] .card-head").textContent()).includes("암발생률"), cancer);
+  ok("산출방법서 맨 뒤 '별첨 — 위험률 표' (연령 × 열)", (await p.locator(".doc-body h2", { hasText: "별첨 — 위험률 표" }).count()) === 1 && (await p.locator(".doc-body section:last-of-type tbody tr").count()) === 3);
+  // 11-1) 조건 M04 에서 위험률을 더하면 표에 빈 열이 생기고(표 없음 안내), 지우면 연결이 풀린다
+  await p.locator("[data-card='M04'] .card-head").click();
+  await p.locator("[data-card='M04'] button:has-text('＋ 위험률')").click();
+  await p.waitForTimeout(600);
+  const heads = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent.replace(/^[A-Z]\s*/, "").trim()));
+  const sels = await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value));
+  ok("M04 [＋ 위험률] → 표에 '새 위험률' 빈 열이 그 위험률에 이어짐 · 상태줄 '표 없음 1'", heads.at(-1) === "새 위험률" && /^rate:/.test(sels.at(-2)) && (await p.textContent("footer")).includes("표 없음 1"), `${heads.join(",")} | ${sels.join(",")}`);
+  ok("M04 카드가 '값 표 없음' 을 안내", (await p.locator("[data-card='M04']").textContent()).includes("값 표가 없는 위험률: 새 위험률"));
+  await p.locator("[data-path^='rates['] .sub-x").last().click();
+  await p.waitForTimeout(600);
+  const sels2 = await p.$$eval("table.sheet select.sheet-sel", (els) => els.map((e) => e.value));
+  ok("위험률을 지우면 그 열은 '쓰지 않음' (값은 남음)", sels2.at(-1) === "skip" && (await p.$$eval("table.sheet th.sheet-name", (els) => els.length)) === heads.length, sels2.join(","));
   await p.locator("th.sheet-name", { hasText: "사망률(남)" }).click();
   await p.waitForTimeout(500);
   const hlSheet = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 20)));

@@ -553,10 +553,12 @@ interface Props {
   open: string[];
   setOpen: (f: (open: string[]) => string[]) => void;
   tableNote: (rateId: string) => string | undefined;
+  /** 값 표가 없는 위험률 id — M04 가 알려 준다(계산 앱에서 0 이 된다) */
+  noTableIds: string[];
   onShowYaml: () => void;
 }
 
-export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, onShowYaml }: Props) {
+export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onShowYaml }: Props) {
   const { doc, syntax, raw } = useMemo(() => {
     const doc = parseDocument(yaml);
     const syntax = doc.errors[0] ?? (doc.contents !== null && !isMap(doc.contents)
@@ -587,6 +589,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const status = (err: string | undefined, done: boolean, optional = false): Status => (err ? "error" : done ? "done" : optional ? "optional" : "editing");
   const sp = spec;
   const waiverRates = rates.filter((r) => r.role === "waiver");
+  const noTable = rates.filter((r) => r.role !== "lapse" && noTableIds.includes(r.id)).map((r) => r.name);
   const waiverOff = b.waiver === true && !waiverRates.length;
   const nExp = list(raw.expenses).length, nForm = list(raw.formulas).length;
   const sr = (raw.surrender ?? {}) as Obj, rs = (raw.reserve ?? {}) as Obj;
@@ -604,9 +607,10 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       summary: [sp.basis.interest !== undefined ? `i = ${pct(sp.basis.interest)}` : "", sp.basis.standardInterest !== undefined ? `표준 ${pct(sp.basis.standardInterest)}` : "",
         ...(sp.basis.lapse?.length ? [`해지율 ${sp.basis.lapse.map((l) => pct(l.rate)).join("·")}`, sp.basis.lowRatio !== undefined ? (sp.basis.lowRatio === 0 ? "무해지" : `환급률 ${pct(sp.basis.lowRatio)}`) : ""] : [])],
       help: "적용이율은 보험료·책임준비금에, 표준이율은 표준책임준비금과 해약공제 기준 신계약비에 씁니다. 저해지·무해지형은 적용해지율과 환급률을 넣습니다.", body: <BasisBody /> },
-    { id: "M04", code: "M04", title: "위험률", paths: ["rates"], status: status(undefined, rates.length > 0),
-      summary: [...rates.slice(0, 4).map((r) => r.name), rates.length > 4 ? `외 ${rates.length - 4}` : "", sp.rates.some((r) => r.table) ? `표 ${sp.rates.filter((r) => r.table).length}개 연결` : ""],
-      help: "위험률마다 이름·유형(사망·최초발생·반복지급·납입면제·해지·기타)·근거를 적습니다. 유형이 담보·납입면제와의 연결을 정합니다. 값 표는 아래 [위험률 표]에서 열을 이어 붙입니다.",
+    { id: "M04", code: "M04", title: "위험률", paths: ["rates"], status: rates.length ? (noTable.length ? "editing" : "done") : "editing",
+      message: noTable.length ? `값 표가 없는 위험률: ${noTable.join(", ")} — 아래 [위험률 표]에 같은 이름의 열을 붙여넣으면 이어집니다(계산 앱에서는 그때까지 0). 위험률을 더하면 표에 빈 열이 생깁니다.` : undefined,
+      summary: [...rates.slice(0, 4).map((r) => r.name), rates.length > 4 ? `외 ${rates.length - 4}` : "", sp.rates.some((r) => r.table) ? `표 ${sp.rates.filter((r) => r.table).length}개 연결` : "", noTable.length ? `표 없음 ${noTable.length}` : ""],
+      help: "위험률마다 이름·유형(사망·최초발생·반복지급·납입면제·해지·기타)·근거를 적습니다. 유형이 담보·납입면제와의 연결을 정합니다. 값 표는 아래 [위험률 표]에서 이어집니다 — 표를 올리면 같은 이름의 열이 자동으로 이어지고, 여기서 위험률을 더하면 표에 빈 열이 생깁니다. 이 표가 산출방법서 별첨과 자유설계보험 계산에 그대로 쓰입니다.",
       body: <RatesBody rates={rates} used={used} tableNote={tableNote} /> },
     { id: "M05", code: "M05", title: "납입자수", paths: ["basis.waiver"], status: waiverOff ? "error" : "done",
       message: waiverOff ? "추가 납입면제 사유를 켰지만 유형이 '납입면제'인 위험률이 없습니다. 아래에서 고르세요." : undefined,

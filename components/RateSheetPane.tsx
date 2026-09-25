@@ -17,6 +17,9 @@ interface Props {
   rates: RateRef[];
   /** 조건에 위험률을 더하고 새 id 를 돌려준다 */
   onNewRates: (items: { name: string; role: RateRole }[]) => string[];
+  /** 값 표가 없는 조건의 위험률 — 빈 열을 만들어 값을 붙여넣게 안내한다 */
+  noTable: RateRef[];
+  onEmptyColumns: (ids: string[]) => void;
   /** 왼쪽에서 고른 조건 경로 → 그 위험률에 이은 열을 표시 */
   highlight: string[];
   onPick: (paths: string[]) => void;
@@ -30,7 +33,7 @@ const NONE: ColMap[] = [];
  * 위험률 표 — 붙여넣기·CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽고, 열마다 조건(연령 · 위험률 · 성별)에 잇는다.
  * 이은 열은 RateRef.table 이 되어 산출방법서 위험률 표와 MethodSpec JSON(자유설계보험 입력)에 실린다.
  */
-export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, onNewRates, highlight, onPick, tools }: Props) {
+export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, noTable, onNewRates, onEmptyColumns, highlight, onPick, tools }: Props) {
   const file = useRef<HTMLInputElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
   const sh = state?.sheet, map = state?.map ?? NONE;
@@ -94,14 +97,21 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
         <span className="flex-1" />
         <button className="btn" onClick={() => file.current?.click()}>파일 올리기</button>
         <input ref={file} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
-        {sh && <button className="btn" onClick={linkRest} title="아직 잇지 않은 수 열을 위험률로 더해 잇습니다(남·여 열은 한 위험률로)">안 이은 열 → 새 위험률</button>}
+        {sh && map.some((m, i) => m.to === "skip" && hasNumbers(sh, i)) && <button className="btn" onClick={linkRest} title="아직 잇지 않은 수 열을 위험률로 더해 잇습니다(남·여 열은 한 위험률로)">안 이은 열 → 새 위험률</button>}
+        {sh && ageCol >= 0 && noTable.some((r) => !linked.has(r.id)) && (
+          <button className="btn" onClick={() => onEmptyColumns(noTable.filter((r) => !linked.has(r.id)).map((r) => r.id))}
+            title={`조건의 위험률 중 열이 없는 것: ${noTable.filter((r) => !linked.has(r.id)).map((r) => r.name).join(", ")} — 그 이름의 빈 열을 만들어 값을 붙여넣습니다`}>
+            표 없는 위험률 {noTable.filter((r) => !linked.has(r.id)).length}개 → 빈 열
+          </button>
+        )}
         {sh && <button className="btn" onClick={() => { if (window.confirm("위험률 표를 지울까요? (조건의 위험률은 남습니다)")) onClear(); }}>지우기</button>}
         {tools}
       </div>
       {!sh ? (
         <div className="sheet-empty">
-          <p>Excel 표를 복사해 아래 칸에 붙여넣거나(<b>Ctrl+V</b>) CSV·XLSX 파일을 올리세요. <b>첫 행은 열 이름</b>(연령 · 사망률(남) · 사망률(여) · 암발생률 …) — 조건의 위험률 이름과 겹치면 바로 잇습니다.
-            산출방법서(PDF·Word·한글)에 든 별첨 위험률 표는 [열기]만 해도 여기로 들어옵니다.</p>
+          <p>Excel 표를 복사해 아래 칸에 붙여넣거나(<b>Ctrl+V</b>) CSV·XLSX 파일을 올리세요. <b>첫 행은 열 이름</b>(연령 · 사망률(남) · 사망률(여) · 암발생률 …) — 조건의 위험률 이름과 같으면 바로 잇고, 없는 이름은 새 위험률로 조건에 더합니다.
+            산출방법서(PDF·Word·한글)에 든 별첨 위험률 표는 [열기]만 해도 여기로 들어옵니다.
+            {noTable.length > 0 && <> 지금 조건의 위험률 <b>{noTable.map((r) => r.name).join(" · ")}</b> 에 값 표가 없습니다 — 이 이름을 열 이름으로 쓰면 바로 이어집니다(<code>samples/08_위험률표_종합_남녀.csv</code> 가 보기입니다).</>}</p>
           <textarea className="inp h-24 font-mono text-xs" aria-label="위험률 표 붙여넣기" placeholder={"연령\t사망률(남)\t사망률(여)\n40\t0.00103\t0.00052\n41\t0.00112\t0.00056"} />
         </div>
       ) : (
