@@ -352,14 +352,14 @@ export default function Studio() {
     try { loadSheet(sheetFromText("붙여넣기", text)); } catch (e) { setToast({ text: errText(e), kind: "err" }); }
   };
 
-  /** 견본 식을 조건의 식(M08)으로 더한다 — 산출방법서의 알맞은 절에 붙는다 */
+  /** 견본 식을 조건의 식(M08 따로 적는 식)으로 더한다 — 산출방법서의 알맞은 절에 붙는다 */
   const addFormula = (f: FormulaSample) => {
     const raw = parseDocument(yaml).toJS() as { formulas?: unknown[] } | null;
     const n = Array.isArray(raw?.formulas) ? raw.formulas.length : 0;
     onEdit([{ path: ["formulas"], add: true, value: { section: SECTION_OF[f.group] ?? "계산기수", label: f.label, text: f.text } }]);
-    setLayout((l) => ({ ...l, left: "form", open: l.open.includes("M08") ? l.open : [...l.open, "M08"] }));
+    setLayout((l) => ({ ...l, left: "form", open: ["M08"] }));      // 카드는 한 번에 하나만 펼친다
     setLeftSel([`formulas[${n}]`]); setRightSel([`formulas[${n}]`]); setFollow(true);
-    setToast({ text: `"${f.label}" 식을 조건 M08 에 더했습니다 — 아래 M08 카드에서 고쳐 쓰세요 (되돌리기 ↶)`, kind: "ok" });
+    setToast({ text: `"${f.label}" 식을 조건 M08(따로 적는 식) 에 더했습니다 — 그 카드에서 고쳐 쓰세요 (되돌리기 ↶)`, kind: "ok" });
   };
 
   // ── 열기 ─────────────────────────────────────────────────────────────────
@@ -603,13 +603,13 @@ export default function Studio() {
                     <button className="pane-tool" disabled={!histN.past} onClick={() => restore(-1)} title="마지막 입력·변경을 되돌립니다 (Ctrl+Z — 칸 밖에서)">↶ 되돌리기{histN.past ? ` ${histN.past}` : ""}</button>
                     <button className="pane-tool" disabled={!histN.future} onClick={() => restore(1)} title="되돌린 것을 다시 합니다 (Ctrl+Shift+Z)">↷ 다시</button>
                   </span>
-                  <button className={`btn ${palLeft ? "btn-on" : ""}`} onClick={() => setPalLeft((v) => !v)} title="견본 식을 조건 M08 에 더합니다">＋ 수식 더하기</button>
+                  <button className={`btn ${palLeft ? "btn-on" : ""}`} onClick={() => setPalLeft((v) => !v)} title="견본 식을 조건 M08(따로 적는 식) 에 더합니다">＋ 수식 더하기</button>
                   <span className="flex-1" />
                   {syntaxErrors.length > 0 && <span className="truncate rounded bg-rose-100 px-1.5 text-rose-700">{syntaxErrors[0].line}줄: {syntaxErrors[0].message}</span>}
                   {tools("cond")}
                 </div>
                 {palLeft && <FormulaPalette onFormula={addFormula}
-                  hint="누르면 그 식을 조건(M08 수식 더하기)에 넣습니다 — 산출방법서의 알맞은 절에 붙고, 아래 M08 카드에서 고칩니다." />}
+                  hint="누르면 그 식을 조건(M08 따로 적는 식)에 넣습니다 — 산출방법서의 알맞은 절에 붙고, 그 카드에서 고칩니다." />}
                 <div className="min-h-0 flex-1">
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}

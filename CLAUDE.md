@@ -10,12 +10,16 @@ flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대�
 - **MethodSpec 이 유일한 계약이다.** 조건 파일(YAML)·산출방법서(MD/TEX/HTML)·다른 앱(JSON)이 모두 이 형식을 거친다.
 - `lib/methoddoc/` 는 앱에 의존하지 않는다(React·yaml 금지). flexible_insurance 에도 같은 모듈이 있고 **이쪽이 원본**이다 — 고치면 폴더째 `../flexible_insurance/lib/methoddoc/` 로 복사하고 그쪽 시험(`tests/methoddoc`·`tests/ui/roundtrip`·`tests/ui/spec-import`)도 돌린다.
 - 산출방법서 블록에는 조건 경로(`path`, 표는 `rowPaths`)를 단다. "|" 로 여러 경로. 대응 위치 표시가 이것에 기댄다.
-- 유지자수·납입자수: 탈퇴 사유 결합은 `1 − Σd + Σdᵢdⱼ/2`. 따로 둔 납입면제율을 곱하지 않는다. 사망형은 급부 = 탈퇴 전부.
+- 유지자수·납입자수: 탈퇴율 결합은 `Q = Σd − Σdᵢdⱼ/2`(잔존은 `1 − Q`). 따로 둔 납입면제율을 곱하지 않는다. 사망형은 급부 = 탈퇴 전부(`C = l·Q·v^{t+½}` — 엔진과 끝자리까지 같게 결합 탈퇴율로 쓴다).
+- **식이 계산의 정의다.** 산출방법서에 싣는 평문 수식 표기가 곧 `calc.ts` 가 읽는 문법이고, `computeSpec(spec, 계약)` 이 그 식으로 보험료를 낸다 — 사용자가 카드·Word·한글에서 식을 고치면 계산이 바뀐다. **새 식을 만들 때는 calc.ts 의 문법을 벗어나지 않게 적는다**(아래첨자 `x`·`x+t`·`x+t+1`·`t`·`u`·수 / `Σ_{u≥t}`·`Σ_{u=t}^{n−1}` / `if(조건, 참, 거짓)` · `min` · `max` · 비교 사슬 `40 ≤ x+t ≤ 59` / 이름의 아래첨자는 `α_S`·`P_base` 처럼 자리(x·t·u·수)가 아닌 것). 읽히는지는 `checkFormula`, 식이 엔진과 같은 값을 내는지는 `tests/calc.test.ts` · flexible `tests/ui/default-product`(10만원당 보험료가 정확히 같아야 한다).
+- 카드 순서 = 산출 순서 = 산출방법서 절 순서: M01 상품 → M03 이율 → M04 위험률 → **M05 탈퇴자·유지자·납입자(집단마다 l·l′)** → **B01 보장(담보 전부 한 카드)** → **K01 보험료의 현가(D·N·N\*)** → **K02 보험금의 현가(담보마다 S·C·M·PVB)** → M06 사업비 → **K03 보험료(P·G) + 시산** → M07 준비금·환급금 → M08 따로 적는 식. 카드는 한 번에 하나만 펼치고(`open` 은 한 개), 열면 `onSelect(card.paths)` 로 오른쪽 그 자리를 비춘다.
+- **집단(`groupModels`)은 조건에 따로 적는 항목이 아니다** — 탈퇴 위험률(`benefits[].exitRateIds`)이 같은 담보를 묶은 것이다. M05 에서 집단의 탈퇴 사유를 고치면 그 집단의 담보들이 함께 바뀌고, B01 에서 집단을 고르면 그 담보만 옮겨 간다. 그래서 MethodSpec 에 새 칸이 없다.
+- 식 덩이는 `FormulaSpec.key`(`group:g1` · `benefit:b1` · `pv:N` · `premium:G` …)로 짝짓는다 — 조건 파일·JSON 에 싣지 않고 늘 다시 만든다. 사용자가 고친 식은 `formulas` 에 같은 `절|제목`으로 들어가 `withFormulas` 가 자동 식 위에 얹는다(`path`·`key` 는 자동 식 것을 지킨다). 산출방법서 블록에는 `formula:pv.N` 꼴 경로도 달려(조건 줄이 아니라 카드 짝짓기용) 카드가 자기 식만 짚는다.
 - LaTeX·Markdown 을 고쳐 조건에 반영할 때는 `mergeSpec` → `patchYaml` — 조건 파일을 통째로 다시 쓰지 않는다(사용자 주석 보존).
 - 입력 카드(`ConditionForm`)는 따로 상태를 두지 않는다 — 칸은 YAML 에서 읽고 `editYaml` 로 그 칸만 쓴다. 칸의 `data-path` 는 산출방법서 블록 경로와 같은 `pathKey`.
 - 이 앱은 **산출방법서의 전체 정보만** 다룬다. `product`(M01 가입 조건 — 보험기간·납입기간·가입나이 표 등)는 산출방법서에 싣는 **정보**다. 계산하는 계약 한 점(`contract` — 성별·가입나이·기간·주기·가입금액)은 **이 앱에 없다**: parse 는 읽지 않고, 조건 파일·입력 카드에도 없으며(M02 카드 없음), render 는 `contract` 가 채워져 있을 때만(자유설계보험이 낸 문서) 시산 기준 표를 싣는다. 계약정보는 자유설계보험 상품 만들기 M02 에서 기본값(`CONTRACT_DEFAULTS`)으로 시작해 사용자가 바꾼다.
 - 위험률 남·여 열은 두 벌 다 `RateRef.tables` 로 싣는다(`table` 은 옛 소비자용 한 벌). 계산하는 앱이 `rateTable(r, sex)` 로 고른다.
-- **표준 산출방법서 v2** = 이 앱이 내는 산출방법서 모양(`render.ts` `STANDARD_FORMAT`). 개요 표 `양식` 행이 표시, 식은 `[식] 제목` + 설명 줄(위)·식 줄(아래) + `※ 덧붙임`(편집용 내보내기에만 — `kind: "label"`). `기호의 정의` 절(k = 납입주기, r = 발생률, ρ = 저해지 비율), 담보마다 세로 표. Word 는 식 줄을 독립 수식(`m:oMathPara`)으로 — 한글은 글 속 수식(`m:oMath`)을 버린다. 모양을 바꾸면 `parse.ts` `readStandard`·`standards/README.md` 를 같이 고치고, `STANDARDS_UPDATE=1` 로 `standards/*.docx` 를 다시 만들고, `.hwpx` 는 한글로 다시 저장한다(시험이 되읽어 확인). 판을 바꾸면 옛 판도 읽게 둔다.
+- **표준 산출방법서 v3** = 이 앱이 내는 산출방법서 모양(`render.ts` `STANDARD_FORMAT`). 개요 표 `양식` 행이 표시, 식은 `[식] 제목` + 설명 줄(위)·식 줄(아래) + `※ 덧붙임`(편집용 내보내기에만 — `kind: "label"`). `기호의 정의` 절(k = 납입주기, r = 발생률, ρ = 저해지 비율, S = 보장금액의 배수), 담보마다 세로 표(`집단` 행 포함). 식 절은 산출 순서로 나뉜다 — 탈퇴자·유지자·납입자 / 보험료의 현가 / 보험금의 현가 / 보험료의 계산 / 책임준비금 / 해지환급금. Word 는 식 줄을 독립 수식(`m:oMathPara`)으로 — 한글은 글 속 수식(`m:oMath`)을 버린다. 모양을 바꾸면 `parse.ts` `readStandard`·`standards/README.md` 를 같이 고치고, `STANDARDS_UPDATE=1` 로 `standards/*.docx` 를 다시 만들고, `.hwpx` 는 한글로 다시 저장한다(시험이 되읽어 확인). 판을 바꾸면 옛 판도 읽게 둔다.
 - 그림으로 읽기: 모델은 **옮겨 적기만**(`vision.ts`), 값은 `parseMethodDoc` 가 읽는다. API 키는 사용자가 앱에서 넣고 sessionStorage(고르면 localStorage)에만 — 내보내기·조건 파일에 절대 넣지 않는다. 실제 API 호출(비용)은 사용자 동의 없이 하지 않는다 — 시험은 가짜 ask·Playwright 경로 가로채기.
 - 위험률 표는 조건 파일에 싣지 않는다(localStorage). `attachTables` 가 이은 열을 `RateRef.tables`·`table` 로 붙인다. 값 표가 붙은 위험률은 산출방법서 맨 뒤 "별첨 — 위험률 표"(`rateGrid`)로 나가고, 문서의 연령 × 값 표는 `sheetFromDoc` 이 위험률 표 창으로 가져온다(parse 는 `isRateValueTable` 로 뺀다).
 - 위험률은 세 곳이 함께 움직인다: 표를 올리면 조건에 없는 이름의 열이 M04 에 새 위험률로(`unlinkedGroups`·`linkGroups`), M04 에서 더하면 표에 빈 열(`addEmptyColumn`)·지우면 연결 해제(`unlinkRate`), 문서 반영은 `syncSheetRates`. 값 표 없는 위험률은 `ratesWithoutTable` 로 알린다. 자유설계보험 `applySpecToPlan` 은 고른 위험률을 시트 열로 더한다. 시험: `tests/rates-flow.test.ts` · flexible `tests/ui/rates-from-studio.test.ts`(`samples/08_위험률표_종합_남녀.csv`).
@@ -36,6 +40,7 @@ flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대�
 6. OneDrive 한글 파일명은 NFD — 테스트는 `readdirSync` + `normalize("NFC")` 로 찾는다.
 7. Bash heredoc 이 긴 파이썬 패치에서 깨질 때가 있다(RTK 훅) — 스크립트 파일로 써서 돌린다.
 8. 한글 자동화: `HWPFrame.HwpObject` COM 으로 `.docx` → `.hwpx` 저장이 된다(한컴오피스 설치 PC). 한글은 Word 수식을 10pt 로 가져온다 — 저장 전에 수식 개체(`eqed`)마다 `BaseUnit` = 1200 으로 12pt.
+9. 그 COM 은 한 번 강제 종료(`Stop-Process Hwp`)하면 다음 `Open` 이 보이지 않는 대화상자에 막혀 **영원히 멈춘다** — 사용자가 한글을 한 번 직접 띄워 정리해야 풀린다. 그래서 `.hwpx` 를 다시 만들 때는 한 번에 끝내고, 글자 한 칸(예: 개요 표 `양식` 값)만 바꿀 때는 `.hwpx`(ZIP) 안 `Contents/section0.xml`·`Preview/PrvText.txt` 의 그 글자만 고쳐도 된다(본문·수식은 한글이 저장한 그대로 남는다).
 
 ## 검증
 
@@ -46,5 +51,5 @@ node node_modules/eslint/bin/eslint.js .
 node node_modules/next/dist/bin/next build --turbopack
 ```
 
-브라우저 확인(68항목: 기본 상품 종신보험(암진단 포함)·양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표(조건 ↔ 표 자동 연결·별첨·칸·열 이름·유형 고치기)·기본 위험률 모음·JSON 표 내보내기·열기·패키지 저장·열기·최근 작업·수식 견본·바뀐 곳 표시·되돌리기·메뉴 닫힘·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
+브라우저 확인(79항목: 기본 상품 종신보험(암진단 포함)·카드 순서·아코디언·카드를 열면 산출방법서 강조·집단 둘·식 고치기 → 문서·시산 함께 바뀜·되돌리기·시산 261·162·342,000원·양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·담보 더하기·복사·삭제·위험률 표(조건 ↔ 표 자동 연결·별첨·칸·열 이름·유형 고치기)·기본 위험률 모음·JSON 표 내보내기·열기·패키지 저장·열기·최근 작업·수식 견본·바뀐 곳 표시·되돌리기·메뉴 닫힘·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
 `node node_modules/next/dist/bin/next start --port 3217` 을 띄운 뒤 `OUT=<폴더> node scripts/e2e.cjs` — npx 로 받아 둔 playwright-core 와 chromium 을 쓴다.

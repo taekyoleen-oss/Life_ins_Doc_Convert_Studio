@@ -76,7 +76,11 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .form-body { height: 100%; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--background); }
 .card { border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 1px 2px #0000000a; transition: border-color .15s, box-shadow .15s; }
 .card:hover { box-shadow: 0 2px 8px #0000000f; }
-.card-open { border-color: #b9d3e8; box-shadow: 0 0 0 3px #4a90c214; }
+/* 고른 카드 — 테두리를 진하게, 바탕을 달리해 지금 보는 단계가 한눈에 (한 번에 하나만 펼친다) */
+.card-open { border-color: var(--primary); border-width: 2px; margin: -1px; background: #fbfdff; box-shadow: 0 0 0 4px #4a90c21f, 0 4px 14px #4a90c21a; }
+.card-open > .card-head { background: linear-gradient(180deg, #eff6fb, #fbfdff); border-radius: 11px 11px 0 0; }
+.card-open > .card-head h3 { color: var(--primary); }
+.card:not(.card-open) .card-head:hover { background: #f8fafc; border-radius: 11px; }
 .card-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer; }
 .card-no { display: flex; width: 30px; height: 30px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--muted); color: var(--muted-foreground); }
 .card-no-done { background: #5b86b8; color: #fff; }
@@ -116,6 +120,20 @@ textarea.inp { font-family: inherit; resize: vertical; }
 .form-changed .inp { border-color: #a7dcc1; }
 .chip-changed { border-radius: 999px; background: #e6f6ee; color: #1e7f4e; padding: 1px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .changed-note { display: inline-flex; align-items: center; gap: 6px; color: #1e7f4e; font-weight: 600; }
+/* 카드 안에서 접었다 펴는 묶음 — 담보 하나, 집단 하나 */
+.sub-open { border-color: #b9d3e8; background: #f8fbfe; box-shadow: 0 0 0 2px #4a90c210; }
+.fold-head { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; text-align: left; }
+.fold-mark { flex-shrink: 0; width: 18px; font-size: 11px; color: var(--muted-foreground); }
+/* 그 단계의 식 — 보여 주고 고친다 */
+.formula-card { border: 1px solid var(--border); border-left: 3px solid #b9d3e8; border-radius: 8px; background: #fcfdfe; padding: 7px 10px; }
+.chip-warn { border-radius: 999px; background: #fef3c7; color: #92400e; padding: 1px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* 식대로 계산해 본 값 */
+.calc-panel { border: 1px solid #cfe3f1; border-radius: 10px; background: #f6fbff; padding: 8px 10px; }
+.calc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.calc-table th, .calc-table td { border-bottom: 1px solid #e2e8f0; padding: 3px 6px; text-align: left; white-space: nowrap; }
+.calc-table th { font-weight: 600; color: var(--muted-foreground); font-size: 11px; }
+.calc-table td.num, .calc-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.calc-sum td { font-weight: 700; border-bottom: none; }
 .formula-preview { overflow-x: auto; border-radius: 6px; background: #f6f7f9; padding: 2px 10px; }
 .formula-preview .katex-display { margin: 4px 0; text-align: left; }
 .formula-preview .katex-display > .katex { text-align: left; }

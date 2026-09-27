@@ -37,6 +37,49 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     && (await p.locator(".doc-body p", { hasText: "그 담보의 탈퇴 사유이기도 한 사유는" }).count()) === 1);
   ok("첫 화면: 산출방법서에 별첨 위험률 표 · 상태줄 '표 없음' 없음", (await p.locator(".doc-body h2", { hasText: "별첨" }).count()) === 1 && !(await p.textContent("footer")).includes("표 없음"));
   await p.screenshot({ path: `${OUT}/s1_first.png` });
+
+  // 0-1) 카드 흐름 — 집단(M05) → 보장(B01) → 보험료 현가(K01) → 보험금 현가(K02) → 사업비 → 보험료(K03)
+  const codes = await p.$$eval(".form-body [data-card]", (els) => els.map((e) => e.dataset.card));
+  ok("카드 순서가 산출 순서다", codes.join(",") === "M01,M03,M04,M05,B01,K01,K02,M06,K03,M07,M08", codes.join(","));
+  await p.click(".card[data-card=M05] .card-head");
+  await p.waitForTimeout(500);
+  const g5 = await p.textContent(".card[data-card=M05]");
+  const hl5 = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 30)));
+  ok("M05: 탈퇴 사유가 다른 담보는 집단 둘(사망·80% 장해 / 사망·암) · 열면 그 유지자수 식이 강조된다",
+    (await p.locator(".card[data-card=M05] .fold-head").count()) === 2 && g5.includes("사망 · 80% 이상 장해") && g5.includes("사망 · 암")
+    && hl5.some((t) => t.includes("유지자수·납입자수 —")), `${hl5.join(" / ")}`);
+  await p.click(".card[data-card=K01] .card-head");
+  await p.waitForTimeout(500);
+  const hl1 = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 24)));
+  ok("K01: 보험료의 현가 식(D · N · N*)만 강조된다", hl1.length >= 4 && hl1.some((t) => t.includes("현가의 누계")) && !hl1.some((t) => t.includes("적용이율")), hl1.join(" / "));
+  await p.click(".card[data-card=K03] .card-head");
+  await p.waitForTimeout(700);
+  const calc0 = await p.$$eval(".card[data-card=K03] .calc-table tbody tr", (rows) => rows.map((r) => [...r.cells].map((c) => c.textContent.trim())));
+  ok("K03: 산출방법서의 식을 그대로 읽어 시산 — 10만원당 261 · 162 · 담보 보험료 합 342,000원",
+    calc0[0].includes("261") && calc0[1].includes("162") && calc0[2].includes("342,000 원"), JSON.stringify(calc0));
+
+  // 0-2) 식을 고치면 산출방법서와 시산이 함께 바뀐다 → 되돌리기
+  await p.click(".card[data-card=K02] .card-head");
+  await p.waitForTimeout(500);
+  const box2 = p.locator(".card[data-card=K02] .formula-card").nth(1);
+  const docCancer = () => p.locator(".doc-body .formula", { hasText: "S_t" }).nth(1).textContent();
+  const pvb2 = async () => (await p.textContent(".card[data-card=K02] .calc-table")).replace(/\s+/g, " ");
+  const was = await pvb2();
+  const docWas = await docCancer();                                            // 암 진단의 식 덩이 — 면책이 보장금액 배수 S 로 들어 있다
+  ok("K02: 담보마다 식 덩이(S · C · M · PVB) · 면책이 식에 나타난다",
+    (await p.locator(".card[data-card=K02] .formula-card").count()) === 2 && /3\s*\/\s*12/.test(docWas) && /M_/.test(docWas));
+  await box2.locator("button:has-text('식 고치기')").click();
+  const ta2 = box2.locator("textarea");
+  await ta2.fill((await ta2.inputValue()).replace("if( t = 0, 1 − 3/12, 1 )", "1"));
+  await p.waitForTimeout(1000);
+  const [chip2, doc2, now2] = [await box2.locator(".chip-changed").count(), await docCancer(), await pvb2()];
+  ok("K02 에서 식을 고치면 '고친 식' 딱지 · 산출방법서의 식 · 시산 PVB 가 함께 바뀐다",
+    chip2 === 1 && doc2 !== docWas && now2 !== was, `딱지 ${chip2} · 문서 ${doc2 !== docWas ? "바뀜" : "그대로"} · PVB ${now2 !== was ? "바뀜" : "그대로"}`);
+  await box2.locator("button:has-text('되돌리기')").click();
+  await p.waitForTimeout(1000);
+  ok("[되돌리기] → 자동 식으로 돌아가고 시산도 처음 값", (await docCancer()) === docWas && (await pvb2()) === was);
+  await p.screenshot({ path: `${OUT}/s1b_cards.png` });
+
   await p.click(".seg button:has-text('YAML')");           // 아래 1)~7)은 YAML 편집기로
   await p.waitForSelector(".cm-editor");
 
@@ -62,10 +105,12 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("담보 금액 줄 → 담보 행과 유지자수·납입자수 식", hl3.length >= 2, hl3.join(" / "));
 
   // 4) 조건을 고치면 산출방법서가 바로 바뀐다
-  await p.locator(".cm-line", { hasText: "interest: 2.5%" }).first().click();
+  const iLine = p.locator(".cm-line", { hasText: "interest: 2.5%" }).first();
+  const iText = (await iLine.textContent()).trimStart();           // 줄 맞춤은 남기고 값·주석만 다시 적는다(주석 자리가 달라져도 흔들리지 않게)
+  await iLine.click();
   await p.keyboard.press("End");
-  for (let i = 0; i < "2.5%      # 적용(예정)이율".length; i++) await p.keyboard.press("Backspace");
-  await p.keyboard.type("3%");
+  for (let i = 0; i < iText.length; i++) await p.keyboard.press("Backspace");
+  await p.keyboard.type("interest: 3%");
   await p.waitForTimeout(600);
   const rate = await p.locator(".doc-body tr", { hasText: "적용이율" }).first().textContent();
   ok("조건 이율 3% → 산출방법서 3.000%", rate.includes("3.000%"), rate);
@@ -150,10 +195,24 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("산출방법서 β_G 행 → 입력 화면 사업비 행 강조(M06 펼침)", formHl.includes("expenses[3]"), formHl.join(" / "));
   await p.screenshot({ path: `${OUT}/s7_form_mirror.png` });
 
-  // 10) 담보 추가
-  await p.click(".form-body button:has-text('＋ 진단형')");
-  await p.waitForTimeout(600);
-  ok("＋ 진단형 → 카드 C02 와 산출방법서 담보 행", (await p.locator(".card[data-card=C1]").count()) === 1 && (await p.locator(".doc-body tr", { hasText: "담보 2" }).count()) >= 1);
+  // 10) 보장 카드(B01) — 한 카드에서 담보를 더하고 복사한다
+  await p.click(".card[data-card=B01] .card-head");
+  await p.waitForTimeout(400);
+  ok("카드는 한 번에 하나만 펼쳐진다 (아코디언)", (await p.locator(".card.card-open").count()) === 1 && (await p.locator(".card.card-open").getAttribute("data-card")) === "B01");
+  const b01Hl = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 24)));
+  ok("카드를 열면 산출방법서의 그 항목이 강조된다", b01Hl.length >= 2, b01Hl.join(" / "));
+  await p.click(".card[data-card=B01] button:has-text('＋ 진단형')");
+  await p.waitForTimeout(700);
+  ok("＋ 진단형 → 보장 카드에 담보 하나 늘고 산출방법서 담보 표·보험금 현가 절도 늘어난다",
+    (await p.locator(".card[data-card=B01] .sub").count()) >= 2 && (await p.locator(".doc-body tr", { hasText: "담보 2" }).count()) >= 1
+    && (await p.locator(".doc-body .doc-label", { hasText: "보험금의 현가 — 담보 2" }).count()) === 1);
+  await p.click(".card[data-card=B01] .sub-open button[title^='이 담보를 복사']");
+  await p.waitForTimeout(700);
+  ok("담보 복사 → '담보 2 (복사)' 가 조건·산출방법서에 함께",
+    (await p.locator(".card[data-card=B01] .sub").count()) >= 3 && (await p.locator(".doc-body tr", { hasText: "담보 2 (복사)" }).count()) >= 1);
+  await p.locator(".card[data-card=B01] .sub-open .sub-x").click();          // 복사한 것을 지운다(확인창은 자동 수락)
+  await p.waitForTimeout(700);
+  ok("담보 삭제 → 조건·산출방법서에서 함께 빠진다", (await p.locator(".doc-body tr", { hasText: "담보 2 (복사)" }).count()) === 0);
 
   // 10-1) M01 가입 조건(정보) → 산출방법서 개요 표 · 계약(시산 기준)은 이 앱에 없다
   if (!(await p.locator("[data-path='product.terms[1].age'] input").count())) await p.click(".card[data-card=M01] .card-head");   // M01 은 처음부터 펼쳐져 있다

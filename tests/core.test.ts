@@ -51,16 +51,26 @@ describe("조건 파일(YAML)", () => {
 });
 
 describe("조건 → 산출식", () => {
-  it("종신: 사망·80% 장해를 한 담보로 — 유지자수·납입자수 = 1 − q − r + q·r/2, 급부 = 탈퇴 전부", () => {
-    const f = generateFormulas(sample("whole").spec).find((x) => x.path?.split("|")[0] === "benefits[0]")!;
-    expect(f.path).toBe("benefits[0]|rates[0]|rates[1]");        // 담보·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다
+  /** 짝(key)으로 식 덩이를 집는다 — 조건 카드·계산(calc)이 쓰는 것과 같은 짝이다 */
+  const byKey = (id: string, key: string) => generateFormulas(sample(id as never).spec).find((x) => x.key === key)!;
+
+  it("종신: 사망·80% 장해 한 집단 — 탈퇴율 Q = q + r − q·r/2, 유지자수·납입자수는 1 − Q", () => {
+    const g = byKey("whole", "group:g1");
+    expect(g.section).toBe("탈퇴자·유지자·납입자");
+    expect(g.path).toBe("benefits[0]|rates[0]|rates[1]");        // 담보·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
-    expect(f.text).toContain("유지자수\nl_{x+t+1} = l_{x+t} × ( 1 − q_{x+t} − r_{x+t} + q_{x+t}·r_{x+t}/2 )");
-    expect(f.text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − q_{x+t} − r_{x+t} + q_{x+t}·r_{x+t}/2 )");
-    expect(f.text).toContain("C_{x+t} = ( l_{x+t} − l_{x+t+1} )·v^{t+½}");
+    expect(g.text).toContain("Q_{x+t} = q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2");
+    expect(g.text).toContain("유지자수\nl_{x+t+1} = l_{x+t} × ( 1 − Q_{x+t} )");
+    expect(g.text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q_{x+t} )");
+    // 급부는 담보의 절(보험금의 현가)에 — 사망형은 탈퇴자 전부
+    const b = byKey("whole", "benefit:b1");
+    expect(b.section).toBe("보험금의 현가");
+    expect(b.text).toContain("C_{x+t} = l_{x+t}·Q_{x+t}·v^{t+½}");
+    expect(b.text).toContain("M_{x+t} = Σ_{u=t}^{n−1} S_u·C_{x+u}");
+    expect(b.text).toContain("PVB = M_x");
   });
   it("진단형은 급부 = 진단율, 무해지는 해지율 w·CSV, 납입지원은 추가 사유 f", () => {
-    expect(generateFormulas(sample("twoMajor").spec)[0].text).toContain("C_{x+t} = l_{x+t}·r_{x+t}·v^{t+½}");
+    expect(byKey("twoMajor", "benefit:b1").text).toContain("C_{x+t} = l_{x+t}·r_{x+t}·v^{t+½}");
     // 납입주기는 k (mm 아님) — 연납 환산 납입기수·영업보험료·납입누계
     const all = generateFormulas(sample("whole").spec).map((x) => x.text).join("\n");
     expect(all).not.toMatch(/mm/);
@@ -69,7 +79,7 @@ describe("조건 → 산출식", () => {
     const low = generateFormulas(sample("noRefund").spec);
     expect(low[0].text).toContain("w_{x+t}");
     expect(low.some((x) => x.label === "저해지·무해지환급형")).toBe(true);
-    expect(generateFormulas(sample("waiverSupport").spec)[0].text).toContain("− f_{x+t} + Q_{x+t}·f_{x+t}/2");
+    expect(byKey("waiverSupport", "group:g1").text).toContain("− f_{x+t} + Q_{x+t}·f_{x+t}/2");
   });
 });
 

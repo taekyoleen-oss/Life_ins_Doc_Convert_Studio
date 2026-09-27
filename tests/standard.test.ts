@@ -24,10 +24,10 @@ const WITH_EXTRAS = (base: MethodSpec): MethodSpec => ({
   meta: { ...base.meta, insurer: "가나다생명", version: "2026-1", note: "표준 양식 시험" },
   reserve: { notes: ["책임준비금은 표준이율로 계산한 금액 이상으로 적립한다."] },
   surrender: { deductionYears: 10, notes: ["해지환급금은 0 미만이 되지 않는다."] },
-  // 문서 순서(절 순서)로 둔다 — 되읽으면 이 순서로 나온다
+  // 문서 순서(절 순서)로 둔다 — 되읽으면 이 순서로 나온다. 영업보험료는 자동 식을 덮고, 새 기수는 없던 절이라 뒤에 붙는다
   formulas: [
-    { section: "계산기수", label: "새 기수", text: "M_{x+t} = Σ_{u≥t} C_{x+u}" },
     { section: "보험료의 계산", label: "영업보험료", text: "G = [ P + α_S·D′_x/N* ] / ( 1 − β_G )", note: "사업비를 줄인 시험용 식" },
+    { section: "계산기수", label: "새 기수", text: "M_{x+t} = Σ_{u≥t} C_{x+u}" },
   ],
   sections: [{ title: "기타 사항", paragraphs: ["이 상품은 시험용이다.", "둘째 문단."] }],
 });
