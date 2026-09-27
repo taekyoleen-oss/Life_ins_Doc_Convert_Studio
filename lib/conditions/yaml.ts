@@ -56,6 +56,7 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
       minGuaranteed: b.minGuaranteed !== undefined ? pct(b.minGuaranteed) : undefined,
       averagePublished: b.averagePublished !== undefined ? pct(b.averagePublished) : undefined,
       waiver: b.waiver,
+      waiverRateIds: b.waiverRateIds,
       lapse: b.lapse?.map((l) => clean({ label: l.label, rate: pct(l.rate), duringPayOnly: l.duringPayOnly })),
       lowRatio: b.lowRatio !== undefined ? pct(b.lowRatio) : undefined,
     }),
@@ -94,6 +95,7 @@ function styleFlow(doc: Document) {
   flowItems(["expenses"]);
   flowItems(["basis", "lapse"]);
   flowItems(["product", "terms"]);
+  { const w = doc.getIn(["basis", "waiverRateIds"], true); if (isSeq(w)) w.flow = true; }
   for (const key of ["types", "payFreqs"]) { const s = doc.getIn(["product", key], true); if (isSeq(s)) s.flow = true; }
   const bens = doc.getIn(["benefits"], true);
   if (isSeq(bens)) for (const b of bens.items) {
@@ -164,6 +166,8 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
     else spec.basis[k] = v;
   }
   if (typeof b.waiver === "boolean") spec.basis.waiver = b.waiver;
+  const wids = arr(b.waiverRateIds).map(str).filter((x): x is string => !!x);
+  if (wids.length) spec.basis.waiverRateIds = wids;
   const lapse = arr(b.lapse).map(obj).map((l) => ({ label: str(l.label), rate: rateOf(l.rate) ?? 0, duringPayOnly: l.duringPayOnly === true }));
   if (lapse.length) spec.basis.lapse = lapse.map((l) => (l.label ? l : { rate: l.rate, duringPayOnly: l.duringPayOnly }));
 
@@ -319,6 +323,14 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
       changes.push(`rates: "${r.name}" 추가`);
     }
   }
+  // 납입면제 사유(유형과 상관없는 위험률) — 위험률 id 는 짝지은 대로 옮긴다
+  if (took.has("basis.waiverRateIds")) {
+    const next = parsed.basis.waiverRateIds?.map((id) => idMap.get(id) ?? id);
+    if (JSON.stringify(next ?? []) !== JSON.stringify(out.basis.waiverRateIds ?? [])) {
+      changes.push(`basis.waiverRateIds: ${JSON.stringify(out.basis.waiverRateIds ?? [])} → ${JSON.stringify(next ?? [])}`);
+      out.basis.waiverRateIds = next;
+    }
+  }
   if (took.has("benefits") && parsed.benefits.length) {
     const fix = (id?: string) => (id ? idMap.get(id) ?? id : id);
     // 문서의 담보 표가 곧 담보다 — 문서에서 지운 칸(면책 "없음"·구간 주석 삭제)은 조건에서도 빠진다. id 와(문서에 없으면) 단위만 이어받는다
@@ -400,7 +412,7 @@ export interface YamlEdit { path: YamlPath; value?: unknown; add?: boolean }
 export const pathKey = (p: YamlPath) => p.map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k)).join("");
 
 /** 새로 만드는 항목 중 한 줄로 두는 것 — specToYaml 의 styleFlow 와 같은 관례 */
-const FLOW = /^(expenses|basis\.lapse|product\.terms)\[\d+\]$|\.(exitRateIds|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$/;
+const FLOW = /^(expenses|basis\.lapse|product\.terms)\[\d+\]$|\.(exitRateIds|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
 function markFlow(node: unknown, key: string) {
   if (!isCollection(node)) return;
   if (FLOW.test(key)) node.flow = true;

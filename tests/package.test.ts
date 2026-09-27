@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { yamlToSpec } from "@/lib/conditions/yaml";
 import { unzip } from "@/lib/methoddoc/extract";
 import { buildPackage, isPackage, PACKAGE_FORMAT, readPackage } from "@/lib/package";
-import { RATE_SAMPLE_CSV } from "@/lib/rate-sample";
+import { BASE_RATES_CSV as RATE_SAMPLE_CSV } from "@/lib/base-rates";
 import { SAMPLES } from "@/lib/samples";
 import { attachTables, sampleSheet } from "@/lib/sheet";
 
@@ -21,7 +21,7 @@ describe("패키지 저장 → 열기", () => {
     expect([...files.keys()]).toEqual(["package.json", "조건.yaml", "위험률표.csv", "MethodSpec.json", "산출방법서.md", "산출방법서.docx"]);
     expect(dec(files.get("조건.yaml")!)).toBe(yaml);                                // 주석까지 원문 그대로
     expect(files.get("위험률표.csv")!.slice(0, 3)).toEqual(new Uint8Array([0xef, 0xbb, 0xbf]));                       // Excel 용 BOM
-    expect(dec(files.get("위험률표.csv")!)).toMatch(/^연령,사망률\(남\),사망률\(여\),80% 이상 장해율\n15,/);
+    expect(dec(files.get("위험률표.csv")!)).toMatch(/^연령,사망률\(남\),사망률\(여\),80% 이상 장해율\(남\),80% 이상 장해율\(여\)\n0,/);
     const q = JSON.parse(dec(files.get("MethodSpec.json")!)).rates[0].tables.F;
     expect(q.values[q.ages.indexOf(40)]).toBeCloseTo(0.00051, 12);                    // 40세 여자 사망률
     expect(dec(files.get("산출방법서.md")!)).toContain("별첨 — 위험률 표");
@@ -61,6 +61,6 @@ describe("샘플 세트 — 조건마다 견본 표에서 이름이 맞는 열�
     expect(st.map.slice(1).every((m) => m.to === "rate")).toBe(true);
     const linked = new Set(st.map.flatMap((m) => (m.to === "rate" ? [m.rateId] : [])));
     for (const r of spec.rates) expect(linked.has(r.id)).toBe(true);           // 샘플의 위험률은 모두 표가 있다
-    expect(st.sheet.rows.length).toBe(66);
+    expect(st.sheet.rows.length).toBe(111);
   });
 });

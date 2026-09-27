@@ -299,7 +299,7 @@ function BasisBody() {
   );
 }
 
-function RatesBody({ rates, used, tableNote }: { rates: RateItem[]; used: (id: string) => string[]; tableNote: (id: string) => string | undefined }) {
+function RatesBody({ rates, used, tableNote, onLibrary }: { rates: RateItem[]; used: (id: string) => string[]; tableNote: (id: string) => string | undefined; onLibrary: () => void }) {
   const f = useForm();
   const remove = (i: number) => {
     const who = used(rates[i].id);
@@ -325,7 +325,10 @@ function RatesBody({ rates, used, tableNote }: { rates: RateItem[]; used: (id: s
           <p className={`mt-1 text-[11px] ${tableNote(r.id) ? "text-primary" : "text-muted-foreground"}`}>{tableNote(r.id) ?? "표 없음 — 아래 [위험률 표]에서 열을 이 위험률에 이으면 값 표가 붙습니다"}</p>
         </div>
       ))}
-      <Add onClick={() => f.edit([{ path: ["rates"], add: true, value: { id: newRateId("incidence", rates.map((r) => r.id)), name: "새 위험률", role: "incidence" } }])}>＋ 위험률</Add>
+      <div className="flex flex-wrap gap-2">
+        <Add onClick={() => f.edit([{ path: ["rates"], add: true, value: { id: newRateId("incidence", rates.map((r) => r.id)), name: "새 위험률", role: "incidence" } }])}>＋ 위험률</Add>
+        <Add onClick={onLibrary}>＋ 기본 위험률 모음에서 고르기</Add>
+      </div>
     </div>
   );
 }
@@ -333,21 +336,29 @@ function RatesBody({ rates, used, tableNote }: { rates: RateItem[]; used: (id: s
 function WaiverBody({ rates }: { rates: RateItem[] }) {
   const f = useForm();
   const on = f.get(["basis", "waiver"]) === true;
-  const setRole = (i: number, waiver: boolean) => {
-    const back = guessRole(rates[i].name);
-    f.edit([{ path: ["rates", i, "role"], value: waiver ? "waiver" : back === "waiver" ? "other" : back }]);
+  const ids = ((f.get(["basis", "waiverRateIds"]) as unknown[] | undefined) ?? []).map(String);
+  /**
+   * 납입면제 사유 고르기 — 유형이 '납입면제'인 위험률은 그 자체로 사유이고, 다른 유형(예: 암 발생률 — 암진단 급부이면서 사망 담보의 납입면제 사유)은
+   * 유형을 그대로 두고 basis.waiverRateIds 에 넣는다. 그 담보의 탈퇴 사유이기도 한 사유는 식이 알아서 다시 빼지 않는다.
+   */
+  const toggle = (i: number, v: boolean) => {
+    const r = rates[i];
+    if (r.role === "waiver") { if (!v) { const back = guessRole(r.name); f.edit([{ path: ["rates", i, "role"], value: back === "waiver" ? "other" : back }]); } return; }
+    const next = rates.filter((x) => x.role !== "waiver" && (x.id === r.id ? v : ids.includes(x.id))).map((x) => x.id);
+    f.set(["basis", "waiverRateIds"], next.length ? next : undefined);
   };
   return (
     <div className="space-y-2">
       <Check p={["basis", "waiver"]} label="추가 납입면제 사유 적용" />
       <p className="text-xs leading-relaxed text-muted-foreground">
-        납입자수 l′ 는 담보의 탈퇴 사유로 유지자수와 똑같이 줄어듭니다(1 − q − r + q·r/2). 보장은 이어지고 납입만 면제되는 사유(예: 80% 이상 장해)가 있을 때만 켜고 그 위험률을 &apos;납입면제&apos;로 표시합니다.
+        납입자수 l′ 는 담보의 탈퇴 사유로 유지자수와 똑같이 줄어듭니다(1 − q − r + q·r/2). 보장은 이어지고 납입만 면제되는 사유(예: 80% 이상 장해 · 암 진단)가 있을 때 켜고 아래에서 고릅니다 —
+        담보의 급부이기도 한 위험률(예: 암 발생률)도 고를 수 있고, 그 담보에서는 탈퇴로 이미 줄었으므로 다시 빼지 않습니다.
       </p>
       {on && (
-        <div className="flex flex-wrap gap-2">
+        <div data-path="basis.waiverRateIds" className="flex flex-wrap gap-2">
           {rates.map((r, i) => (
             <label key={i} data-path={`rates[${i}]`} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
-              <input type="checkbox" className="accent-[var(--primary)]" checked={r.role === "waiver"} onChange={(e) => setRole(i, e.target.checked)} />
+              <input type="checkbox" className="accent-[var(--primary)]" checked={r.role === "waiver" || ids.includes(r.id)} onFocus={() => f.select("basis.waiverRateIds")} onChange={(e) => toggle(i, e.target.checked)} />
               {r.name} <span className="text-muted-foreground">({RATE_ROLE_LABEL[r.role]})</span>
             </label>
           ))}
@@ -555,10 +566,12 @@ interface Props {
   tableNote: (rateId: string) => string | undefined;
   /** 값 표가 없는 위험률 id — M04 가 알려 준다(계산 앱에서 0 이 된다) */
   noTableIds: string[];
+  /** 기본 위험률 모음 창을 연다 */
+  onLibrary: () => void;
   onShowYaml: () => void;
 }
 
-export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onShowYaml }: Props) {
+export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml }: Props) {
   const { doc, syntax, raw } = useMemo(() => {
     const doc = parseDocument(yaml);
     const syntax = doc.errors[0] ?? (doc.contents !== null && !isMap(doc.contents)
@@ -588,7 +601,8 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const bad = (re: RegExp) => general.find((x) => re.test(x));
   const status = (err: string | undefined, done: boolean, optional = false): Status => (err ? "error" : done ? "done" : optional ? "optional" : "editing");
   const sp = spec;
-  const waiverRates = rates.filter((r) => r.role === "waiver");
+  const waiverIds = (Array.isArray(b.waiverRateIds) ? b.waiverRateIds : []).map(String);
+  const waiverRates = rates.filter((r) => r.role === "waiver" || waiverIds.includes(r.id));
   const noTable = rates.filter((r) => r.role !== "lapse" && noTableIds.includes(r.id)).map((r) => r.name);
   const waiverOff = b.waiver === true && !waiverRates.length;
   const nExp = list(raw.expenses).length, nForm = list(raw.formulas).length;
@@ -611,8 +625,8 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       message: noTable.length ? `값 표가 없는 위험률: ${noTable.join(", ")} — 아래 [위험률 표]에 같은 이름의 열을 붙여넣으면 이어집니다(계산 앱에서는 그때까지 0). 위험률을 더하면 표에 빈 열이 생깁니다.` : undefined,
       summary: [...rates.slice(0, 4).map((r) => r.name), rates.length > 4 ? `외 ${rates.length - 4}` : "", sp.rates.some((r) => r.table) ? `표 ${sp.rates.filter((r) => r.table).length}개 연결` : "", noTable.length ? `표 없음 ${noTable.length}` : ""],
       help: "위험률마다 이름·유형(사망·최초발생·반복지급·납입면제·해지·기타)·근거를 적습니다. 유형이 담보·납입면제와의 연결을 정합니다. 값 표는 아래 [위험률 표]에서 이어집니다 — 표를 올리면 같은 이름의 열이 자동으로 이어지고, 여기서 위험률을 더하면 표에 빈 열이 생깁니다. 이 표가 산출방법서 별첨과 자유설계보험 계산에 그대로 쓰입니다.",
-      body: <RatesBody rates={rates} used={used} tableNote={tableNote} /> },
-    { id: "M05", code: "M05", title: "납입자수", paths: ["basis.waiver"], status: waiverOff ? "error" : "done",
+      body: <RatesBody rates={rates} used={used} tableNote={tableNote} onLibrary={onLibrary} /> },
+    { id: "M05", code: "M05", title: "납입자수", paths: ["basis.waiver", "basis.waiverRateIds"], status: waiverOff ? "error" : "done",
       message: waiverOff ? "추가 납입면제 사유를 켰지만 유형이 '납입면제'인 위험률이 없습니다. 아래에서 고르세요." : undefined,
       summary: [b.waiver === true ? `추가 사유: ${waiverRates.map((r) => r.name).join(" · ") || "없음"}` : "납입자수 = 유지자수"],
       help: "납입자수 l′ 는 담보의 탈퇴 사유로 유지자수와 똑같이 줄어듭니다. 보장은 이어지고 납입만 면제되는 사유가 있을 때만 켭니다.", body: <WaiverBody rates={rates} /> },

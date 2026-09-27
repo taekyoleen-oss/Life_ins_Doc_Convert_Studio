@@ -54,3 +54,7 @@ public/standards/
 .vt.txt
 .build.txt
 .vitest-out.json
+
+# 사내 위험률 모음 — 외부 반출 금지 (scripts/import-rate-library.py 가 이 PC 에만 만든다)
+/private/
+/public/rate-library.json

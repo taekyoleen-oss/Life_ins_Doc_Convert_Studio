@@ -205,6 +205,23 @@ export function addEmptyColumn(st: SheetState | null, rate: Pick<RateRef, "id" |
   };
 }
 
+/**
+ * 열을 연령으로 이어 붙인다(기본 위험률 모음에서 고른 것) — 연령은 합집합, 없는 칸은 빈칸. 표가 없으면 연령 열부터 새로 만든다.
+ * 새 열은 target 이 있으면 그 위험률에(성별은 열 이름으로), 없으면 "쓰지 않음" — 잇기는 부르는 쪽이 정한다
+ */
+export function mergeColumns(st: SheetState | null, cols: { head: string; ages: number[]; values: number[]; target?: string }[], name = "위험률 표"): SheetState {
+  const base: SheetState = st && st.map.some((m) => m.to === "age") ? st : { sheet: { name, head: ["연령"], rows: [] }, map: [{ to: "age" }] };
+  const ageCol = base.map.findIndex((m) => m.to === "age");
+  const ages = [...new Set([...base.sheet.rows.map((r) => cellNum(r[ageCol] ?? "")).filter((a): a is number => a !== null), ...cols.flatMap((c) => c.ages)])].sort((a, b) => a - b);
+  const oldAt = new Map(base.sheet.rows.map((r) => [cellNum(r[ageCol] ?? ""), r]));
+  const rows = ages.map((a) => {
+    const old = oldAt.get(a) ?? base.sheet.head.map((_, i) => (i === ageCol ? String(a) : ""));
+    return [...old, ...cols.map((c) => { const k = c.ages.indexOf(a); return k < 0 ? "" : String(c.values[k]); })];
+  });
+  const map: ColMap[] = [...base.map, ...cols.map((c): ColMap => (c.target ? { to: "rate", rateId: c.target, ...(sexOf(c.head) ? { sex: sexOf(c.head) } : {}) } : { to: "skip" }))];
+  return { sheet: { ...base.sheet, head: [...base.sheet.head, ...cols.map((c) => c.head)], rows }, map };
+}
+
 /** 표 창에서 칸 하나를 고친다 — 값은 글자 그대로 두고(attachTables 가 수만 읽는다) 새 표를 돌려준다 */
 export function setCell(st: SheetState, row: number, col: number, value: string): SheetState {
   if (!st.sheet.rows[row] || col < 0 || col >= st.sheet.head.length || st.sheet.rows[row][col] === value) return st;
@@ -232,7 +249,7 @@ export const ratesWithoutTable = (withTables: MethodSpec) =>
  * 샘플 조건에 딸려 오는 위험률 표 — 견본 CSV 에서 그 조건의 위험률과 이름이 맞는 열만(연령 + 이은 열) 남긴다.
  * 첫 화면·[샘플] 이 조건·산출방법서·위험률 표를 한 세트로 보여 주기 위한 것. 맞는 열이 없으면 null
  */
-export function sampleSheet(rates: Pick<RateRef, "id" | "name">[], csv: string, name = "견본 위험률 표(가상의 값)"): SheetState | null {
+export function sampleSheet(rates: Pick<RateRef, "id" | "name">[], csv: string, name = "기본 위험률 표"): SheetState | null {
   const sh = sheetFromText(name, csv);
   const map = autoMap(sh, rates);
   const keep = map.flatMap((m, i) => (m.to === "skip" ? [] : [i]));

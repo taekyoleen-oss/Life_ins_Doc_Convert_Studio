@@ -36,6 +36,7 @@
 | `05_자유설계보험_암보험_MethodSpec.json` | 자유설계보험이 낸 조건(주계약 + 특약) | 전부 + 위험률 표 4열 | 없음 |
 | `06_위험률표_종신_남녀` .csv · .xlsx | 위험률 표 창(연령 × 위험률) | 첫 행 = 열 이름, 이름이 같은 위험률에 남·여로 자동 연결 | 이름이 다른 열은 [잇기]에서 고름 |
 | `07_스캔본_든든건강보험.pdf` · `_1쪽.png` | 글자 층이 없는 스캔본 · 그림 | 그림으로 읽기(AI 가 옮겨 적고 규칙이 읽음) — 02 와 같은 값 | API 키 · 02 와 같음 |
+| `09_종신보험(암진단포함)_MethodSpec.json` · `_계산결과.json` · `_검산.xlsx` | 기본 상품의 조건 + 위험률 표(공개) · 자유설계보험 계산 결과 · 산출방법서 식을 엑셀 수식으로 적은 검산 | JSON 은 [열기] 로 조건·표 전부 / 엑셀은 Excel 로 열어 [보험료] 시트의 차이 열(모두 0)을 본다 | 없음 |
 | `08_위험률표_종합_남녀.csv` | 위험률 표 → 조건 → 계산 앱 흐름(가상의 값, 15~80세) | 사망률(남·여) · 2대질병 · 3대질병 · 암(남·여) · 80% 장해율 — 샘플 조건의 위험률 이름과 같아 바로 이어지고, 없는 이름은 새 위험률로 | 새로 더해진 위험률의 유형 |
 
 ### 시험하다 발견한 점
@@ -74,4 +75,5 @@ node node_modules/vitest/vitest.mjs run tests/samples.test.ts
 - **05** — 자유설계보험 레시피 "암 진단 + 암입원 특약" → `planToSpec`
 - **06** — 자유설계보험에 들어 있는 제7회 경험생명표 사망률 · 80% 이상 장해율(40~110세, 남·여)
 - **07** — 02 PDF 1쪽을 그림(PNG)으로 찍고, 그 그림만 넣은 PDF
+- **09** — Studio `VERIFY_UPDATE=1 … tests/default-product.test.ts` (조건 + 공개 기본 위험률 → JSON) → 자유설계보험 `VERIFY_UPDATE=1 … tests/ui/default-product.test.ts` (계산 → `_계산결과.json`) → `python scripts/make-verify-xlsx.py` (엑셀 수식) → `powershell -ExecutionPolicy Bypass -File scripts/check-verify-xlsx.ps1` (엑셀로 다시 계산 · 차이 0 확인 · 값 저장)
 - **08** — `node scripts/make-rate-sample.mjs` (곰페르츠 곡선으로 만든 가상의 값 — 실제 경험률이 아님)

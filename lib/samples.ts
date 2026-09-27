@@ -32,6 +32,9 @@ const Q = `  - id: q
 
 export interface Sample { id: string; label: string; hint: string; yaml: string }
 
+/** 첫 화면에 여는 기본 상품 */
+export const DEFAULT_SAMPLE_ID = "wholeCancer";
+
 export const SAMPLES: Sample[] = [
   { id: "whole", label: "종신보험 (사망·80% 이상 장해)", hint: "작성법 견본 — 항목마다 설명 주석", yaml: `# 산출방법서 조건 — 종신보험
 # 왼쪽을 고치면 오른쪽 산출방법서가 바로 바뀝니다. 이율·사업비는 "2.5%", "1.5/1000" 처럼 적습니다.
@@ -170,6 +173,56 @@ benefits:
     endAge: 80
     rateId: r3
     exitRateIds: [q, r3]
+${NOTES}
+` },
+  { id: "wholeCancer", label: "종신보험(암진단 포함)", hint: "기본 상품 — 사망·80% 장해 + 암 진단(사망보험금의 50%, 90일 면책) · 장해·암 진단 시 납입면제", yaml: `# 산출방법서 조건 — 종신보험(암진단 포함) · 이 앱의 기본 상품
+# 왼쪽을 고치면 오른쪽 산출방법서가 바로 바뀝니다. 이율·사업비는 "2.5%", "1.5/1000" 처럼 적습니다.
+# 한 줄을 고르면 오른쪽에서 그 조건이 만든 부분이 노랗게 표시됩니다(반대 방향도 됩니다).
+meta:
+  productName: 종신보험(암진단 포함)
+  kind: 표준형(완전 환급)
+product:              # 가입 조건 — 산출방법서에 싣는 판매 범위(정보). 계산할 계약 한 점은 자유설계보험 M02 계약정보에서 정한다
+  category: 생명보험 / 종신
+  types: [표준형(완전 환급)]
+  terms:              # 보험기간 · 보험료 납입기간 · 가입나이 (사업방법서 표와 같은 모양)
+    - { term: 110세만기, pay: 10·15·20년납, age: 만15세 ~ 65세 }
+    - { term: 110세만기, pay: 30년납, age: 만15세 ~ 50세 }
+  payFreqs: [월납, 연납]
+  sumLimit: 1천만원 ~ 10억원
+  renewal: 비갱신형
+basis:
+  interest: 2.5%      # 적용(예정)이율
+  standardInterest: 3.25%
+  waiver: true        # 납입면제 — 80% 이상 장해·암 진단 시 이후 보험료를 면제한다(사망은 계약 소멸 — 탈퇴로 줄어든다)
+  waiverRateIds: [r80, rc]   # 납입면제 사유. 그 담보의 탈퇴 사유인 것은 탈퇴로 이미 줄었으므로 다시 빼지 않는다
+rates:                # role: death 사망 · incidence 최초발생 · recurring 반복지급 · waiver 납입면제 · other 기타
+${Q}
+  - id: r80
+    name: 80% 이상 장해율
+    role: incidence
+    source: 써미트 2014-59호 80%이상 재해장해 + 질병장해발생율
+  - id: rc
+    name: 암발생률
+    role: incidence
+    source: 보험개발원 생명장기제2024-112호 무배당 예정 경험 암발생률
+${EXPENSES}
+benefits:
+  - id: b1
+    name: 사망·80% 이상 장해
+    role: death       # 사망형 — 탈퇴 사유 전부에 같은 보험금
+    trigger: 사망 또는 80% 이상 장해 시
+    amount: 100000000
+    endAge: 110
+    exitRateIds: [q, r80]   # 유지자수 = 1 − q − r + q·r/2 · 납입자수는 암 진단(납입면제)으로 더 준다
+  - id: b2
+    name: 암 진단
+    role: incidence   # 진단형 — 기본 식(사망 + 암 진단이 탈퇴)
+    trigger: 암 진단 확정 시 (사망보험금의 50%)
+    amount: 50000000
+    endAge: 100
+    waitDays: 90      # 암 면책 90일 — 첫해 급부는 (1 − 3/12) 배
+    rateId: rc
+    exitRateIds: [q, rc]    # 납입자수는 80% 이상 장해(납입면제)로 더 준다
 ${NOTES}
 ` },
 ];

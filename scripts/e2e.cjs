@@ -30,7 +30,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("첫 화면: 종신보험 산출방법서", (await p.textContent(".doc-body h1")).includes("종신보험"));
   ok("KaTeX 수식이 그려진다", (await p.locator(".doc-body .formula .katex").count()) >= 8);
   const heads0 = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent.replace(/^[A-Z]\s*/, "").trim()));
-  ok("첫 화면: 왼쪽은 입력 카드, 아래는 위험률 표까지 한 세트(연령·사망률 남·여·장해율)", (await p.locator(".form-body .card").count()) >= 8 && heads0.join(",") === "연령,사망률(남),사망률(여),80% 이상 장해율", heads0.join(","));
+  ok("첫 화면: 기본 상품 종신보험(암진단 포함) — 입력 카드와 위험률 표 한 세트(사망률·장해율·암발생률 모두 남·여)",
+    (await p.textContent(".doc-body h1")).includes("종신보험(암진단 포함)") && (await p.locator(".form-body .card").count()) >= 9
+    && heads0.join(",") === "연령,사망률(남),사망률(여),80% 이상 장해율(남),80% 이상 장해율(여),암발생률(남),암발생률(여)", heads0.join(","));
+  ok("첫 화면: 암 진단 담보(90일 면책·사망보험금의 50%) · 납입면제 사유 80% 장해·암", (await p.locator(".doc-body tr", { hasText: "면책" }).allTextContents()).some((t) => t.includes("90일"))
+    && (await p.locator(".doc-body p", { hasText: "그 담보의 탈퇴 사유이기도 한 사유는" }).count()) === 1);
   ok("첫 화면: 산출방법서에 별첨 위험률 표 · 상태줄 '표 없음' 없음", (await p.locator(".doc-body h2", { hasText: "별첨" }).count()) === 1 && !(await p.textContent("footer")).includes("표 없음"));
   await p.screenshot({ path: `${OUT}/s1_first.png` });
   await p.click(".seg button:has-text('YAML')");           // 아래 1)~7)은 YAML 편집기로
@@ -119,7 +123,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
 
   // ── 입력 화면 · 위험률 표 · 수식 견본 · 화면 조절 ──────────────────────────
   await p.click("summary:has-text('샘플')");
-  await p.click("details[open] .menu-list button:has-text('종신보험')");
+  await p.click("details[open] .menu-list button:has-text('종신보험 (사망')");
   await p.click(".seg button:has-text('입력')");
   await p.waitForSelector(".form-body .card");
 
@@ -209,6 +213,20 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const hlSheet = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 20)));
   ok("표 열 머리 → 산출방법서 위험률 행 강조", hlSheet.some((t) => t.includes("사망률")), hlSheet.join(" / "));
   await p.screenshot({ path: `${OUT}/s8_sheet.png` });
+
+  // 11-3) 기본 위험률 모음 — 공개 기본 위험률(+ 이 PC 의 사내 위험률 모음)에서 골라 표에 넣고 조건에 잇는다
+  await p.click("button.btn-primary:has-text('기본 위험률 모음')");
+  await p.waitForSelector(".lib-modal");
+  const libItems = await p.locator(".lib-item").count();
+  const privNote = (await p.textContent(".lib-modal")).includes("외부 반출 금지");
+  ok("[기본 위험률 모음] 창 — 공개 기본 위험률 5계열" + (privNote ? " + 사내 위험률 모음(외부 반출 금지 안내)" : ""), libItems >= 5, `${libItems}개`);
+  await p.fill(".lib-bar input", "2대질병");
+  await p.locator(".lib-item", { hasText: "2대질병 발생률" }).first().locator("input[type=checkbox]").check();
+  await p.click("button:has-text('표에 넣기 (1)')");
+  await p.waitForTimeout(700);
+  const heads3 = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent.replace(/^[A-Z]{1,2}\s*/, "").trim()));
+  ok("고른 위험률 → 표에 남·여 열 + 조건 M04 에 새 위험률 + 산출방법서 위험률 표", heads3.includes("2대질병 발생률(남)") && heads3.includes("2대질병 발생률(여)")
+    && (await p.locator(".doc-body tr", { hasText: "2대질병 발생률" }).count()) >= 1, heads3.join(","));
 
   // 12) MethodSpec JSON — 자유설계보험 입력: 계약 성별(남)의 위험률 표가 실린다
   await p.click("summary:has-text('내보내기')");

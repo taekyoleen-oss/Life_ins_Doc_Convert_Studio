@@ -19,7 +19,10 @@ flexible_insurance 와 함께 쓰는 공용 모듈·형식 이름이라 그대�
 - 그림으로 읽기: 모델은 **옮겨 적기만**(`vision.ts`), 값은 `parseMethodDoc` 가 읽는다. API 키는 사용자가 앱에서 넣고 sessionStorage(고르면 localStorage)에만 — 내보내기·조건 파일에 절대 넣지 않는다. 실제 API 호출(비용)은 사용자 동의 없이 하지 않는다 — 시험은 가짜 ask·Playwright 경로 가로채기.
 - 위험률 표는 조건 파일에 싣지 않는다(localStorage). `attachTables` 가 이은 열을 `RateRef.tables`·`table` 로 붙인다. 값 표가 붙은 위험률은 산출방법서 맨 뒤 "별첨 — 위험률 표"(`rateGrid`)로 나가고, 문서의 연령 × 값 표는 `sheetFromDoc` 이 위험률 표 창으로 가져온다(parse 는 `isRateValueTable` 로 뺀다).
 - 위험률은 세 곳이 함께 움직인다: 표를 올리면 조건에 없는 이름의 열이 M04 에 새 위험률로(`unlinkedGroups`·`linkGroups`), M04 에서 더하면 표에 빈 열(`addEmptyColumn`)·지우면 연결 해제(`unlinkRate`), 문서 반영은 `syncSheetRates`. 값 표 없는 위험률은 `ratesWithoutTable` 로 알린다. 자유설계보험 `applySpecToPlan` 은 고른 위험률을 시트 열로 더한다. 시험: `tests/rates-flow.test.ts` · flexible `tests/ui/rates-from-studio.test.ts`(`samples/08_위험률표_종합_남녀.csv`).
-- 패키지 `.lifepkg`(`lib/package.ts`) = 압축하지 않은 ZIP: `package.json`(양식·이름·저장 시각·표의 열 연결) · `조건.yaml`(원문 그대로) · `위험률표.csv`(있을 때만) · `MethodSpec.json` · `산출방법서.md`·`.docx`(파생 — 열 때 안 씀). 첫 화면·샘플은 `sampleSheet`(`lib/rate-sample.ts` 견본 표에서 이름이 맞는 열만)로 조건 + 표 한 세트. 최근 작업은 localStorage `…:recent`(조건·표 스냅샷 12개).
+- **기본 상품 = 종신보험(암진단 포함)**(`lib/samples.ts` `DEFAULT_SAMPLE_ID`): 사망·80% 장해(사망형 1억) + 암 진단(사망보험금의 50%, 90일 면책, 100세), 납입면제 사유 80% 장해·암(`basis.waiverRateIds`). 옛 종신보험은 샘플로 남는다. 조건·표·자유설계보험 계산·엑셀 검산은 `samples/09_종신보험(암진단포함)_*` 로 묶여 있고 시험이 서로 맞대어 본다 — 조건·식·엔진을 바꾸면 `VERIFY_UPDATE=1` 로 두 앱의 `default-product` 시험을 돌리고 `python scripts/make-verify-xlsx.py` → `scripts/check-verify-xlsx.ps1`(엑셀 재계산, 차이 0 확인).
+- 납입면제 사유 = 유형 `waiver` 인 위험률 + `basis.waiverRateIds`(급부이기도 한 위험률 — 예: 암). 담보마다 그 담보의 탈퇴 사유인 사유는 f 에서 뺀다(formulas.ts · 자유설계보험 `tabPlanInput` 이 같은 규칙).
+- 위험률 표 두 가지: `lib/base-rates.ts`(공개 — 자유설계보험의 공개 표, `node scripts/make-base-rates.mjs`) 와 **사내 위험률 모음**(`private/rate-library.json` ← `python scripts/import-rate-library.py`, 원본에 "외부 반출 금지"). 저장소가 공개이므로 사내 값은 **절대 커밋·배포하지 않는다**(`.gitignore` · `.vercelignore`) — 시험·문서·샘플에도 넣지 않는다. 앱은 `public/rate-library.json`(copy-public 이 복사, 없으면 빈 모음)을 읽어 [기본 위험률 모음] 창에 보인다.
+- 패키지 `.lifepkg`(`lib/package.ts`) = 압축하지 않은 ZIP: `package.json`(양식·이름·저장 시각·표의 열 연결) · `조건.yaml`(원문 그대로) · `위험률표.csv`(있을 때만) · `MethodSpec.json` · `산출방법서.md`·`.docx`(파생 — 열 때 안 씀). 첫 화면·샘플은 `sampleSheet`(`lib/base-rates.ts` 공개 기본 위험률에서 이름이 맞는 열만)로 조건 + 표 한 세트. 최근 작업은 localStorage `…:recent`(조건·표 스냅샷 12개).
 - 고친 산출방법서 반영(`mergeSpec`)은 표준 양식이면 지운 것도 뺀다(담보 칸·담보가 안 쓰는 위험률 행). 문서의 식이 고치기 전 조건의 자동 식과 같으면 사람이 고친 식이 아니다 — 조건에 남기지 않는다.
 - 결과는 자유설계보험(`../flexible_insurance`) 입력으로 쓸 수 있어야 한다: 카드 코드·모양은 그 빌더(`components/builder/steps.tsx`)와 맞추고, 주고받는 것은 MethodSpec JSON 뿐이다. 대응표는 `docs/설계.md` §6.
 
@@ -43,5 +46,5 @@ node node_modules/eslint/bin/eslint.js .
 node node_modules/next/dist/bin/next build --turbopack
 ```
 
-브라우저 확인(65항목: 양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표(조건 ↔ 표 자동 연결·별첨·칸·열 이름·유형 고치기)·JSON 표 내보내기·열기·패키지 저장·열기·최근 작업·수식 견본·바뀐 곳 표시·되돌리기·메뉴 닫힘·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
+브라우저 확인(68항목: 기본 상품 종신보험(암진단 포함)·양방향 강조·조건 수정·PDF 열기·원문 근거·LaTeX 반영·입력 카드·가입 조건·위험률 표(조건 ↔ 표 자동 연결·별첨·칸·열 이름·유형 고치기)·기본 위험률 모음·JSON 표 내보내기·열기·패키지 저장·열기·최근 작업·수식 견본·바뀐 곳 표시·되돌리기·메뉴 닫힘·화면 조절·Word 표준 양식 고쳐 반영·한글 견본 열기·그림으로 읽기(가짜 API)·콘솔 오류):
 `node node_modules/next/dist/bin/next start --port 3217` 을 띄운 뒤 `OUT=<폴더> node scripts/e2e.cjs` — npx 로 받아 둔 playwright-core 와 chromium 을 쓴다.

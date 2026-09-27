@@ -1,7 +1,7 @@
 // 브라우저가 받아 가는 파일을 public/ 으로 복사한다(둘 다 .gitignore — 원본만 커밋한다).
 //  - pdfjs 워커: node_modules 에서. 브라우저는 workerSrc 경로가 있어야 PDF 를 연다(1.3MB).
 //  - 표준 산출방법서 한글 파일(standards/*.hwpx): [표준 양식] 메뉴가 내려받게 한다. .docx 는 앱이 조건에서 바로 만든다.
-import { copyFileSync, mkdirSync, existsSync, readdirSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -16,3 +16,9 @@ mkdirSync("public/standards", { recursive: true });
 const hwpx = existsSync("standards") ? readdirSync("standards").filter((f) => f.endsWith(".hwpx")) : [];
 for (const f of hwpx) copyFileSync(join("standards", f), join("public/standards", f.normalize("NFC")));
 console.log(`public/standards/ 한글 표준 산출방법서 ${hwpx.length}개 복사`);
+
+// 사내 위험률 모음 — private/rate-library.json(scripts/import-rate-library.py, 외부 반출 금지)이 이 PC 에 있을 때만 싣는다.
+// 없으면 빈 모음을 두어(404 없이) 앱이 공개 기본 위험률만 보인다. 둘 다 .gitignore · .vercelignore
+const lib = "private/rate-library.json";
+if (existsSync(lib)) { copyFileSync(lib, "public/rate-library.json"); console.log(`public/rate-library.json 사내 위험률 모음 (${Math.round(statSync(lib).size / 1024)}KB) — 이 PC 에서만`); }
+else { writeFileSync("public/rate-library.json", JSON.stringify({ title: "", rates: [] })); console.log("public/rate-library.json 빈 모음 (private/rate-library.json 없음)"); }

@@ -11,7 +11,9 @@ import dynamic from "next/dynamic";
 // 그림으로 읽기 창은 열 때만 받는다 — Anthropic SDK 가 첫 화면 번들에 들어가지 않게
 const VisionDialog = dynamic(() => import("./VisionDialog"), { ssr: false });
 import RateSheetPane from "./RateSheetPane";
-import { SAMPLES } from "@/lib/samples";
+import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
+import { itemColumns, sanitizeLibrary, type RateLibrary } from "@/lib/rate-library";
+import { DEFAULT_SAMPLE_ID, SAMPLES } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
 import { withFormulas } from "@/lib/methoddoc/formulas";
@@ -27,12 +29,15 @@ import { STANDARDS, standardFile, standardSpec, toStandardDocx } from "@/lib/sta
 import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId, ratesWithoutTable, sanitizeSheet, sheetFromDoc, sheetFromFile, sheetFromSpec, sheetFromText, unlinkRate, unlinkedGroups, type Sheet, type SheetState } from "@/lib/sheet";
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 import { buildPackage, isPackage, PACKAGE_EXT, readPackage } from "@/lib/package";
-import { RATE_SAMPLE_CSV } from "@/lib/rate-sample";
-import { sampleSheet, setCell, setHead } from "@/lib/sheet";
+import { BASE_RATES_CSV } from "@/lib/base-rates";
+import { guessRole, mergeColumns, sampleSheet, setCell, setHead } from "@/lib/sheet";
 
-/** 샘플은 조건 + 위험률 표 한 세트 — 견본 표에서 그 조건의 위험률과 이름이 맞는 열만 */
-const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, RATE_SAMPLE_CSV) });
-const SAMPLE0 = sampleSet(SAMPLES[0].yaml);
+/** 샘플은 조건 + 위험률 표 한 세트 — 기본 위험률 표(공개, 남·여)에서 그 조건의 위험률과 이름이 맞는 열만 */
+const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, BASE_RATES_CSV, "기본 위험률 표") });
+/** 첫 화면 = 기본 상품 종신보험(암진단 포함). [샘플] 메뉴에서도 맨 위 */
+const DEFAULT_SAMPLE = SAMPLES.find((x) => x.id === DEFAULT_SAMPLE_ID) ?? SAMPLES[0];
+const MENU_SAMPLES = [DEFAULT_SAMPLE, ...SAMPLES.filter((x) => x !== DEFAULT_SAMPLE)];
+const SAMPLE0 = sampleSet(DEFAULT_SAMPLE.yaml);
 /** 최근 작업 — 패키지로 저장·연 것과 연 파일. 조건·위험률 표를 그대로 두어 바로 되살린다 */
 interface Recent { id: string; name: string; at: number; product: string; yaml: string; sheet: SheetState | null }
 const RECENT_MAX = 12;
@@ -96,20 +101,26 @@ function useDebounced<T>(v: T, ms: number): T {
 }
 
 export default function Studio() {
-  const [yaml, setYaml] = useState(SAMPLES[0].yaml);
-  const [saved, setSaved] = useState(SAMPLES[0].yaml);            // 마지막으로 연 내용 — 덮어쓰기 확인용
+  const [yaml, setYaml] = useState(SAMPLE0.yaml);
+  const [saved, setSaved] = useState(SAMPLE0.yaml);            // 마지막으로 연 내용 — 덮어쓰기 확인용
   const [layout, setLayout] = useState<Layout>(LAYOUT0);
   const [sheet, setSheet] = useState<SheetState | null>(SAMPLE0.sheet);
   const [recent, setRecent] = useState<Recent[]>([]);
+  // 기본 위험률 모음 — 공개 기본 위험률 + (이 PC 에 있으면) 사내 위험률 모음(public/rate-library.json ← private/, 외부 반출 금지)
+  const [library, setLibrary] = useState<RateLibrary | null>(null);
+  const [libOpen, setLibOpen] = useState(false);
+  useEffect(() => {
+    fetch("/rate-library.json").then((r) => (r.ok ? r.json() : null)).then((j) => setLibrary(sanitizeLibrary(j))).catch(() => { /* 없으면 공개 기본 위험률만 */ });
+  }, []);
   useEffect(() => {
     const s = readStore();
     // 이어서 작업 — 처음이면 샘플 세트 그대로. 저장된 조건에 표가 없으면(옛 저장본) 견본 표에서 그 조건의 위험률과 이름이 맞는 열을 붙여 준다 — 화면은 늘 조건 + 표 한 세트
     if (s) {
       setYaml(s); setSaved(s);
       const stored = sanitizeSheet(readJson(`${KEY}:sheet`));
-      const fallback = stored ? null : s === SAMPLE0.yaml ? SAMPLE0.sheet : sampleSheet(yamlToSpec(s).spec.rates, RATE_SAMPLE_CSV);
+      const fallback = stored ? null : s === SAMPLE0.yaml ? SAMPLE0.sheet : sampleSheet(yamlToSpec(s).spec.rates, BASE_RATES_CSV, "기본 위험률 표");
       setSheet(stored ?? fallback);
-      if (fallback && s !== SAMPLE0.yaml) setToast({ text: `위험률 표가 없어 견본 표(가상의 값)에서 이름이 맞는 ${fallback.sheet.head.length - 1}개 열을 이었습니다 — 실제 표를 올리거나 칸을 눌러 값을 고치세요`, kind: "warn" });
+      if (fallback && s !== SAMPLE0.yaml) setToast({ text: `위험률 표가 없어 기본 위험률 표(공개)에서 이름이 맞는 ${fallback.sheet.head.length - 1}개 열을 이었습니다 — 실제 표를 올리거나 칸을 눌러 값을 고치세요`, kind: "warn" });
     }
     setLayout(sanitizeLayout(readJson(`${KEY}:layout`)));
     setRecent(sanitizeRecent(readJson(`${KEY}:recent`)));
@@ -256,14 +267,22 @@ export default function Studio() {
    */
   const onEdit = useCallback((edits: YamlEdit[]) => {
     setYaml((y) => {
-      const raw = parseDocument(y).toJS() as { rates?: { id?: unknown; name?: unknown }[] } | null;
+      const raw = parseDocument(y).toJS() as { rates?: { id?: unknown; name?: unknown }[]; basis?: { waiverRateIds?: unknown[] } } | null;
+      const more: YamlEdit[] = [];
       for (const e of edits) {
         if (e.path[0] !== "rates") continue;
         const v = e.value as { id?: unknown; name?: unknown } | undefined;
         if (e.add && e.path.length === 1 && v?.id) setSheet((st) => addEmptyColumn(st, { id: String(v.id), name: String(v.name ?? v.id) }));
-        else if (!e.add && e.value === undefined && e.path.length === 2) { const id = raw?.rates?.[Number(e.path[1])]?.id; if (id) setSheet((st) => unlinkRate(st, String(id))); }
+        else if (!e.add && e.value === undefined && e.path.length === 2) {
+          const id = raw?.rates?.[Number(e.path[1])]?.id;
+          if (!id) continue;
+          setSheet((st) => unlinkRate(st, String(id)));
+          // 납입면제 사유 목록에서도 뺀다 — 없는 위험률을 가리키지 않게
+          const w = (raw?.basis?.waiverRateIds ?? []).map(String);
+          if (w.includes(String(id))) { const rest = w.filter((x) => x !== String(id)); more.push({ path: ["basis", "waiverRateIds"], value: rest.length ? rest : undefined }); }
+        }
       }
-      return editYaml(y, edits);
+      return editYaml(y, [...edits, ...more]);
     });
   }, []);
   /** 문서를 반영해 위험률이 늘거나 줄었을 때 표도 맞춘다 */
@@ -280,14 +299,14 @@ export default function Studio() {
   const tableNote = useCallback((id: string) => linkNote(sheet, specT, id), [sheet, specT]);
 
   /** 위험률 표의 열을 새 위험률로 — 조건에 더하고 id 를 돌려준다 */
-  const addRates = (items: { name: string; role: RateRole }[]): string[] => {
+  const addRates = (items: { name: string; role: RateRole; source?: string }[]): string[] => {
     if (syntaxErrors.length) { setToast({ text: `조건 파일 ${syntaxErrors[0].line}번째 줄 오류를 먼저 고쳐 주세요`, kind: "err" }); return []; }
     const raw = parseDocument(yaml).toJS() as { rates?: { id?: unknown }[] } | null;
     const taken = Array.isArray(raw?.rates) ? raw.rates.map((r) => String(r?.id)) : [];
     const ids: string[] = [];
     for (const it of items) ids.push(newRateId(it.role, [...taken, ...ids]));
     if (items.length) {
-      setYaml((y) => editYaml(y, items.map((it, k) => ({ path: ["rates"], add: true, value: { id: ids[k], name: it.name, role: it.role } }))));
+      setYaml((y) => editYaml(y, items.map((it, k) => ({ path: ["rates"], add: true, value: { id: ids[k], name: it.name, role: it.role, ...(it.source ? { source: it.source } : {}) } }))));
       setToast({ text: `위험률 ${items.map((x) => x.name).join(", ")} 을(를) 조건(M04)에 더했습니다 — 유형을 확인하세요`, kind: "ok" });
     }
     return ids;
@@ -297,6 +316,23 @@ export default function Studio() {
    * 표를 올리면 열 이름으로 조건의 위험률에 잇고, 조건에 없는 이름의 수 열은 새 위험률로 조건에 더해 잇는다 —
    * 사용자는 표만 올리면 된다(유형은 이름으로 어림하므로 M04 에서 확인 · 되돌리기 가능)
    */
+  /**
+   * 기본 위험률 모음에서 고른 것 → 위험률 표 창의 남·여 열. 고른 조건 위험률에 잇고(그 위험률에 이어 있던 열은 풀린다),
+   * "새 위험률" 이면 M04 에 더해 잇는다 — 산출방법서 별첨·JSON(자유설계보험)에 그 값이 실린다
+   */
+  const addFromLibrary = (picks: LibPick[]) => {
+    const fresh = picks.filter((p) => p.target === "new");
+    const ids = fresh.length ? addRates(fresh.map((p) => ({ name: p.item.name, role: guessRole(`${p.item.category} ${p.item.name}`), source: p.item.source || undefined }))) : [];
+    if (ids.length !== fresh.length) return;                    // 조건 파일 오류 — addRates 가 알렸다
+    const target = (p: LibPick) => (p.target === "new" ? ids[fresh.indexOf(p)] : p.target);
+    let st = sheet;
+    for (const p of picks) if (p.target !== "new") st = unlinkRate(st, p.target);
+    st = mergeColumns(st, picks.flatMap((p) => itemColumns(p.item).map((c) => ({ ...c, target: target(p) }))), sheet?.sheet.name ?? "위험률 표");
+    setSheet(st); showPane("sheet"); setLibOpen(false);
+    const priv = picks.some((p) => p.item.private);
+    setToast({ text: `위험률 ${picks.length}개를 표에 넣고 조건에 이었습니다 (${picks.map((p) => p.item.name).join(", ")})${priv ? " — 사내 자료(외부 반출 금지)가 들어 있습니다" : ""}`, kind: priv ? "warn" : "ok" });
+  };
+
   const loadSheet = (sh: Sheet) => {
     if (sheet && sheet.map.some((m) => m.to !== "skip") && !window.confirm("지금 위험률 표와 연결을 새 표로 바꿀까요?")) return;
     let st: SheetState = { sheet: sh, map: autoMap(sh, parsed.spec.rates) };
@@ -522,8 +558,8 @@ export default function Studio() {
         <details className="menu">
           <summary className="btn">샘플 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
-            <p className="menu-head">샘플 세트 — 조건 · 산출방법서 · 위험률 표(가상의 값)</p>
-            {SAMPLES.map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
+            <p className="menu-head">샘플 세트 — 조건 · 산출방법서 · 위험률 표(기본 위험률)</p>
+            {MENU_SAMPLES.map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
             <p className="menu-head">산출방법서 샘플</p>
             <button onClick={() => loadSample(SAMPLES[0].yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>이율·금액을 고친 뒤 [조건에 반영]</small></button>
             <button onClick={() => loadSample(SAMPLES[2].yaml, "markdown")}>Markdown 산출방법서 고쳐 보기<small>무해지 암보험 — 해지율을 바꿔 보기</small></button>
@@ -577,7 +613,7 @@ export default function Studio() {
                 <div className="min-h-0 flex-1">
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
-                        open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))} />
+                        open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
@@ -676,7 +712,7 @@ export default function Studio() {
         {visible("sheet") && (
           <section className="no-print flex min-h-0 flex-col border-t border-border bg-white" style={{ flex: top ? `${layout.sheetH} 1 0` : "1 1 0" }}>
             <RateSheetPane state={sheet} onMap={(map) => setSheet((x) => (x ? { ...x, map } : x))} onText={pasteSheet} onFile={(f) => void openSheetFile(f)}
-              onClear={() => setSheet(null)} rates={s.rates} noTable={noTable} onNewRates={addRates}
+              onClear={() => setSheet(null)} rates={s.rates} noTable={noTable} onNewRates={addRates} onLibrary={() => setLibOpen(true)} libraryCount={library?.rates.length ?? 0}
               onCell={(r, c, v) => setSheet((st) => (st ? setCell(st, r, c, v) : st))} onHead={(c, v) => setSheet((st) => (st ? setHead(st, c, v) : st))}
               onRole={(id, role) => { const i = s.rates.findIndex((r) => r.id === id); if (i >= 0) onEdit([{ path: ["rates", i, "role"], value: role }]); }}
               onEmptyColumns={(ids) => { setSheet((st) => ids.reduce((acc, id) => addEmptyColumn(acc, s.rates.find((r) => r.id === id)!), st)); setToast({ text: `빈 열 ${ids.length}개를 만들었습니다 — 값을 붙여넣거나 Excel 에서 채워 다시 올리세요`, kind: "ok" }); }}
@@ -703,6 +739,7 @@ export default function Studio() {
       {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>패키지(.lifepkg) · PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
       {toast && <div className={`toast toast-${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       {help && <Help onClose={() => setHelp(false)} />}
+      {libOpen && <RateLibraryDialog library={library} rates={s.rates} onAdd={addFromLibrary} onClose={() => setLibOpen(false)} />}
       {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
     </div>
   );

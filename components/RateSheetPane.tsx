@@ -24,6 +24,9 @@ interface Props {
   onCell: (row: number, col: number, value: string) => void;
   onHead: (col: number, name: string) => void;
   onRole: (rateId: string, role: RateRole) => void;
+  /** 기본 위험률 모음 창 — 공개 기본 위험률 + 사내 위험률 모음(있으면) */
+  onLibrary: () => void;
+  libraryCount: number;
   /** 왼쪽에서 고른 조건 경로 → 그 위험률에 이은 열을 표시 */
   highlight: string[];
   onPick: (paths: string[]) => void;
@@ -37,7 +40,7 @@ const NONE: ColMap[] = [];
  * 위험률 표 — 붙여넣기·CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽고, 열마다 조건(연령 · 위험률 · 성별)에 잇는다.
  * 이은 열은 RateRef.table 이 되어 산출방법서 위험률 표와 MethodSpec JSON(자유설계보험 입력)에 실린다.
  */
-export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, noTable, onNewRates, onEmptyColumns, onCell, onHead, onRole, highlight, onPick, tools }: Props) {
+export default function RateSheetPane({ state, onMap, onText, onFile, onClear, rates, noTable, onNewRates, onEmptyColumns, onCell, onHead, onRole, onLibrary, libraryCount, highlight, onPick, tools }: Props) {
   const file = useRef<HTMLInputElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
   const sh = state?.sheet, map = state?.map ?? NONE;
@@ -114,6 +117,7 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
           </span>
         ) : <span className="text-muted-foreground">연령 × 위험률 표를 올려 조건의 위험률에 잇습니다</span>}
         <span className="flex-1" />
+        <button className="btn-primary" onClick={onLibrary} title={`공개 기본 위험률${libraryCount ? ` + 사내 위험률 모음 ${libraryCount}개(외부 반출 금지)` : ""}에서 골라 넣습니다`}>기본 위험률 모음{libraryCount ? ` (사내 ${libraryCount})` : ""}</button>
         <button className="btn" onClick={() => file.current?.click()}>파일 올리기</button>
         <input ref={file} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
         {sh && map.some((m, i) => m.to === "skip" && hasNumbers(sh, i)) && <button className="btn" onClick={linkRest} title="아직 잇지 않은 수 열을 위험률로 더해 잇습니다(남·여 열은 한 위험률로)">안 이은 열 → 새 위험률</button>}
