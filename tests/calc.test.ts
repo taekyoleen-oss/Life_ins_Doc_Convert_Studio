@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { buildDefs, computeSpec, parseEquation, parseLines, valueOf, type Model } from "@/lib/methoddoc/calc";
+import { buildDefs, calcSheets, computeSpec, parseEquation, parseLines, valueOf, type Model } from "@/lib/methoddoc/calc";
 import { withFormulas } from "@/lib/methoddoc/formulas";
 import { jsonToSpec } from "@/lib/conditions/yaml";
 
@@ -75,6 +75,32 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
       expect(b.premium).toBe(w.monthlyGross);
     });
     expect(got.premium).toBe(want.monthlyGross);
+  });
+
+  it("계산 표: 위험률 → 유지자수·납입자수·지급자수 → 현가·누계 → 보험금, 열마다 그 식", () => {
+    const { sheets, premium, per100k } = calcSheets(spec, want.contract);
+    expect(sheets.map((s) => s.name)).toEqual(["사망·80% 이상 장해", "암 진단"]);
+    const s0 = sheets[0];
+    expect(s0.error).toBeUndefined();
+    expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
+    // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
+    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f"]);
+    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M"]);
+    for (const c of s0.cols) expect(c.values).toHaveLength(72);
+    // 기준 인원에서 시작하고, 지급자수 = 유지자수 × 탈퇴율
+    const col = (sym: string) => s0.cols.find((c) => c.sym === sym)!;
+    expect(col("l").values[0]).toBe(100000);
+    expect(col("l′").values[0]).toBe(100000);
+    expect(col("d").values[3]).toBeCloseTo(col("l").values[3] * col("Q").values[3], 9);
+    expect(col("l").formula).toContain("l_{x+t+1} = l_{x+t}");
+    expect(col("q").formula).toContain("위험률 표에서 온 값");
+    // 줄마다 "이 값들로 나왔다" — l 은 앞자리 l 과 그 자리 Q 로
+    expect(col("l").parts[1].map((p) => p.ref)).toEqual(["l(40)", "Q(40)"]);
+    expect(col("l").parts[1][0].value).toBe(100000);
+    // 표 아래 한 값들 — 엔진·엑셀과 같은 보험료
+    expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G"]);
+    expect(sheets.map((s) => s.per100k)).toEqual([261, 162]);
+    expect([per100k, premium]).toEqual([423, 342000]);
   });
 
   it("식을 고치면 계산이 바뀐다 — 조건만이 아니라 산출방법서의 식도 계산에 쓰인다", () => {

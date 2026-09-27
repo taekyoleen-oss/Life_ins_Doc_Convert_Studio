@@ -12,7 +12,7 @@
 MethodSpec  ←─ adapter ──  앱의 입력 조건 (위험률 값 표는 RateRef.table)
    ↓ formulas.ts · render.ts · tex.ts · docx.ts
 산출방법서 = 표준 산출방법서 v3 (화면 · Markdown · HTML · LaTeX · Word)
-   ↓ calc.ts              문서의 식을 그대로 읽어 계산 (computeSpec) → 보험료
+   ↓ calc.ts              문서의 식을 그대로 읽어 계산 (computeSpec · calcSheets) → 보험료 · 한 해 한 줄 계산 표
 ```
 
 ### 표준 산출방법서 v3
@@ -60,7 +60,7 @@ Word·한글의 수식 편집기로 넣은 식(OMML · `hp:script`)과 글자 �
 | `parse.ts` | 문단·표 → MethodSpec + Evidence. 동의어·단위 사전 포함 | `spec.ts` `extract.ts` |
 | `llm.ts` | 규칙이 못 찾은 항목만 LLM 에 묻는 선택 경로. `ask` 를 안 넘기면 꺼짐 | 없음 |
 | `formulas.ts` | MethodSpec → 산출식. 집단(`groupModels` — 탈퇴 사유가 같은 담보) 마다 `l`·`l′`, 담보(`benefitModels`) 마다 `S`·`C`·`M`·`PVB`, 공통으로 `D`·`N`·`N*`·`P`·`G`, 그리고 준비금·환급금 | `spec.ts` 만 |
-| `calc.ts` | **산출방법서의 식을 그대로 읽어 계산.** 평문 수식 표기가 곧 문법이다 — `parseEquation`·`buildDefs`·`valueOf`·`computeSpec(spec, 계약)`. 다른 앱은 이것만으로 문서대로 보험료를 낼 수 있다(자유설계보험 엔진과 10만원당 보험료가 같다) | `spec.ts` `formulas.ts` |
+| `calc.ts` | **산출방법서의 식을 그대로 읽어 계산.** 평문 수식 표기가 곧 문법이다 — `parseEquation`·`buildDefs`·`valueOf`·`computeSpec(spec, 계약)`. `calcSheets` 는 한 해 한 줄의 계산 표(열마다 그 식과 쓰인 값)를 낸다. 다른 앱은 이것만으로 문서대로 보험료를 낼 수 있다(자유설계보험 엔진과 10만원당 보험료가 같다) | `spec.ts` `formulas.ts` |
 | `tex.ts` | 평문 수식 → LaTeX(KaTeX 공용), 산출방법서 ↔ `.tex` | 이 폴더 안만 |
 | `docx.ts` | 산출방법서 블록 → Word(.docx). 압축 없는 ZIP 을 직접 쓴다(`zipStore`) — 한글에서 열어 HWPX 로 저장된다 | 이 폴더 안만 |
 | `vision.ts` | 스캔 PDF·그림 → 문단·표. 모델은 옮겨 적기만(`PAGE_SCHEMA` · `VISION_SYSTEM`), 조건은 `parse.ts` 가. 호출은 `VisionAsk` 로 주입 | 이 폴더 안만 |

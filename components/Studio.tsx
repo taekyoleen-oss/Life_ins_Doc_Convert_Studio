@@ -11,12 +11,15 @@ import dynamic from "next/dynamic";
 // 그림으로 읽기 창은 열 때만 받는다 — Anthropic SDK 가 첫 화면 번들에 들어가지 않게
 const VisionDialog = dynamic(() => import("./VisionDialog"), { ssr: false });
 import RateSheetPane from "./RateSheetPane";
+// 보험료 계산 화면(스프레드시트)은 열 때만 받는다
+const PremiumSheet = dynamic(() => import("./PremiumSheet"), { ssr: false });
 import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
 import { itemColumns, sanitizeLibrary, type RateLibrary } from "@/lib/rate-library";
 import { DEFAULT_SAMPLE_ID, SAMPLES } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
 import { withFormulas } from "@/lib/methoddoc/formulas";
+import { CALC_DEFAULT, type CalcContract } from "@/lib/methoddoc/calc";
 import { docToMarkdown, renderMethodDoc } from "@/lib/methoddoc/render";
 import { docToLatex, latexToDoc } from "@/lib/methoddoc/tex";
 import { ExtractError, extractDoc, extractText, type ExtractedDoc } from "@/lib/methoddoc/extract";
@@ -53,10 +56,10 @@ type PaneId = "cond" | "doc" | "sheet";
 interface Buf { text: string; dirty: boolean }
 type Toast = { text: string; kind: "ok" | "warn" | "err" } | null;
 /** 화면 나눔 — 비율·숨김·크게 보기·왼쪽 탭·펼친 카드. 브라우저에 기억한다 */
-interface Layout { split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[] }
+interface Layout { split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[]; formulas: boolean }
 const PANES: PaneId[] = ["cond", "doc", "sheet"];
 const PANE_NAME: Record<PaneId, string> = { cond: "조건", doc: "산출방법서", sheet: "위험률 표" };
-const LAYOUT0: Layout = { split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"] };
+const LAYOUT0: Layout = { split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"], formulas: true };
 
 const KEY = "life_ins_doc_convert_studio";
 const STORE = `${KEY}:yaml`;
@@ -84,6 +87,7 @@ function sanitizeLayout(raw: unknown): Layout {
     hide: hide.length === PANES.length ? [] : hide, max: PANES.includes(l.max as PaneId) ? (l.max as PaneId) : null,
     left: l.left === "yaml" ? "yaml" : "form",
     open: Array.isArray(l.open) ? l.open.filter((x): x is string => typeof x === "string").slice(0, 80) : LAYOUT0.open,
+    formulas: typeof l.formulas === "boolean" ? l.formulas : true,
   };
 }
 const SHEET_EXT = /\.(csv|tsv|xlsx|xls)$/i;
@@ -151,6 +155,8 @@ export default function Studio() {
   const [rightSel, setRightSel] = useState<string[]>([]);  // 오른쪽에서 고른 경로 → 왼쪽 줄·칸 강조
   const [follow, setFollow] = useState(false);
   const [pal, setPal] = useState(false);                   // 수식·기호 견본 (LaTeX·Markdown 탭 — 커서 자리에)
+  const [calcOpen, setCalcOpen] = useState(false);         // 보험료 계산 화면(스프레드시트)
+  const [calcOn, setCalcOn] = useState<CalcContract>(CALC_DEFAULT);   // 시산에 쓰는 계약 한 점 — 조건에 저장하지 않는다
   const [palLeft, setPalLeft] = useState(false);           // 수식 더하기 (조건 창 — M08 식으로)
   const editor = useRef<EditorApi | null>(null);
 
@@ -352,14 +358,14 @@ export default function Studio() {
     try { loadSheet(sheetFromText("붙여넣기", text)); } catch (e) { setToast({ text: errText(e), kind: "err" }); }
   };
 
-  /** 견본 식을 조건의 식(M08 따로 적는 식)으로 더한다 — 산출방법서의 알맞은 절에 붙는다 */
+  /** 견본 식을 조건의 식(M10 따로 적는 식)으로 더한다 — 산출방법서의 알맞은 절에 붙는다 */
   const addFormula = (f: FormulaSample) => {
     const raw = parseDocument(yaml).toJS() as { formulas?: unknown[] } | null;
     const n = Array.isArray(raw?.formulas) ? raw.formulas.length : 0;
     onEdit([{ path: ["formulas"], add: true, value: { section: SECTION_OF[f.group] ?? "계산기수", label: f.label, text: f.text } }]);
-    setLayout((l) => ({ ...l, left: "form", open: ["M08"] }));      // 카드는 한 번에 하나만 펼친다
+    setLayout((l) => ({ ...l, left: "form", open: ["M10"] }));      // 카드는 한 번에 하나만 펼친다
     setLeftSel([`formulas[${n}]`]); setRightSel([`formulas[${n}]`]); setFollow(true);
-    setToast({ text: `"${f.label}" 식을 조건 M08(따로 적는 식) 에 더했습니다 — 그 카드에서 고쳐 쓰세요 (되돌리기 ↶)`, kind: "ok" });
+    setToast({ text: `"${f.label}" 식을 조건 M10(따로 적는 식) 에 더했습니다 — 그 카드에서 고쳐 쓰세요 (되돌리기 ↶)`, kind: "ok" });
   };
 
   // ── 열기 ─────────────────────────────────────────────────────────────────
@@ -527,6 +533,7 @@ export default function Studio() {
   const exportJson = () => {
     exporters.json(specT);
     if (noTable.length) setToast({ text: `내보냈습니다. 값 표가 없는 위험률 ${noTable.map((r) => r.name).join(", ")} 은(는) 자유설계보험에서 0 으로 들어갑니다 — 아래 위험률 표에 값을 붙여넣으면 이어집니다`, kind: "warn" });
+    else setToast({ text: "MethodSpec JSON 을 저장했습니다 — 자유설계보험의 [산출방법서 변환기] 에 이 파일을 올리고 [상품 만들기에 넣기] 하면 보험료가 계산됩니다", kind: "ok" });
   };
 
   return (
@@ -541,6 +548,7 @@ export default function Studio() {
             <button key={p} aria-pressed={visible(p)} className={visible(p) ? "seg-on" : ""} onClick={() => togglePane(p)} title={`${PANE_NAME[p]} ${visible(p) ? "숨기기" : "보이기"}`}>{PANE_NAME[p]}</button>
           ))}
         </div>
+        <button className="btn-primary" onClick={() => setCalcOpen(true)} title="산출방법서의 식으로 이 앱이 보험료를 계산합니다 — 한 해 한 줄의 표로 과정을 봅니다">＝ 보험료 계산</button>
         <button className="btn-primary" onClick={() => fileInput.current?.click()}>열기</button>
         <input ref={fileInput} aria-label="열 파일" type="file" accept={`${ACCEPT},.csv,.tsv,.xlsx`} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
         <details className="menu">
@@ -571,7 +579,7 @@ export default function Studio() {
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">조건 (다른 앱에서 읽기)</p>
             <button onClick={() => exporters.yaml(yaml, s)}>조건 파일 .yaml</button>
-            <button onClick={exportJson}>MethodSpec .json<small>자유설계보험(flexible_insurance) 등 다른 앱 입력 · 위험률 표 {nTables}개 포함{noTable.length ? ` · 표 없는 위험률 ${noTable.length}개` : ""}</small></button>
+            <button onClick={exportJson}>자유설계보험으로 보내기 — MethodSpec .json<small>저장한 파일을 자유설계보험 [산출방법서 변환기] 화면에 올리고 [상품 만들기에 넣기] 하면 그쪽에서 보험료를 계산합니다 · 위험률 표 {nTables}개 포함{noTable.length ? ` · 표 없는 위험률 ${noTable.length}개` : ""}</small></button>
             <p className="menu-head">산출방법서</p>
             <button onClick={() => exporters.docx(specT)}>Word .docx<small>표준 산출방법서 — 한글에서도 열림 · 작성 안내 포함</small></button>
             <button onClick={() => exporters.docx(specT, false)}>Word .docx (작성 안내 없이)<small>출력·제출용</small></button>
@@ -603,17 +611,22 @@ export default function Studio() {
                     <button className="pane-tool" disabled={!histN.past} onClick={() => restore(-1)} title="마지막 입력·변경을 되돌립니다 (Ctrl+Z — 칸 밖에서)">↶ 되돌리기{histN.past ? ` ${histN.past}` : ""}</button>
                     <button className="pane-tool" disabled={!histN.future} onClick={() => restore(1)} title="되돌린 것을 다시 합니다 (Ctrl+Shift+Z)">↷ 다시</button>
                   </span>
-                  <button className={`btn ${palLeft ? "btn-on" : ""}`} onClick={() => setPalLeft((v) => !v)} title="견본 식을 조건 M08(따로 적는 식) 에 더합니다">＋ 수식 더하기</button>
+                  {layout.left === "form" && (
+                    <button className={`btn ${layout.formulas ? "btn-on" : ""}`} onClick={() => setLayout((l) => ({ ...l, formulas: !l.formulas }))}
+                      title={layout.formulas ? "카드의 식을 감춥니다 — 값만 보고 싶을 때" : "카드의 식을 보입니다 — 고치기도 여기서"}>{layout.formulas ? "수식 숨기기" : "수식 보이기"}</button>
+                  )}
+                  <button className={`btn ${palLeft ? "btn-on" : ""}`} onClick={() => setPalLeft((v) => !v)} title="견본 식을 조건 M10(따로 적는 식) 에 더합니다">＋ 수식 더하기</button>
                   <span className="flex-1" />
                   {syntaxErrors.length > 0 && <span className="truncate rounded bg-rose-100 px-1.5 text-rose-700">{syntaxErrors[0].line}줄: {syntaxErrors[0].message}</span>}
                   {tools("cond")}
                 </div>
                 {palLeft && <FormulaPalette onFormula={addFormula}
-                  hint="누르면 그 식을 조건(M08 따로 적는 식)에 넣습니다 — 산출방법서의 알맞은 절에 붙고, 그 카드에서 고칩니다." />}
+                  hint="누르면 그 식을 조건(M10 따로 적는 식)에 넣습니다 — 산출방법서의 알맞은 절에 붙고, 그 카드에서 고칩니다." />}
                 <div className="min-h-0 flex-1">
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
-                        open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))} />
+                        open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
+                        calc={calcOn} setCalc={setCalcOn} showFormulas={layout.formulas} onPremiumSheet={() => setCalcOpen(true)} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
@@ -739,6 +752,7 @@ export default function Studio() {
       {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>패키지(.lifepkg) · PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
       {toast && <div className={`toast toast-${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       {help && <Help onClose={() => setHelp(false)} />}
+      {calcOpen && <PremiumSheet spec={specT} contract={calcOn} setContract={setCalcOn} onClose={() => setCalcOpen(false)} />}
       {libOpen && <RateLibraryDialog library={library} rates={s.rates} onAdd={addFromLibrary} onClose={() => setLibOpen(false)} />}
       {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
     </div>
@@ -774,7 +788,10 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다. 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 산출방법서의 정보가 아니어서 이 앱에 두지 않고, 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
           <li><b>위험률 표 ↔ 조건 ↔ 계산</b> 첫 화면부터 조건과 이어진 견본 표(가상의 값)가 들어 있습니다 — 칸을 누르면 값을, 머리를 두 번 누르면 열 이름을 고치고, 열마다 [잇기]에서 조건의 위험률·성별·유형을 고릅니다(유형은 M04 에 바로 반영). 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽어 같은 이름의 위험률(M04)에 잇고, 조건에 없는 이름의 열은 새 위험률로 M04 에 더합니다(유형 확인). 거꾸로 M04 에서 위험률을 더하면 표에 그 이름의 빈 열이 생기고, 산출방법서에서 위험률을 더해 올려도 같습니다. 이은 값 표는 산출방법서 별첨과 MethodSpec JSON 에 실려 자유설계보험이 계약 성별의 표로 계산합니다 — 값 표가 없는 위험률은 상태줄에 &quot;표 없음&quot;으로 알리고 그쪽에서 0 이 됩니다. 순서: ① 샘플·산출방법서 열기 → ② 위험률 표 올리기 → ③ [내보내기 → MethodSpec .json] → 자유설계보험 /method 에서 열기.</li>
-          <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M08)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
+          <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M10)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
+          <li><b>＝ 보험료 계산</b> 머리의 단추를 누르면 담보마다 한 해 한 줄의 표(위험률 → 유지자수·납입자수·지급자수 → 현가·누계 → 보험금)가 열립니다. 이 앱이 산출방법서의 식을 그대로 읽어 계산한 값이고, <b>열 제목이나 값을 누르면 그 값을 만든 식과 그 해에 쓰인 값</b>이 옆에 나옵니다. [표 내려받기 (CSV)] 로 엑셀에서 볼 수 있습니다.</li>
+          <li><b>식 고치기</b> 조건 카드(M05 보험료 · M06 보험금 · M08 보험료의 계산 · M09)의 [식 고치기]로 산출방법서의 식을 바꾸면 문서와 계산이 함께 바뀝니다([되돌리기]로 자동 식). 값만 보고 싶으면 [수식 숨기기].</li>
+          <li><b>자유설계보험으로</b> [내보내기 → 자유설계보험으로 보내기]로 MethodSpec JSON 을 저장하고, 자유설계보험의 [산출방법서 변환기] 화면에 그 파일을 올리면 보험료가 바로 나오고 [상품 만들기에 넣기]로 설계 전체가 됩니다.</li>
           <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
           <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>
           <li><b>그림으로 읽기</b> 스캔 PDF·PNG·JPG 를 열면 쪽을 골라 본인의 Anthropic API 키로 보냅니다. AI 는 쪽을 글로 옮겨 적기만 하고 값은 앱의 규칙이 읽습니다. 글자 있는 PDF 도 [원문] 탭에서 [그림으로 다시 읽기] 할 수 있습니다.</li>

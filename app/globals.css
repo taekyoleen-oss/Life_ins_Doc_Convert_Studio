@@ -270,6 +270,62 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 
 /* 그림으로 읽기 */
 .modal.vision { max-width: 920px; width: 100%; max-height: 92vh; display: flex; flex-direction: column; }
+
+/* ---------- 보험료 계산 — 엑셀처럼 한 해 한 줄 ---------- */
+.modal.calc-modal { max-width: 1500px; width: 100%; max-height: 94vh; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.calc-head { display: flex; align-items: center; gap: 8px; }
+.calc-head h2 { flex: 1; margin: 0; }
+.calc-head h2 span { font-size: 12px; font-weight: 400; color: var(--muted-foreground); margin-left: 8px; }
+.calc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid #cfe3f1; border-radius: 10px; background: #f6fbff; padding: 6px 10px; }
+/* 시산 조건 고르개는 내용 만큼만 (.inp 는 기본이 100%) */
+.calc-bar select.inp, .calc-panel select.inp { width: auto; min-width: 0; }
+.calc-total { font-size: 12px; color: #334155; }
+.calc-total b { font-size: 15px; color: var(--primary); }
+.calc-total small { color: var(--muted-foreground); margin-left: 6px; }
+.calc-warn { border-radius: 8px; background: #fffbeb; color: #92400e; padding: 6px 10px; font-size: 12px; }
+.calc-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.calc-tabs > button { border: 1px solid var(--border); border-radius: 8px 8px 0 0; background: #f8fafc; padding: 4px 12px; font-size: 12.5px; text-align: left; }
+.calc-tabs > button small { display: block; font-size: 10.5px; color: var(--muted-foreground); }
+.calc-tabs > button.on { border-color: var(--primary); border-bottom-color: #fff; background: #fff; font-weight: 600; color: var(--primary); }
+.calc-body { display: flex; min-height: 0; flex: 1; gap: 10px; }
+.calc-grid-wrap { flex: 1; min-width: 0; overflow: auto; border: 1px solid #c9d3de; border-radius: 6px; background: #fff; }
+.calc-grid { border-collapse: separate; border-spacing: 0; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.calc-grid th, .calc-grid td { border-right: 1px solid #e4e9ef; border-bottom: 1px solid #e4e9ef; padding: 2px 7px; white-space: nowrap; }
+.calc-grid td.num { text-align: right; }
+.calc-grid thead th { position: sticky; background: #eef2f6; z-index: 2; }
+.calc-grid tr.calc-abc th { top: 0; height: 17px; padding: 0 7px; text-align: center; font-size: 10px; font-weight: 400; color: #94a3b8; }
+.calc-grid thead tr:nth-child(2) th { top: 17px; min-width: 70px; vertical-align: bottom; text-align: left; font-weight: 700; }
+.calc-grid thead tr:nth-child(2) th small { display: block; font-size: 10px; font-weight: 400; color: #64748b; max-width: 130px; white-space: normal; }
+.calc-grid th.calc-col { cursor: pointer; }
+.calc-grid th.calc-col:hover { background: #dbeafe; }
+.calc-grid th.calc-col.rate { background: #eaf6ee; }
+.calc-grid th.calc-col.on { background: var(--primary); color: #fff; }
+.calc-grid th.calc-col.on small { color: #e0f2fe; }
+.calc-grid th.calc-row { position: sticky; left: 0; z-index: 1; background: #eef2f6; text-align: right; font-size: 10px; font-weight: 400; color: #94a3b8; }
+.calc-grid th.calc-corner { position: sticky; left: 0; z-index: 3; background: #e2e8f0; }
+.calc-grid tbody tr:nth-child(even) td { background: #fbfcfd; }
+.calc-grid tbody tr:hover td { background: #eff6fb; }
+.calc-grid td { cursor: pointer; }
+.calc-grid td.on { background: #4a90c2 !important; color: #fff; font-weight: 700; }
+.calc-grid .calc-fix { background: #f6f8fa; color: #475569; }
+.calc-side { width: 380px; flex-shrink: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.calc-sum { border: 1px solid #cfe3f1; border-radius: 10px; background: #f6fbff; padding: 8px 10px; }
+.calc-sum-title { font-size: 12.5px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+.calc-sum table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.calc-sum th, .calc-sum td { border-bottom: 1px solid #e2e8f0; padding: 3px 4px; text-align: left; }
+.calc-sum td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.calc-sum tr { cursor: pointer; }
+.calc-sum tr:hover td, .calc-sum tr:hover th { background: #e7f2fa; }
+.calc-sum tr.on th, .calc-sum tr.on td { background: var(--primary); color: #fff; }
+.calc-sum tr.calc-sum-hi { cursor: default; }
+.calc-sum tr.calc-sum-hi th, .calc-sum tr.calc-sum-hi td { font-weight: 700; color: var(--primary); background: #fff; }
+.calc-pop { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 8px 10px; }
+.calc-pop-title { font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+.calc-pop-title small { font-weight: 400; color: var(--muted-foreground); }
+.calc-pop-val { margin-top: 4px; font-family: var(--font-jetbrains), monospace; font-size: 13px; font-weight: 700; color: var(--primary); }
+.calc-parts { margin-top: 5px; border-collapse: collapse; font-size: 11.5px; }
+.calc-parts th, .calc-parts td { border-bottom: 1px solid #eef2f6; padding: 2px 8px 2px 0; text-align: left; }
+.calc-parts td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .vision-bar { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; flex-wrap: wrap; }
 .vision-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; overflow: auto; max-height: 38vh; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); }
 .vision-page { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; border: 2px solid transparent; border-radius: 6px; background: #fff; cursor: pointer; font-size: 12px; }
