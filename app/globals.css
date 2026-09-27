@@ -288,6 +288,15 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 .calc-tabs > button small { display: block; font-size: 10.5px; color: var(--muted-foreground); }
 .calc-tabs > button.on { border-color: var(--primary); border-bottom-color: #fff; background: #fff; font-weight: 600; color: var(--primary); }
 .calc-body { display: flex; min-height: 0; flex: 1; gap: 10px; }
+/* 왼쪽 — 계산에 앞서 정한 값(계약·기초율). 내려받은 파일에도 그대로 들어간다 */
+.calc-left { width: 262px; flex-shrink: 0; overflow: auto; border: 1px solid #cfe3f1; border-radius: 10px; background: #f6fbff; padding: 8px 10px; }
+.calc-inputs { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 6px; }
+.calc-inputs th, .calc-inputs td { border-bottom: 1px solid #e2e8f0; padding: 3px 4px; text-align: left; font-weight: 400; color: #475569; vertical-align: top; }
+.calc-inputs th { width: 56%; word-break: keep-all; }
+.calc-inputs th small { display: block; font-size: 10.5px; color: var(--muted-foreground); }
+.calc-inputs td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--foreground); font-weight: 600; }
+
+.calc-inputs tr.calc-derived td.num { color: var(--primary); }
 .calc-grid-wrap { flex: 1; min-width: 0; overflow: auto; border: 1px solid #c9d3de; border-radius: 6px; background: #fff; }
 .calc-grid { border-collapse: separate; border-spacing: 0; font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .calc-grid th, .calc-grid td { border-right: 1px solid #e4e9ef; border-bottom: 1px solid #e4e9ef; padding: 2px 7px; white-space: nowrap; }
@@ -299,6 +308,7 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 .calc-grid th.calc-col { cursor: pointer; }
 .calc-grid th.calc-col:hover { background: #dbeafe; }
 .calc-grid th.calc-col.rate { background: #eaf6ee; }
+.calc-grid th.calc-col.discount { background: #fff7e6; }
 .calc-grid th.calc-col.on { background: var(--primary); color: #fff; }
 .calc-grid th.calc-col.on small { color: #e0f2fe; }
 .calc-grid th.calc-row { position: sticky; left: 0; z-index: 1; background: #eef2f6; text-align: right; font-size: 10px; font-weight: 400; color: #94a3b8; }

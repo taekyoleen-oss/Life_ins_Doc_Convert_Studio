@@ -104,9 +104,13 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click("header button:has-text('보험료 계산')");
   await p.waitForSelector(".calc-modal .calc-grid");
   const cHead = await p.$$eval(".calc-modal thead tr:nth-child(2) th", (e) => e.map((x) => x.textContent.trim()));
-  ok("보험료 계산 표: 위험률 → 유지자수·납입자수·지급자수 → 현가·누계 → 보장금액 배수·급부 현가",
-    /제7회 경험생명표 사망률/.test(cHead[3]) && cHead.some((t) => t.includes("유지자수")) && cHead.some((t) => t.includes("납입자수"))
-    && cHead.some((t) => t.includes("지급자수")) && cHead.some((t) => t.includes("현가의 누계")) && cHead.length === 17, `${cHead.length}열`);
+  ok("보험료 계산 표: 위험률 → 현가율 둘 → 유지자수·납입자수·지급자수 → 현가·누계 → 보장금액 배수·급부 현가",
+    /제7회 경험생명표 사망률/.test(cHead[3]) && cHead.filter((t) => t.includes("현가율")).length === 2
+    && cHead.some((t) => t.includes("유지자수")) && cHead.some((t) => t.includes("납입자수"))
+    && cHead.some((t) => t.includes("지급자수")) && cHead.some((t) => t.includes("현가의 누계")) && cHead.length === 19, `${cHead.length}열`);
+  const inputs = (await p.textContent(".calc-modal .calc-left")).replace(/\s+/g, " ");
+  ok("왼쪽에 계약·기초율 — 가입나이·보장기간·납입기간·납입주기·이율·현가율·보장금액·사업비",
+    ["가입나이 x", "보장기간 n", "납입기간 m", "납입주기 k", "적용이율 i", "현가율 v", "보장금액", "α_S", "γ"].every((t) => inputs.includes(t)), inputs.slice(0, 120));
   const nRow = await p.locator(".calc-modal .calc-grid tbody tr").count();
   const sums = (await p.textContent(".calc-modal .calc-sum")).replace(/\s+/g, " ");
   ok("담보 하나가 보장기간 만큼 한 해 한 줄(72줄) · 표 아래 N*·PVB·P·G·10만원당 261 · 담보 보험료 261,000원",
@@ -115,7 +119,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click(".calc-modal th.calc-col:has-text('유지자수')");
   await p.waitForTimeout(300);
   ok("열 제목을 누르면 그 열을 만든 식이 팝업으로", (await p.textContent(".calc-pop")).includes("l_{x+t+1} = l_{x+t}"));
-  await p.click(".calc-modal tbody tr:nth-child(2) td:nth-child(8)");          // 2줄 · 유지자수
+  await p.click(".calc-modal tbody tr:nth-child(2) td:nth-child(10)");         // 2줄 · 유지자수
   await p.waitForTimeout(300);
   const cell = (await p.textContent(".calc-pop")).replace(/\s+/g, " ");
   ok("값을 누르면 그 해에 쓰인 값까지 — l(41) = l(40) × (1 − Q(40))", cell.includes("1년 뒤 (41세)") && cell.includes("100,000"), cell.slice(0, 120));

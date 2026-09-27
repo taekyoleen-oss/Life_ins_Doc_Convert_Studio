@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { calcSheets, type CalcColumn, type CalcContract, type CalcSheet } from "@/lib/methoddoc/calc";
+import { calcWorkbook } from "@/lib/methoddoc/calc-xlsx";
 import { subSup } from "@/lib/methoddoc/render";
 import type { MethodSpec } from "@/lib/methoddoc/spec";
 import { formulaHtml } from "./DocPreview";
@@ -30,8 +31,8 @@ const num = (v: number, digits: number) => {
   return v.toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
 };
 const won = (v: number) => `${Math.round(v).toLocaleString("ko-KR")} 원`;
-/** 열 제목의 자리 표기 — 보장금액 배수 S·생존 배수 E 는 경과기간 t 로 적는다(식도 S_t) */
-const headOf = (sym: string) => (["S", "E"].includes(sym) ? `${sym}_t` : `${sym}_{x+t}`);
+/** 열 제목의 자리 표기 — 현가율은 기호에 이미 자리가 있고, 보장금액 배수 S·생존 배수 E 는 경과기간 t 로 적는다(식도 S_t) */
+const headOf = (sym: string) => (sym.startsWith("v^") ? sym : ["S", "E"].includes(sym) ? `${sym}_t` : `${sym}_{x+t}`);
 
 /** 고른 칸 — 열만 고르면 t 는 없다 */
 type Pick = { col: CalcColumn; t?: number } | { scalar: CalcSheet["scalars"][number] } | null;
@@ -43,18 +44,30 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
   const sheet = calc.sheets[Math.min(at, calc.sheets.length - 1)];
   const put = (k: keyof CalcContract, v: string) => { setContract({ ...contract, [k]: k === "sex" ? (v as "M" | "F") : Number(v) }); setPick(null); };
 
-  /** 표를 CSV 로 — 엑셀에서 그대로 열어 수식을 다시 세워 볼 수 있다 */
+  const save = (name: string, data: Uint8Array | string, type: string) => {
+    const url = URL.createObjectURL(new Blob([data as BlobPart], { type }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  /**
+   * 엑셀로 — **위험률과 계약·기초율만 값**이고 현가율부터 유지자수·납입자수·기수·보험료까지는 엑셀 수식이다.
+   * 그래서 이 파일 하나만으로 산출 과정을 따라가고, 값을 바꿔 다시 계산해 볼 수 있다.
+   */
+  const xlsx = () => save(`${(spec.meta.productName || "상품").replace(/[\\/:*?"<>|]/g, "_")}_보험료계산.xlsx`,
+    calcWorkbook(spec, contract), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+  /** 지금 보는 담보의 표만 값으로 (CSV) */
   const csv = () => {
     if (!sheet) return;
     const head = ["t", "연령", ...sheet.cols.map((c) => `${c.sym} ${c.label}`)];
     const rows = sheet.ages.map((age, t) => [t, age, ...sheet.cols.map((c) => c.values[t] ?? "")]);
-    const foot = [[], ["식"], ...sheet.cols.map((c) => [c.sym, c.formula]), [], ...sheet.scalars.map((s) => [s.sym, s.label, s.value, s.formula])];
+    const foot = [[], ["계약 · 기초율"], ...sheet.inputs.map((x) => [x.label, x.value, x.note ?? ""]),
+      [], ["식"], ...sheet.cols.map((c) => [c.sym, c.formula]), [], ...sheet.scalars.map((s) => [s.sym, s.label, s.value, s.formula])];
     const text = [head, ...rows, ...foot].map((r) => r.map((x) => (typeof x === "string" && /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x)).join(",")).join("\r\n");
-    const url = URL.createObjectURL(new Blob([`﻿${text}`], { type: "text/csv" }));   // 엑셀이 한글을 바로 읽게 BOM
-    const a = document.createElement("a");
-    a.href = url; a.download = `${spec.meta.productName || "상품"}_${sheet.name}_계산과정.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    save(`${spec.meta.productName || "상품"}_${sheet.name}_계산과정.csv`, `﻿${text}`, "text/csv;charset=utf-8");   // BOM — 엑셀이 한글을 바로 읽게
   };
 
   return (
@@ -62,7 +75,8 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
       <div className="modal calc-modal" onClick={(e) => e.stopPropagation()}>
         <header className="calc-head">
           <h2>보험료 계산 <span>{spec.meta.productName || "(이름 없음)"} — 산출방법서의 식을 그대로 읽어 이 앱이 계산합니다</span></h2>
-          <button className="btn" onClick={csv}>표 내려받기 (CSV)</button>
+          <button className="btn-primary" onClick={xlsx} title="위험률과 계약·기초율만 값이고, 현가율부터는 엑셀 수식으로 들어갑니다">엑셀로 내려받기 (수식 포함)</button>
+          <button className="btn" onClick={csv}>이 담보만 CSV (값)</button>
           <button className="btn" onClick={onClose}>닫기</button>
         </header>
 
@@ -91,6 +105,20 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
 
         {sheet && (
           <div className="calc-body">
+            <div className="calc-left thin-scroll">
+              <p className="calc-sum-title">계약 · 기초율</p>
+              <p className="fld-hint">계산에 앞서 정한 값입니다. 이것과 위험률만 값이고, 오른쪽 <b>현가율부터는 모두 식</b>에서 나옵니다 — 내려받은 엑셀도 그렇습니다.</p>
+              <table className="calc-inputs">
+                <tbody>
+                  {sheet.inputs.map((x, i) => (
+                    <tr key={i} className={x.formula ? "calc-derived" : ""}>
+                      <th>{x.label}{x.note ? <small>{x.note}</small> : null}</th>
+                      <td className="num">{typeof x.value === "number" ? num(x.value, x.digits ?? 6) : x.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="calc-grid-wrap thin-scroll">
               {sheet.error ? <p className="calc-warn">식으로 계산할 수 없습니다 — {sheet.error}</p> : (
                 <table className="calc-grid">
@@ -162,7 +190,7 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
                 {pick && "col" in pick && (
                   <>
                     <p className="calc-pop-title">
-                      <span dangerouslySetInnerHTML={{ __html: subSup(pick.t === undefined ? headOf(pick.col.sym) : `${pick.col.sym}_{${["S", "E"].includes(pick.col.sym) ? pick.t : sheet.ages[pick.t]}}`) }} /> {pick.col.label}
+                      <span dangerouslySetInnerHTML={{ __html: subSup(pick.t === undefined || pick.col.sym.startsWith("v^") ? headOf(pick.col.sym) : `${pick.col.sym}_{${["S", "E"].includes(pick.col.sym) ? pick.t : sheet.ages[pick.t]}}`) }} /> {pick.col.label}
                       {pick.t !== undefined && <small> · {pick.t}년 뒤 ({sheet.ages[pick.t]}세)</small>}
                     </p>
                     {pick.col.kind === "rate"
