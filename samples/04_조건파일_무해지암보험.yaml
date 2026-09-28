@@ -17,13 +17,13 @@ basis:
   lowRatio: 0%        # 납입기간 중 해지환급금 = 표준형 × 0%
 rates:
   - id: q
-    name: 제7회 경험생명표 사망률
+    name: 사망률
     role: death
-    source: 보험개발원 제7회 경험생명표 사망률
+    source: 경험생명표(가상) 사망률
   - id: rc
     name: 암발생률
     role: incidence
-    source: 보험개발원 생명장기제2024-112호 무배당 예정 경험 암발생률
+    source: 경험생명표(가상) 암발생률
 expenses:           # 기호: α_S α_P β_S β_G β′ γ (산출방법서형) 또는 α β γ
   - { group: 계약체결비용, symbol: α_S, basis: 보험가입금액, rate: 1%, phase: 초년도 }
   - { group: 계약체결비용, symbol: α_P, basis: 기준연납순보험료, times: 1배, phase: 초년도 }
@@ -35,7 +35,6 @@ benefits:
   - id: b1
     name: 암 진단
     role: incidence
-    trigger: 진단 확정 시
     amount: 50000000
     endAge: 100
     waitDays: 90

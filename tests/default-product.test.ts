@@ -48,7 +48,8 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     // 면책은 보장금액의 배수 S 로 — 첫해만 (1 − 3/12) 배
     expect(f.find((x) => x.key === "benefit:b2")!.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
-    expect(md).toContain("f_x : 80% 이상 장해율 · 암발생률");                     // 1.4 납입면제 사유
+    expect(md).toContain("f_x : 80% 이상 장해율 · 암발생률");                     // 가.(4) 납입면제 사유 — 되읽는 표시
+    expect(md).toContain("f_{x+t} : 그 집단에서 납입만 면제되는 사유의 발생률");
     expect(md).toContain("| 면책 | 90일 |");
     expect(md).toContain("유지자수·납입자수의 집단 2개");
   });

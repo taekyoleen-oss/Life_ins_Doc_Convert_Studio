@@ -65,12 +65,12 @@ describe("열 → 조건 → 산출방법서", () => {
     expect(m.rates[1].tables).toBeUndefined();
     expect(m.rates[1].table?.values[0]).toBeCloseTo(0.0012, 12);
     const rows = renderMethodDoc(m).flatMap((s) => s.blocks).flatMap((b) => (b.t === "table" ? b.rows : []));
-    expect(rows.some((r) => r[0] === "제7회 경험생명표 사망률" && r[4] === "40~41세 2행 · 남·여")).toBe(true);
+    expect(rows.some((r) => r[0] === "사망률" && r[4] === "40~41세 2행 · 남·여")).toBe(true);
   });
   it("남·여 두 벌 → 위험률 표 창 → 다시 붙이면 같은 두 벌", () => {
     const m = attachTables(spec, { sheet, map });
     const st = sheetFromSpec(m, "a.json")!;
-    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률(남)", "제7회 경험생명표 사망률(여)", "80% 이상 장해율"]);
+    expect(st.sheet.head).toEqual(["연령", "사망률(남)", "사망률(여)", "80% 이상 장해율"]);
     const bare = { ...m, rates: m.rates.map((r) => ({ ...r, table: undefined, tables: undefined })) };
     expect(attachTables(bare, st).rates.map((r) => [r.table, r.tables])).toEqual(m.rates.map((r) => [r.table, r.tables]));
   });
@@ -80,7 +80,7 @@ describe("열 → 조건 → 산출방법서", () => {
       { ...spec.rates[1], id: "t1:r2", table: { ages: [41, 42], values: [0.0013, 0.0014] } },
     ] };
     const st = sheetFromSpec(withT, "a.json")!;
-    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률(남)", "80% 이상 장해율"]);
+    expect(st.sheet.head).toEqual(["연령", "사망률(남)", "80% 이상 장해율"]);
     expect(st.sheet.rows[0]).toEqual(["40", "0.00103", ""]);
     const bare = { ...withT, rates: withT.rates.map((r) => ({ ...r, table: undefined })) };
     expect(attachTables(bare, st).rates.map((r) => r.table)).toEqual(withT.rates.map((r) => r.table));

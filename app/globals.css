@@ -120,6 +120,12 @@ textarea.inp { font-family: inherit; resize: vertical; }
 .form-changed .inp { border-color: #a7dcc1; }
 .chip-changed { border-radius: 999px; background: #e6f6ee; color: #1e7f4e; padding: 1px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .changed-note { display: inline-flex; align-items: center; gap: 6px; color: #1e7f4e; font-weight: 600; }
+/* 맨 위 — 시산보험료 조건 (조건에 저장하지 않는다) */
+.trial-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid #cfe3f1; border-radius: 12px; background: #f6fbff; padding: 8px 12px; }
+.trial-bar > b { font-size: 13px; color: #334155; }
+.trial-bar select.inp { width: auto; min-width: 0; padding: 3px 8px; font-size: 12.5px; }
+.trial-out { margin-left: auto; font-size: 12px; color: #475569; }
+.trial-out b { font-size: 14px; color: var(--primary); }
 /* 카드 안에서 접었다 펴는 묶음 — 담보 하나, 집단 하나 */
 .sub-open { border-color: #b9d3e8; background: #f8fbfe; box-shadow: 0 0 0 2px #4a90c210; }
 .fold-head { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; text-align: left; }

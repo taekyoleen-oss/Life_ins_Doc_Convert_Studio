@@ -18,8 +18,16 @@ for (const [name, f] of [
   ["3대질병 발생률", (s, a) => at(cancer[s].q, a) + at(ci.stroke[s], a) + at(ci.ami[s], a)],
 ]) for (const [s, label] of [["M", "남"], ["F", "여"]]) cols.push([`${name}(${label})`, (a) => r10(f(s, a))]);
 const lines = [["연령", ...cols.map((c) => c[0])].join(","), ...ages.map((a) => [a, ...cols.map(([, f]) => f(a))].join(","))];
+/**
+ * 근거는 **가상 이름**으로 적는다 — 값은 공개 표를 쓰지만 이 저장소가 공개라 실제 출처(회사·호수·판)는 싣지 않는다.
+ * 사내 위험률 모음(private/)을 쓸 때는 그쪽 출처가 그대로 들어간다(이 PC 에서만).
+ */
 const sources = {
-  사망률: kli7.meta.name, "80% 이상 장해율": dis80.meta.source, 암발생률: cancer.meta.name, "2대질병 발생률": ci.meta.name, "3대질병 발생률": `${cancer.meta.name} + ${ci.meta.name}`,
+  사망률: "경험생명표(가상) 사망률",
+  "80% 이상 장해율": "경험생명표(가상) 80%이상 재해장해율 + 질병장해율",
+  암발생률: "경험생명표(가상) 암발생률",
+  "2대질병 발생률": "경험생명표(가상) 뇌출혈 + 급성심근경색증 발생률",
+  "3대질병 발생률": "경험생명표(가상) 암 + 뇌출혈 + 급성심근경색증 발생률",
 };
 writeFileSync(new URL("../lib/base-rates.ts", import.meta.url), `/** 생성 파일 — scripts/make-base-rates.mjs. 자유설계보험의 공개 위험률 표(0~110세, 남·여). 사내 위험률은 넣지 않는다 */
 export const BASE_RATES_CSV = ${JSON.stringify(lines.join("\n"))};

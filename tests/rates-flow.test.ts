@@ -50,7 +50,7 @@ describe("표를 올리면 — 이름으로 잇고, 없는 이름은 새 위험�
     expect(autoMap(back, withT.rates).map((m) => (m.to === "rate" ? m.rateId : m.to))).toEqual(["age", "q", "q", "r2", "r", "r3", "r3", "r4"]);
   });
 
-  it("종신 샘플: '사망률(남)' 이 '제7회 경험생명표 사망률' 에 이어진다(이름 포함) · 장해율은 정확히", () => {
+  it("종신 샘플: '사망률(남)' 이 '사망률' 에 이어진다(이름 포함) · 장해율은 정확히", () => {
     const spec = sample("whole");
     const sheet = sheetFromText("08.csv", csv);
     const st = { sheet, map: autoMap(sheet, spec.rates) };
@@ -62,12 +62,12 @@ describe("표를 올리면 — 이름으로 잇고, 없는 이름은 새 위험�
 
 describe("조건에 더하면 표에 빈 열, 지우면 연결 해제", () => {
   const spec = sample("twoMajor");
-  const sheet = sheetFromText("s", "연령\t제7회 경험생명표 사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
+  const sheet = sheetFromText("s", "연령\t사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
   const st0: SheetState = { sheet, map: autoMap(sheet, spec.rates) };
 
   it("빈 열은 그 위험률에 이어지되 값 표는 아직 없다 — 값을 채우면 붙는다", () => {
     const st = addEmptyColumn(st0, { id: "r3", name: "3대질병 발생률" })!;
-    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률", "2대질병 발생률", "3대질병 발생률"]);
+    expect(st.sheet.head).toEqual(["연령", "사망률", "2대질병 발생률", "3대질병 발생률"]);
     expect(st.sheet.rows.map((r) => r[3])).toEqual(["", ""]);
     expect(ids(st)).toEqual(["age", "q", "r2", "r3"]);
     const rates = [...spec.rates, { id: "r3", name: "3대질병 발생률", role: "incidence" as const }];
@@ -91,7 +91,7 @@ describe("조건에 더하면 표에 빈 열, 지우면 연결 해제", () => {
 
 describe("표 창에서 바로 고치기 — 칸 값 · 열 이름", () => {
   const spec = sample("twoMajor");
-  const sheet = sheetFromText("s", "연령\t제7회 경험생명표 사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
+  const sheet = sheetFromText("s", "연령\t사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
   const st0: SheetState = { sheet, map: autoMap(sheet, spec.rates) };
   it("값을 고치면 붙는 표(→ 산출방법서 별첨 · JSON)가 바뀌고, 수가 아니면 그 칸은 빠진다", () => {
     const st = setCell(st0, 1, 2, "0.005");
@@ -102,7 +102,7 @@ describe("표 창에서 바로 고치기 — 칸 값 · 열 이름", () => {
   });
   it("열 이름을 고치면 머리글이 바뀌고 연결은 그대로 · 빈 이름은 무시", () => {
     const st = setHead(st0, 2, " 2대질병 진단율 ");
-    expect(st.sheet.head).toEqual(["연령", "제7회 경험생명표 사망률", "2대질병 진단율"]);
+    expect(st.sheet.head).toEqual(["연령", "사망률", "2대질병 진단율"]);
     expect(st.map).toEqual(st0.map);
     expect(setHead(st0, 2, "  ")).toBe(st0);
   });
@@ -113,14 +113,14 @@ describe("산출방법서에 위험률을 더해 올리면 — 조건에 더해�
     const spec = sample("twoMajor");
     let md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
     md = md.replace(/^(\| 2대질병 발생률 \|.*)$/m, "$1\n| 뇌졸중 발생률 | r9 | 최초발생 | 가상 | 별첨 |")
-      .replace("| 탈퇴 위험률 | 제7회 경험생명표 사망률 및 2대질병 발생률 |", "| 탈퇴 위험률 | 제7회 경험생명표 사망률 및 2대질병 발생률 및 뇌졸중 발생률 |");
+      .replace("| 탈퇴 위험률 | 사망률 및 2대질병 발생률 |", "| 탈퇴 위험률 | 사망률 및 2대질병 발생률 및 뇌졸중 발생률 |");
     const back = parseMethodDoc(extractText(new TextEncoder().encode(md)), { fallbackName: spec.meta.productName });
     const { spec: out, changes } = mergeSpec(spec, back.spec, back.evidence, { standard: true });
     expect(changes).toEqual(['rates: "뇌졸중 발생률" 추가', "benefits: 1개 → 1개 갱신"]);
     const added = out.rates.find((r) => r.name === "뇌졸중 발생률")!;
     expect(out.benefits[0].exitRateIds).toEqual(["q", "r2", added.id]);
     expect(withFormulas(out).formulas[0].text).toContain("r^{(2)}_x : 뇌졸중 발생률");
-    const sheet = sheetFromText("s", "연령\t제7회 경험생명표 사망률\t2대질병 발생률\n40\t0.001\t0.002");
+    const sheet = sheetFromText("s", "연령\t사망률\t2대질병 발생률\n40\t0.001\t0.002");
     const st = addEmptyColumn({ sheet, map: autoMap(sheet, spec.rates) }, added)!;
     expect(st.sheet.head.at(-1)).toBe("뇌졸중 발생률");
     expect(ratesWithoutTable(attachTables(out, st)).map((r) => r.name)).toEqual(["뇌졸중 발생률"]);

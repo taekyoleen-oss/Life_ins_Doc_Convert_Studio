@@ -71,7 +71,7 @@ describe("위험률 값 표 — 별첨으로 문서에 실리고 되읽으면 �
     expect(last.title).toMatch(/^\d+\. 별첨 — 위험률 표$/);
     const t = last.blocks.find((b) => b.t === "table");
     expect(t && t.t === "table" ? [t.head, t.rows] : null).toEqual([
-      ["연령", "제7회 경험생명표 사망률(남)", "제7회 경험생명표 사망률(여)", "80% 이상 장해율"],
+      ["연령", "사망률(남)", "사망률(여)", "80% 이상 장해율"],
       [[40, 0.001, 0.0005, 0.0012], [41, 0.0011, 0.0006, 0.0013]],
     ]);
     expect(renderMethodDoc(withFormulas(spec)).some((s) => /별첨/.test(s.title))).toBe(false);

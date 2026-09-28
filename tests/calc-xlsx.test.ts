@@ -54,7 +54,7 @@ describe("보험료 계산 → 엑셀 수식", () => {
   it("표 — 위험률만 값이고 현가율·유지자수·납입자수·기수는 모두 수식", () => {
     // 머리: t · 연령 · 위험률 3 · 현가율 2 · 계산기수 …
     expect(cell(sheet1, "D1")?.s).toBe("t (경과)");
-    expect(cell(sheet1, "F1")?.s).toContain("q 제7회 경험생명표 사망률");
+    expect(cell(sheet1, "F1")?.s).toContain("q 사망률");
     expect(cell(sheet1, "I1")?.s).toBe("v^t 현가율");
     expect(cell(sheet1, "J1")?.s).toBe("v^{t+½} 현가율");
     expect(cell(sheet1, "K1")?.s).toBe("Q 탈퇴율");

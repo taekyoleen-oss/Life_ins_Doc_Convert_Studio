@@ -56,7 +56,7 @@ describe("조건 → 산출식", () => {
 
   it("종신: 사망·80% 장해 한 집단 — 탈퇴율 Q = q + r − q·r/2, 유지자수·납입자수는 1 − Q", () => {
     const g = byKey("whole", "group:g1");
-    expect(g.section).toBe("탈퇴자·유지자·납입자");
+    expect(g.section).toBe("유지자수·납입자수");
     expect(g.path).toBe("benefits[0]|rates[0]|rates[1]");        // 담보·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
     expect(g.text).toContain("Q_{x+t} = q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2");
@@ -64,7 +64,7 @@ describe("조건 → 산출식", () => {
     expect(g.text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q_{x+t} )");
     // 급부는 담보의 절(보험금의 현가)에 — 사망형은 탈퇴자 전부
     const b = byKey("whole", "benefit:b1");
-    expect(b.section).toBe("보험금의 현가");
+    expect(b.section).toBe("계산기수 — 보험금");
     expect(b.text).toContain("C_{x+t} = l_{x+t}·Q_{x+t}·v^{t+½}");
     expect(b.text).toContain("M_{x+t} = Σ_{u=t}^{n−1} S_u·C_{x+u}");
     expect(b.text).toContain("PVB = M_x");

@@ -26,9 +26,9 @@ reserve:
     - 연중 보간은 하지 않고 연말 기준으로 산출한다.`;
 
 const Q = `  - id: q
-    name: 제7회 경험생명표 사망률
+    name: 사망률
     role: death
-    source: 보험개발원 제7회 경험생명표 사망률`;
+    source: 경험생명표(가상) 사망률`;
 
 export interface Sample { id: string; label: string; hint: string; yaml: string }
 
@@ -60,13 +60,12 @@ ${Q}
   - id: r80
     name: 80% 이상 장해율
     role: incidence
-    source: 써미트 2014-59호 80%이상 재해장해 + 질병장해발생율
+    source: 경험생명표(가상) 80%이상 재해장해율 + 질병장해율
 ${EXPENSES}
 benefits:
   - id: b1
     name: 사망·80% 이상 장해
     role: death       # 사망형 — 탈퇴 사유 전부에 같은 보험금
-    trigger: 사망 또는 80% 이상 장해 시
     amount: 100000000
     endAge: 110
     exitRateIds: [q, r80]   # 유지자수·납입자수 = 1 − q − r + q·r/2
@@ -91,13 +90,12 @@ ${Q}
   - id: r2
     name: 2대질병 발생률
     role: incidence
-    source: 무배당 예정 뇌출혈 + 급성심근경색증 발생률 (제공 자료)
+    source: 경험생명표(가상) 뇌출혈 + 급성심근경색증 발생률
 ${EXPENSES}
 benefits:
   - id: b1
     name: 2대질병 진단
     role: incidence
-    trigger: 진단 확정 시
     amount: 30000000
     endAge: 80
     rateId: r2
@@ -126,13 +124,12 @@ ${Q}
   - id: rc
     name: 암발생률
     role: incidence
-    source: 보험개발원 생명장기제2024-112호 무배당 예정 경험 암발생률
+    source: 경험생명표(가상) 암발생률
 ${EXPENSES}
 benefits:
   - id: b1
     name: 암 진단
     role: incidence
-    trigger: 진단 확정 시
     amount: 50000000
     endAge: 100
     waitDays: 90
@@ -158,17 +155,16 @@ ${Q}
   - id: r3
     name: 3대질병 발생률
     role: incidence
-    source: 암 + 뇌출혈 + 급성심근경색증 발생률
+    source: 경험생명표(가상) 암 + 뇌출혈 + 급성심근경색증 발생률
   - id: f80
     name: 80% 이상 장해율
     role: waiver
-    source: 써미트 2014-59호 80%이상 재해장해 + 질병장해발생율
+    source: 경험생명표(가상) 80%이상 재해장해율 + 질병장해율
 ${EXPENSES}
 benefits:
   - id: b1
     name: 3대질병 진단
     role: incidence
-    trigger: 진단 확정 시
     amount: 30000000
     endAge: 80
     rateId: r3
@@ -200,24 +196,22 @@ ${Q}
   - id: r80
     name: 80% 이상 장해율
     role: incidence
-    source: 써미트 2014-59호 80%이상 재해장해 + 질병장해발생율
+    source: 경험생명표(가상) 80%이상 재해장해율 + 질병장해율
   - id: rc
     name: 암발생률
     role: incidence
-    source: 보험개발원 생명장기제2024-112호 무배당 예정 경험 암발생률
+    source: 경험생명표(가상) 암발생률
 ${EXPENSES}
 benefits:
   - id: b1
     name: 사망·80% 이상 장해
     role: death       # 사망형 — 탈퇴 사유 전부에 같은 보험금
-    trigger: 사망 또는 80% 이상 장해 시
     amount: 100000000
     endAge: 110
     exitRateIds: [q, r80]   # 유지자수 = 1 − q − r + q·r/2 · 납입자수는 암 진단(납입면제)으로 더 준다
   - id: b2
     name: 암 진단
     role: incidence   # 진단형 — 기본 식(사망 + 암 진단이 탈퇴)
-    trigger: 암 진단 확정 시 (사망보험금의 50%)
     amount: 50000000
     endAge: 100
     waitDays: 90      # 암 면책 90일 — 첫해 급부는 (1 − 3/12) 배
