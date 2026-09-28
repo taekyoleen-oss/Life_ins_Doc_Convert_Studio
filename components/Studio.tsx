@@ -56,10 +56,11 @@ type PaneId = "cond" | "doc" | "sheet";
 interface Buf { text: string; dirty: boolean }
 type Toast = { text: string; kind: "ok" | "warn" | "err" } | null;
 /** 화면 나눔 — 비율·숨김·크게 보기·왼쪽 탭·펼친 카드. 브라우저에 기억한다 */
-interface Layout { split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[]; formulas: boolean }
+/** `v` 는 저장본 판 — 기본값을 바꾸면 올린다(옛 저장본의 그 값을 한 번 버린다) */
+interface Layout { v: number; split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[]; formulas: boolean }
 const PANES: PaneId[] = ["cond", "doc", "sheet"];
 const PANE_NAME: Record<PaneId, string> = { cond: "조건", doc: "산출방법서", sheet: "위험률 표" };
-const LAYOUT0: Layout = { split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"], formulas: true };
+const LAYOUT0: Layout = { v: 2, split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"], formulas: false };
 
 const KEY = "life_ins_doc_convert_studio";
 const STORE = `${KEY}:yaml`;
@@ -87,7 +88,9 @@ function sanitizeLayout(raw: unknown): Layout {
     hide: hide.length === PANES.length ? [] : hide, max: PANES.includes(l.max as PaneId) ? (l.max as PaneId) : null,
     left: l.left === "yaml" ? "yaml" : "form",
     open: Array.isArray(l.open) ? l.open.filter((x): x is string => typeof x === "string").slice(0, 80) : LAYOUT0.open,
-    formulas: typeof l.formulas === "boolean" ? l.formulas : true,
+    // 카드의 식은 기본이 숨김이다 — v 가 낮은 옛 저장본(보이기)은 한 번 버린다
+    formulas: l.v === LAYOUT0.v && typeof l.formulas === "boolean" ? l.formulas : LAYOUT0.formulas,
+    v: LAYOUT0.v,
   };
 }
 const SHEET_EXT = /\.(csv|tsv|xlsx|xls)$/i;

@@ -126,7 +126,7 @@ function DocPreview({ sections, title, highlight, changed = [], follow, onPick }
 
   useEffect(() => {
     if (!follow || !hl.size) return;
-    body.current?.querySelector(".doc-hl")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    body.current?.querySelector(".doc-hl")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [hl, follow]);
 
   // 끌어서 고른 범위 → 걸친 블록들의 경로

@@ -57,6 +57,13 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("M07: 산출방법서의 식을 그대로 읽어 시산 — 10만원당 261 · 162 · 담보 보험료 합 342,000원",
     calc0[0].includes("261") && calc0[1].includes("162") && calc0[2].includes("342,000 원"), JSON.stringify(calc0));
 
+  // 0-1b) 카드의 식은 기본이 숨김 — 값부터 보게 한다. 뒤의 식 확인을 위해 켠다
+  ok("카드의 식은 기본이 숨김 (머리 단추가 [수식 보이기])",
+    (await p.locator(".card[data-card=M05] .formula-card").count()) === 0
+    && (await p.locator("button[title*='카드의 식']").textContent()).includes("수식 보이기"));
+  await p.click("button[title*='카드의 식']");
+  await p.waitForTimeout(500);
+
   // 0-2) 보장 카드 — 담보 하나가 조건 + 보험금 현가 식 한 묶음, 유지자수는 보험료 카드에서 가져온다
   await p.click(".card[data-card=B01] .card-head");
   await p.waitForTimeout(600);
@@ -64,6 +71,13 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("B01: 담보마다 유지자수 l 을 보험료 카드의 집단에서 가져온다고 밝힌다",
     lxFrom.includes("보험료 카드의 집단") && lxFrom.includes("사망 · 80% 이상 장해"), lxFrom.slice(0, 80));
   ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다", (await p.locator("[data-path$='.trigger']").count()) === 0);
+  const fldRows = await p.$$eval(".card[data-card=B01] .fld", (els) => els.map((f) => {
+    const lab = f.querySelector(".fld-label"), box = f.querySelector(".fld-box");
+    if (!lab || !box) return null;
+    const a = lab.getBoundingClientRect(), c = box.getBoundingClientRect();
+    return Math.abs((a.top + a.height / 2) - (c.top + c.height / 2)) < 6;
+  }).filter((x) => x !== null));
+  ok("입력 칸은 이름과 칸이 한 줄 (자리가 모자랄 때만 두 줄)", fldRows.length >= 5 && fldRows.every(Boolean), `${fldRows.filter(Boolean).length}/${fldRows.length}`);
   await p.click(".card[data-card=B01] .lx-from button");
   await p.waitForTimeout(600);
   ok("[보험료 카드에서 보기] → M05 가 펼쳐지고 그 집단 식이 강조된다",
@@ -191,6 +205,27 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(400);
   const m2 = await p.$$eval(".cm-mirror-hl", (els) => els.map((e) => e.textContent));
   ok("원문 사업비 표 → 조건 사업비 줄 강조", m2.some((t) => /expenses|α|β|γ|group/.test(t)), m2.slice(0, 3).join(" / "));
+
+  // 5-2) 고른 곳이 창 가운데로 — 조건 → 산출방법서, 산출방법서 → 조건
+  await p.click("button.tab:has-text('산출방법서')");
+  await p.click("button[title^='카드의 칸을 채우면']");
+  await p.waitForTimeout(600);
+  await p.click(".card[data-card=M04] .card-head");
+  await p.waitForTimeout(900);
+  const midOff = async (sel, paneSel) => p.evaluate(([s2, ps]) => {
+    const el = document.querySelector(s2), pane = ps === "doc" ? document.querySelector("#print-area").closest(".overflow-auto") : document.querySelector(ps);
+    if (!el || !pane) return 9999;
+    const a = el.getBoundingClientRect(), b = pane.getBoundingClientRect();
+    return Math.round(Math.abs((a.top + a.height / 2) - (b.top + b.height / 2)));
+  }, [sel, paneSel]);
+  const off1 = await midOff(".doc-hl", "doc");
+  ok("조건을 고르면 산출방법서의 그 자리가 창 가운데로 온다", off1 <= 60, `가운데에서 ${off1}px`);
+  await p.evaluate(() => { const r = [...document.querySelectorAll("#print-area tr[data-path]")]; r[r.length - 1]?.click(); });
+  await p.waitForTimeout(1200);
+  const off2 = await midOff(".form-hl", ".form-body");
+  ok("산출방법서를 고르면 조건의 그 자리가 창 가운데로 온다", off2 <= 60, `가운데에서 ${off2}px`);
+  await p.click("button[title^='같은 조건을 MethodSpec']");
+  await p.waitForTimeout(400);
 
   // 6-1) 표준 양식 PDF 열기 — Word 와 같은 조건이 되고 보험료까지 나온다
   const sdir10 = path.join(__dirname, "../samples");

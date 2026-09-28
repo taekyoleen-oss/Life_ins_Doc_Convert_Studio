@@ -99,11 +99,12 @@ function F({ p, label, kind = "text", unit, hint, wide, dl, placeholder, bare, k
     ? <textarea rows={kind === "formula" ? 3 : 2} {...props} onChange={(e) => put(e.target.value)} />
     : <input type="text" inputMode={kind === "num" ? "decimal" : undefined} list={dl} {...props} onChange={(e) => put(e.target.value)}
         onBlur={kind === "pct" ? () => { if (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1) f.set(p, `${s}%`); } : undefined} />;
-  const box = <span className="flex min-w-0 items-center gap-1">{input}{unit && <span className="fld-unit">{unit}</span>}</span>;
+  const tall = kind === "area" || kind === "formula";
+  const box = <span className={`fld-box flex items-center gap-1 ${bare ? "min-w-0" : ""}`}>{input}{unit && <span className="fld-unit">{unit}</span>}</span>;
   if (bare) return <span data-path={key} className="min-w-0">{box}</span>;
   const note = f.note(p);
   return (
-    <label data-path={key} className={`fld ${wide ? "col-span-2" : ""}`}>
+    <label data-path={key} className={`fld ${wide ? "col-span-2" : ""} ${tall ? "fld-tall" : ""}`}>
       <span className="fld-label">{label}</span>
       {box}
       {bad ? <span className="fld-err">{bad}</span> : hint ? <span className="fld-hint">{hint}</span> : null}
@@ -119,7 +120,7 @@ function Sel({ p, label, options, hint, wide, onPick }: { p: YamlPath; label: st
   return (
     <label data-path={key} className={`fld ${wide ? "col-span-2" : ""}`}>
       <span className="fld-label">{label}</span>
-      <select className="inp" value={cur} onFocus={() => f.select(key)}
+      <select className="inp fld-box" value={cur} onFocus={() => f.select(key)}
         onChange={(e) => { const v = opts.find(([o]) => String(o) === e.target.value)?.[0] ?? e.target.value; if (onPick) f.edit(onPick(v)); else f.set(p, v === "" ? undefined : v); }}>
         {!options.some(([o]) => o === "") && <option value="">—</option>}
         {opts.map(([o, l]) => <option key={String(o)} value={String(o)}>{l}</option>)}
@@ -958,7 +959,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     const hit = [...matchBlocks(els.map((el) => splitPaths(el.dataset.path)), highlight)].map((i) => els[i]);
     const top = hit.filter((el) => !hit.some((o) => o !== el && o.contains(el)));
     top.forEach((el) => el.classList.add("form-hl"));
-    top[0]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    top[0]?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [highlight, open]);
 
   if (syntax) {
