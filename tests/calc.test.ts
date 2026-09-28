@@ -95,12 +95,22 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(col("l").formula).toContain("l_{x+t+1} = l_{x+t}");
     expect(col("q").formula).toContain("위험률 표에서 온 값");
     // 줄마다 "이 값들로 나왔다" — l 은 앞자리 l 과 그 자리 Q 로
-    expect(col("l").parts[1].map((p) => p.ref)).toEqual(["l(40)", "Q(40)"]);
-    expect(col("l").parts[1][0].value).toBe(100000);
+    expect(col("l").parts(1).map((p) => p.ref)).toEqual(["l(40)", "Q(40)"]);
+    expect(col("l").parts(1)[0].value).toBe(100000);
     // 표 아래 한 값들 — 엔진·엑셀과 같은 보험료
     expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G"]);
     expect(sheets.map((s) => s.per100k)).toEqual([261, 162]);
     expect([per100k, premium]).toEqual([423, 342000]);
+  });
+
+  it("한 번에 계산한다 — 같은 자리의 값을 다시 세지 않는다(화면이 멈추지 않을 만큼)", () => {
+    // 되돌이 정의(l_{x+t+1} = l_{x+t} × …)를 칸마다 t=0 부터 다시 세면 열이 O(n²) 이 된다.
+    // 담보 2개 × 72줄 × 열 19개라 그 차이가 0.7초짜리 멈춤으로 나타났다 — 모델 하나에 캐시 하나.
+    const t0 = performance.now();
+    const r = calcSheets(spec, want.contract);
+    const took = performance.now() - t0;
+    expect([r.per100k, r.premium]).toEqual([423, 342000]);
+    expect(took).toBeLessThan(150);
   });
 
   it("식을 고치면 계산이 바뀐다 — 조건만이 아니라 산출방법서의 식도 계산에 쓰인다", () => {

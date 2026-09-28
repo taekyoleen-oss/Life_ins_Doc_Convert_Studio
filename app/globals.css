@@ -194,6 +194,9 @@ td.sheet-no { z-index: 1 !important; }
 
 /* ---------- 산출방법서 ---------- */
 .doc-body { font-size: 14.5px; line-height: 1.7; word-break: keep-all; }
+/* 조건을 고칠 때마다 산출방법서 전체를 다시 그리면(별첨 위험률 표만 700칸이 넘는다) 한 글자에 몇 백 ms 가 멈춘다.
+   보이지 않는 절은 브라우저가 배치·그리기를 건너뛰게 둔다 — 화면에 들어오면 그때 그린다. 인쇄·PDF 는 전부 그린다. */
+.doc-body > section { content-visibility: auto; contain-intrinsic-size: auto 400px; }
 .doc-body h1 { font-size: 22px; font-weight: 700; border-bottom: 2px solid #1b2845; padding-bottom: 6px; margin-bottom: 10px; }
 .doc-body h2 { font-size: 17px; font-weight: 700; margin: 26px 0 8px; border-bottom: 1px solid #d5dae0; padding-bottom: 3px; }
 .doc-body p { margin: 8px 0; }
@@ -249,6 +252,7 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
   .doc-hl, tr.doc-hl > td { background: none !important; box-shadow: none !important; }
   .doc-body { max-width: none; padding: 0; font-size: 10.5pt; }
   .doc-body table { break-inside: avoid; }
+  .doc-body > section { content-visibility: visible; }      /* 인쇄·PDF 는 화면 밖 절까지 모두 */
   @page { size: A4; margin: 16mm 14mm; }
 }
 

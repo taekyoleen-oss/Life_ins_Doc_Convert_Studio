@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import katex from "katex";
-import { isNumericCell, subSup, type DocSection } from "@/lib/methoddoc/render";
+import { isNumericCell, subSup, type DocBlock, type DocSection } from "@/lib/methoddoc/render";
 import { formulaToTex } from "@/lib/methoddoc/tex";
 import { matchBlocks, splitPaths } from "@/lib/conditions/link";
 
@@ -36,28 +36,93 @@ interface Props {
   onPick: (paths: string[], scroll: boolean) => void;
 }
 
-export default function DocPreview({ sections, title, highlight, changed = [], follow, onPick }: Props) {
+/**
+ * 블록 하나. **내용과 강조가 그대로면 다시 그리지 않는다.**
+ * 산출방법서는 원소 6천 개가 넘어(별첨 위험률 표만 700칸) 한 번 다시 그릴 때마다 몇 백 ms 가 든다 —
+ * 조건을 한 글자 고치거나 산출방법서 한 줄을 골랐을 때 **바뀐 블록만** 그린다.
+ * 강조는 표 안에서 몇 번째 줄인지를 글자로 받는다("0,3") — 원시값이라 memo 가 듣는다.
+ */
+const Block = memo(function Block({ b, hlKey, chKey }: { b: DocBlock; hlKey: string; chKey: string }) {
+  const cls = (on: boolean, off: boolean, path: string | undefined, base = "") =>
+    `${base} ${path ? "doc-linked" : ""} ${on ? "doc-hl" : ""} ${off ? "doc-changed" : ""}`.trim();
+  if (b.t !== "table") {
+    const c = (base = "") => cls(hlKey === "0", chKey === "0", b.path, base);
+    if (b.t === "p" && b.kind === "sub") return <h3 data-path={b.path} className={c("doc-sub")} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
+    if (b.t === "p") return <p data-path={b.path} className={c(b.kind === "label" ? "doc-label" : "")} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
+    if (b.t === "note") return <blockquote data-path={b.path} className={c()} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
+    return <div data-path={b.path} className={c("formula")} dangerouslySetInnerHTML={{ __html: formulaHtml(b.text) }} />;
+  }
+  const hl = new Set(hlKey ? hlKey.split(",") : []), ch = new Set(chKey ? chKey.split(",") : []);
+  return (
+    <div className="table-wrap">
+      <table className={b.head.length >= 8 ? "wide" : ""}>
+        <thead><tr>{b.head.map((h, i) => <th key={i} dangerouslySetInnerHTML={{ __html: subSup(h) }} />)}</tr></thead>
+        <tbody>
+          {b.rows.map((r, ri) => (
+            <tr key={ri} data-path={b.rowPaths?.[ri]} className={cls(hl.has(String(ri)), ch.has(String(ri)), b.rowPaths?.[ri])}>
+              {r.map((c, ci) => <td key={ci} className={ci && isNumericCell(c) ? "num" : ""} dangerouslySetInnerHTML={{ __html: subSup(String(c)) }} />)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
+
+/** 그 블록이 차지하는 항목 수 (강조 번호 단위 — 표는 줄 수만큼) */
+const countOf = (b: DocBlock) => (b.t === "table" ? b.rows.length : 1);
+
+function DocPreview({ sections, title, highlight, changed = [], follow, onPick }: Props) {
   const body = useRef<HTMLDivElement | null>(null);
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
 
-  // 블록·표 행을 한 줄로 늘어놓아 번호를 매긴다(강조 계산 단위)
-  const { items, layout } = useMemo(() => {
-    const items: Item[] = [];
-    const layout = sections.map((sec) => ({
-      sec,
+  // 내용이 그대로인 블록은 앞의 객체를 다시 쓴다 — 그러면 Block 의 memo 가 듣고 React 가 그 블록을 건너뛴다
+  const kept = useRef(new Map<string, DocBlock>());
+  const stable = useMemo(() => {
+    const next = new Map<string, DocBlock>();
+    const out = sections.map((sec) => ({
+      ...sec,
       blocks: sec.blocks.map((b) => {
-        if (b.t !== "table") { items.push({ kind: b.t, text: b.text, path: b.path }); return { b, first: items.length - 1 }; }
-        const first = items.length;
-        b.rows.forEach((cells, i) => items.push({ kind: "row", cells, path: b.rowPaths?.[i] }));
-        return { b, first };
+        const sig = JSON.stringify(b);
+        const old = kept.current.get(sig) ?? b;
+        next.set(sig, old);
+        return old;
       }),
     }));
-    return { items, layout };
+    kept.current = next;
+    return out;
   }, [sections]);
 
-  const hl = useMemo(() => matchBlocks(items.map((it) => splitPaths(it.path)), highlight), [items, highlight]);
-  const ch = useMemo(() => matchBlocks(items.map((it) => splitPaths(it.path)), changed), [items, changed]);
+  // 블록·표 행을 한 줄로 늘어놓아 번호를 매긴다(강조 계산 단위)
+  const { items, firsts } = useMemo(() => {
+    const items: Item[] = [], firsts: number[][] = [];
+    for (const sec of stable) {
+      const mine: number[] = [];
+      for (const b of sec.blocks) {
+        mine.push(items.length);
+        if (b.t !== "table") items.push({ kind: b.t, text: b.text, path: b.path });
+        else b.rows.forEach((cells, i) => items.push({ kind: "row", cells, path: b.rowPaths?.[i] }));
+      }
+      firsts.push(mine);
+    }
+    return { items, firsts };
+  }, [stable]);
+
+  const paths = useMemo(() => items.map((it) => splitPaths(it.path)), [items]);
+  const hl = useMemo(() => matchBlocks(paths, highlight), [paths, highlight]);
+  const ch = useMemo(() => matchBlocks(paths, changed), [paths, changed]);
+  /** 블록마다 "몇 번째 줄이 강조인가" 를 글자로 — 바뀐 블록만 다시 그리게 한다 */
+  const keys = useMemo(() => stable.map((sec, si) => sec.blocks.map((b, bi) => {
+    const from = firsts[si][bi], n = countOf(b);
+    const pick = (s: Set<number>) => {
+      if (!s.size) return "";
+      const out: string[] = [];
+      for (let i = 0; i < n; i++) if (s.has(from + i)) out.push(String(i));
+      return out.join(",");
+    };
+    return { hlKey: pick(hl), chKey: pick(ch) };
+  })), [stable, firsts, hl, ch]);
 
   useEffect(() => {
     if (!follow || !hl.size) return;
@@ -68,13 +133,12 @@ export default function DocPreview({ sections, title, highlight, changed = [], f
   useEffect(() => {
     const onSel = () => {
       const sel = window.getSelection();
-      const root = body.current;
-      if (!sel || sel.isCollapsed || !sel.rangeCount || !root) return;
+      if (!sel || sel.isCollapsed || !body.current) return;
       const r = sel.getRangeAt(0);
-      if (!root.contains(r.commonAncestorContainer)) return;
-      const paths = new Set<string>();
-      root.querySelectorAll<HTMLElement>("[data-path]").forEach((el) => { if (r.intersectsNode(el)) splitPaths(el.dataset.path).forEach((p) => paths.add(p)); });
-      if (paths.size) onPickRef.current([...paths], false);
+      if (!body.current.contains(r.commonAncestorContainer)) return;
+      const got = [...body.current.querySelectorAll<HTMLElement>("[data-path]")]
+        .filter((el) => r.intersectsNode(el)).flatMap((el) => splitPaths(el.dataset.path));
+      if (got.length) onPickRef.current([...new Set(got)], false);
     };
     document.addEventListener("selectionchange", onSel);
     return () => document.removeEventListener("selectionchange", onSel);
@@ -88,38 +152,18 @@ export default function DocPreview({ sections, title, highlight, changed = [], f
     if (el) onPickRef.current(splitPaths(el.dataset.path), true);
   };
 
-  const cls = (i: number, base = "") => `${base} ${items[i].path ? "doc-linked" : ""} ${hl.has(i) ? "doc-hl" : ""} ${ch.has(i) ? "doc-changed" : ""}`.trim();
-
   return (
     <div ref={body} id="print-area" className="doc-body mx-auto max-w-[860px] px-8 py-6"
       onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY }; }} onClick={onClick}>
       <h1>{title}</h1>
-      {layout.map(({ sec, blocks }) => (
+      {stable.map((sec, si) => (
         <section key={sec.id}>
           <h2>{sec.title}</h2>
-          {blocks.map(({ b, first }, bi) => {
-            const path = b.t === "table" ? undefined : b.path;
-            if (b.t === "p" && b.kind === "sub") return <h3 key={bi} data-path={path} className={cls(first, "doc-sub")} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
-            if (b.t === "p") return <p key={bi} data-path={path} className={cls(first, b.kind === "label" ? "doc-label" : "")} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
-            if (b.t === "note") return <blockquote key={bi} data-path={path} className={cls(first)} dangerouslySetInnerHTML={{ __html: subSup(b.text) }} />;
-            if (b.t === "formula") return <div key={bi} data-path={path} className={cls(first, "formula")} dangerouslySetInnerHTML={{ __html: formulaHtml(b.text) }} />;
-            return (
-              <div key={bi} className="table-wrap">
-                <table className={b.head.length >= 8 ? "wide" : ""}>
-                  <thead><tr>{b.head.map((h, i) => <th key={i} dangerouslySetInnerHTML={{ __html: subSup(h) }} />)}</tr></thead>
-                  <tbody>
-                    {b.rows.map((r, ri) => (
-                      <tr key={ri} data-path={b.rowPaths?.[ri]} className={cls(first + ri)}>
-                        {r.map((c, ci) => <td key={ci} className={ci && isNumericCell(c) ? "num" : ""} dangerouslySetInnerHTML={{ __html: subSup(String(c)) }} />)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
+          {sec.blocks.map((b, bi) => <Block key={bi} b={b} hlKey={keys[si][bi].hlKey} chKey={keys[si][bi].chKey} />)}
         </section>
       ))}
     </div>
   );
 }
+
+export default memo(DocPreview);

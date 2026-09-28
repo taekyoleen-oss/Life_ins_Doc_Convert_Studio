@@ -215,8 +215,9 @@ export default function Studio() {
   // LaTeX·Markdown 편집 버퍼 — 고치지 않았으면 조건에서 늘 새로 만든다
   const [latex, setLatex] = useState<Buf>({ text: "", dirty: false });
   const [md, setMd] = useState<Buf>({ text: "", dirty: false });
-  const genLatex = useMemo(() => docToLatex(sections, title), [sections, title]);
-  const genMd = useMemo(() => docToMarkdown(sections, title), [sections, title]);
+  // 그 탭을 볼 때만 만든다 — 조건을 한 글자 고칠 때마다 만들면 헛일이다(내보내기는 lib/export.ts 가 따로 만든다)
+  const genLatex = useMemo(() => (tab === "latex" ? docToLatex(sections, title) : ""), [tab, sections, title]);
+  const genMd = useMemo(() => (tab === "markdown" ? docToMarkdown(sections, title) : ""), [tab, sections, title]);
 
   const mirror = useMemo(() => linesOfPaths(parsed.ranges, rightSel), [parsed, rightSel]);
   // 마지막으로 연(또는 표시를 지운) 조건과 다른 곳 — 입력 카드·산출방법서에 "바뀜" 표시

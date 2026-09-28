@@ -198,10 +198,10 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
                       : <div className="formula-preview" dangerouslySetInnerHTML={{ __html: formulaHtml(pick.col.formula) }} />}
                     {pick.t !== undefined && (
                       <>
-                        {(pick.col.parts[pick.t] ?? []).length > 0 && (
+                        {pick.col.parts(pick.t).length > 0 && (
                           <table className="calc-parts">
                             <tbody>
-                              {pick.col.parts[pick.t].map((p, i) => (
+                              {pick.col.parts(pick.t).map((p, i) => (
                                 <tr key={i}><th dangerouslySetInnerHTML={{ __html: subSup(p.ref.replace("(", "_{").replace(")", "}")) }} /><td className="num">{num(p.value, 8)}</td></tr>
                               ))}
                             </tbody>
