@@ -1,4 +1,4 @@
-# samples/·standards/ 의 .docx → 같은 이름 .pdf (Word COM).
+﻿# samples/·standards/ 의 .docx → 같은 이름 .pdf (Word COM).
 # "PDF 로 가져와도 Word 와 같은 조건" 시험(tests/pdf-vs-word.test.ts)이 쓰는 파일을 만든다.
 #   powershell -ExecutionPolicy Bypass -File scripts/make-sample-pdf.ps1 -Files "samples/10_...docx"
 param([string[]]$Files)

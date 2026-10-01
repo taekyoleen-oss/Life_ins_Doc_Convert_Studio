@@ -35,8 +35,8 @@ describe("조건 줄 → 산출방법서 블록", () => {
     expect(got.some((t) => /^G = \[/.test(t))).toBe(true);
   });
   it("담보 안의 금액 줄 → 담보 표의 그 담보 행과 그 담보의 유지자수·납입자수 식", () => {
-    const got = hl(lineOf(/amount: 100000000/));
-    expect(got.some((t) => /^보장금액 \| 100,000,000원/.test(t))).toBe(true);    // 담보마다 세로 표
+    const got = hl(lineOf(/multiple: 1/));
+    expect(got.some((t) => /^보장금액 \| 가입금액의 1배/.test(t))).toBe(true);    // 담보마다 세로 표 — 보장금액은 가입금액의 배수
     expect(got.some((t) => /l_\{x\+t\+1\} = l_\{x\+t\}/.test(t))).toBe(true);
   });
   it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 담보식", () => {

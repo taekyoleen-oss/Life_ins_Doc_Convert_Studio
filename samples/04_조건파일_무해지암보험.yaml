@@ -35,10 +35,9 @@ benefits:
   - id: b1
     name: 암 진단
     role: incidence
-    amount: 50000000
+    multiple: 1
     endAge: 100
-    waitDays: 90
-    rateId: rc
+    waitDays: 90      # 면책·삭감 기간 — 90일 면책(지급 0%)
     exitRateIds: [q, rc]
 surrender:
   deductionYears: 7

@@ -2143,7 +2143,7 @@
       "id": "b1",
       "name": "사망·80% 이상 장해",
       "role": "death",
-      "amount": 100000000,
+      "multiple": 1,
       "endAge": 110,
       "exitRateIds": [
         "q",
@@ -2154,10 +2154,9 @@
       "id": "b2",
       "name": "암 진단",
       "role": "incidence",
-      "amount": 50000000,
+      "multiple": 0.5,
       "endAge": 100,
       "waitDays": 90,
-      "rateId": "rc",
       "exitRateIds": [
         "q",
         "rc"

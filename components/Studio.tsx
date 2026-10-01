@@ -57,10 +57,10 @@ interface Buf { text: string; dirty: boolean }
 type Toast = { text: string; kind: "ok" | "warn" | "err" } | null;
 /** 화면 나눔 — 비율·숨김·크게 보기·왼쪽 탭·펼친 카드. 브라우저에 기억한다 */
 /** `v` 는 저장본 판 — 기본값을 바꾸면 올린다(옛 저장본의 그 값을 한 번 버린다) */
-interface Layout { v: number; split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[]; formulas: boolean }
+interface Layout { v: number; split: number; sheetH: number; hide: PaneId[]; max: PaneId | null; left: "form" | "yaml"; open: string[]; /** 식을 보이는 카드 id — 카드마다 [수식 보이기], 기본 숨김 */ formulas: string[] }
 const PANES: PaneId[] = ["cond", "doc", "sheet"];
 const PANE_NAME: Record<PaneId, string> = { cond: "조건", doc: "산출방법서", sheet: "위험률 표" };
-const LAYOUT0: Layout = { v: 2, split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"], formulas: false };
+const LAYOUT0: Layout = { v: 3, split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"], formulas: [] };
 
 const KEY = "life_ins_doc_convert_studio";
 const STORE = `${KEY}:yaml`;
@@ -88,8 +88,8 @@ function sanitizeLayout(raw: unknown): Layout {
     hide: hide.length === PANES.length ? [] : hide, max: PANES.includes(l.max as PaneId) ? (l.max as PaneId) : null,
     left: l.left === "yaml" ? "yaml" : "form",
     open: Array.isArray(l.open) ? l.open.filter((x): x is string => typeof x === "string").slice(0, 80) : LAYOUT0.open,
-    // 카드의 식은 기본이 숨김이다 — v 가 낮은 옛 저장본(보이기)은 한 번 버린다
-    formulas: l.v === LAYOUT0.v && typeof l.formulas === "boolean" ? l.formulas : LAYOUT0.formulas,
+    // 카드의 식은 기본이 숨김이다(카드마다) — v 가 낮은 옛 저장본(한 단추)은 한 번 버린다
+    formulas: l.v === LAYOUT0.v && Array.isArray(l.formulas) ? l.formulas.filter((x): x is string => typeof x === "string") : LAYOUT0.formulas,
     v: LAYOUT0.v,
   };
 }
@@ -547,7 +547,7 @@ export default function Studio() {
         <h1 className="mr-1 font-title text-lg font-bold tracking-tight text-foreground">Life_ins_Doc_Convert_<span className="text-primary">Studio</span></h1>
         <span className="mr-auto hidden text-xs text-muted-foreground lg:inline">산출방법서 ↔ 조건</span>
         <div className="seg" role="group" aria-label="보기">
-          <span className="seg-label">보기</span>
+          <span className="seg-label" title="이 묶음의 이름 — 아래 창(조건 · 산출방법서 · 위험률 표)을 켜고 끕니다">보기</span>
           {PANES.map((p) => (
             <button key={p} aria-pressed={visible(p)} className={visible(p) ? "seg-on" : ""} onClick={() => togglePane(p)} title={`${PANE_NAME[p]} ${visible(p) ? "숨기기" : "보이기"}`}>{PANE_NAME[p]}</button>
           ))}
@@ -615,10 +615,6 @@ export default function Studio() {
                     <button className="pane-tool" disabled={!histN.past} onClick={() => restore(-1)} title="마지막 입력·변경을 되돌립니다 (Ctrl+Z — 칸 밖에서)">↶ 되돌리기{histN.past ? ` ${histN.past}` : ""}</button>
                     <button className="pane-tool" disabled={!histN.future} onClick={() => restore(1)} title="되돌린 것을 다시 합니다 (Ctrl+Shift+Z)">↷ 다시</button>
                   </span>
-                  {layout.left === "form" && (
-                    <button className={`btn ${layout.formulas ? "btn-on" : ""}`} onClick={() => setLayout((l) => ({ ...l, formulas: !l.formulas }))}
-                      title={layout.formulas ? "카드의 식을 감춥니다 — 값만 보고 싶을 때" : "카드의 식을 보입니다 — 고치기도 여기서"}>{layout.formulas ? "수식 숨기기" : "수식 보이기"}</button>
-                  )}
                   <button className={`btn ${palLeft ? "btn-on" : ""}`} onClick={() => setPalLeft((v) => !v)} title="견본 식을 조건 M09(따로 적는 식) 에 더합니다">＋ 수식 더하기</button>
                   <span className="flex-1" />
                   {syntaxErrors.length > 0 && <span className="truncate rounded bg-rose-100 px-1.5 text-rose-700">{syntaxErrors[0].line}줄: {syntaxErrors[0].message}</span>}
@@ -630,7 +626,7 @@ export default function Studio() {
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
-                        calc={calcOn} setCalc={setCalcOn} showFormulas={layout.formulas} onPremiumSheet={() => setCalcOpen(true)} />
+                        calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
@@ -789,13 +785,15 @@ function Help({ onClose }: { onClose: () => void }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Life_ins_Doc_Convert_Studio 사용법</h2>
         <ol>
-          <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 납입자수 · C01 담보 · M06 사업비 …)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 담보·위험률·사업비 행은 ＋ 로 더합니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다. 보험료를 계산할 계약 한 점(성별·가입나이·기간·가입금액)은 산출방법서의 정보가 아니어서 이 앱에 두지 않고, 자유설계보험 상품 만들기의 M02 계약정보에서 정합니다.</li>
+          <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M01 상품 기본정보 · M03 이자율·저해지 · M04 위험률 · M05 보험료(납입자수) · B01 보장(담보마다 유지자수·보험금 현가) · M06 사업비 · M07 보험료의 계산 · M08 준비금·환급금)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 카드를 열면 그 카드가 창 가운데로 오고, 식이 있는 카드는 머리의 [수식 보이기]로 식을 켭니다(기본 숨김). 담보의 보장금액은 <b>가입금액 × 배수</b>(1배·0.5배 …), 면책·삭감은 기간(30일~2년)과 그 기간의 지급 비율(면책 0% · 50% 삭감)로 적습니다. 급부 위험률은 따로 고르지 않고 탈퇴 사유에서 정해집니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다.</li>
+          <li><b>시산보험료 조건 · 계약 단위</b> 맨 위 줄의 계약 한 점(성별·가입나이·납입기간·납입방법·가입금액)으로 시산합니다 — 납입방법(월납·3개월·6개월·연납)마다 보험료가 함께 보이고, 조건에는 저장하지 않습니다. 그 아래 탭이 계약 단위(주계약·특약)입니다 — [＋ 특약]으로 특약을 더하면 그 이름의 담보가 생기고, 보장·보험료 카드가 그 단위의 담보만 보이며, 엑셀도 단위마다 한 장이 됩니다.</li>
           <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
           <li><b>위험률 표 ↔ 조건 ↔ 계산</b> 첫 화면부터 조건과 이어진 견본 표(가상의 값)가 들어 있습니다 — 칸을 누르면 값을, 머리를 두 번 누르면 열 이름을 고치고, 열마다 [잇기]에서 조건의 위험률·성별·유형을 고릅니다(유형은 M04 에 바로 반영). 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽어 같은 이름의 위험률(M04)에 잇고, 조건에 없는 이름의 열은 새 위험률로 M04 에 더합니다(유형 확인). 거꾸로 M04 에서 위험률을 더하면 표에 그 이름의 빈 열이 생기고, 산출방법서에서 위험률을 더해 올려도 같습니다. 이은 값 표는 산출방법서 별첨과 MethodSpec JSON 에 실려 자유설계보험이 계약 성별의 표로 계산합니다 — 값 표가 없는 위험률은 상태줄에 &quot;표 없음&quot;으로 알리고 그쪽에서 0 이 됩니다. 순서: ① 샘플·산출방법서 열기 → ② 위험률 표 올리기 → ③ [내보내기 → MethodSpec .json] → 자유설계보험 /method 에서 열기.</li>
           <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M09)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
-          <li><b>＝ 보험료 계산</b> 머리의 단추를 누르면 담보마다 한 해 한 줄의 표가 열립니다 — 왼쪽에 계약·기초율(가입나이·보장기간·납입기간·이율·보장금액·사업비), 표에 위험률 → 현가율 → 유지자수·납입자수·지급자수 → 현가·누계 → 보험금. 이 앱이 산출방법서의 식을 그대로 읽어 계산한 값이고, <b>열 제목이나 값을 누르면 그 값을 만든 식과 그 해에 쓰인 값</b>이 옆에 나옵니다.</li>
-          <li><b>엑셀로 내려받기 (수식 포함)</b> 계약·기초율과 위험률만 값이고 <b>현가율부터는 모두 엑셀 수식</b>인 .xlsx 를 만듭니다 — 이 파일 하나로 산출 과정을 따라가고 값을 바꿔 다시 계산해 볼 수 있습니다.</li>
-          <li><b>식 고치기</b> 조건 카드(M05 보험료 · B01 보장 · M07 보험료의 계산 · M08)의 [식 고치기]로 산출방법서의 식을 바꾸면 문서와 계산이 함께 바뀝니다([되돌리기]로 자동 식). 값만 보고 싶으면 [수식 숨기기].</li>
+          <li><b>＝ 보험료 계산</b> 머리의 단추를 누르면 담보마다 한 해 한 줄의 표가 열립니다 — 왼쪽에 계약·기초율(가입나이·가입금액·보장기간·납입기간·이율·배수·사업비), 표에 위험률 → 현가율 → 유지자수·납입자수·지급자수 → 현가·누계 → 보험금 → <b>책임준비금 V · 해약공제 · 해지환급금 W · 환급률</b>. 이 앱이 산출방법서의 식을 그대로 읽어 계산한 값이고, <b>열 제목이나 값을 누르면 그 값을 만든 식과 그 해에 쓰인 값</b>이 옆에 나옵니다. 1원당 영업보험료는 소수 여섯째 자리까지 만든 뒤 10만원당(원 단위 반올림) → 담보 보험료(× 가입금액 × 배수 ÷ 10만) 순서입니다.</li>
+          <li><b>엑셀로 내려받기 (수식 포함)</b> 계약 단위(주계약·특약)마다 한 장 — 그 단위의 담보가 모두 한 장에 나란히 들어가고 맨 오른쪽에 담보별 보험료·준비금 결과와 합계가 있습니다. 계약·기초율과 위험률만 값이고 <b>현가율부터는 모두 엑셀 수식</b>이라 값을 바꿔 다시 계산해 볼 수 있습니다.</li>
+          <li><b>Python 일괄 산출</b> [보험료 계산] 창의 [Python 일괄 산출]은 같은 계산을 단계마다 주석을 단 파이썬 셀로 만듭니다 — 셀을 하나씩(또는 전부) 브라우저 안에서 실제로 실행하고(Pyodide, 처음 한 번 내려받음), 코드를 .py 로 내려받아 밖에서 돌려도 같은 값이 나옵니다.</li>
+          <li><b>식 고치기</b> 조건 카드(M05 보험료 · B01 보장 · M07 보험료의 계산 · M08 준비금·환급금)의 [수식 보이기] → [식 고치기]로 산출방법서의 식을 바꾸면 문서와 계산이 함께 바뀝니다([되돌리기]로 자동 식).</li>
           <li><b>자유설계보험으로</b> [내보내기 → 자유설계보험으로 보내기]로 MethodSpec JSON 을 저장하고, 자유설계보험의 [산출방법서 변환기] 화면에 그 파일을 올리면 보험료가 바로 나오고 [상품 만들기에 넣기]로 설계 전체가 됩니다.</li>
           <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
           <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>

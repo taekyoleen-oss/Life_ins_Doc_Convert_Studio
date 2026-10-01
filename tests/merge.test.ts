@@ -23,11 +23,13 @@ describe("고친 산출방법서 → 조건 (지운 것도 반영)", () => {
     const { spec } = yamlToSpec(SAMPLES[1].yaml);
     spec.benefits[0].waitDays = 90;
     spec.benefits[0].steps = [{ fromAge: 40, toAge: 59, multiple: 1 }, { fromAge: 60, toAge: 80, multiple: 0.5 }];
-    const { spec: out, changes } = roundtrip(spec, (md) => md.replace("| 면책 | 90일 |", "| 면책 | 없음 |").replace(/^> ※ .*연령 구간 배수.*$/m, ""));
+    const { spec: out, changes } = roundtrip(spec, (md) => md.replace("| 면책·삭감 | 90일 면책 |", "| 면책·삭감 | 없음 |").replace(/^> ※ .*연령 구간 배수.*$/m, ""));
     expect(changes).toEqual(["benefits: 1개 → 1개 갱신"]);
     expect(out.benefits[0].waitDays).toBeUndefined();
     expect(out.benefits[0].steps).toBeUndefined();
-    expect(out.benefits[0]).toMatchObject({ id: spec.benefits[0].id, amount: 30000000, endAge: 80, rateId: "r2", exitRateIds: ["q", "r2"] });
+    // 급부 위험률은 탈퇴 사유에서 정해지므로 rateId 는 적지 않는다
+    expect(out.benefits[0]).toMatchObject({ id: spec.benefits[0].id, multiple: 1, endAge: 80, exitRateIds: ["q", "r2"] });
+    expect(out.benefits[0].rateId).toBeUndefined();
   });
 
   it("위험률 표에서 담보가 쓰지 않는 행을 지우면 조건에서 빠지고, 쓰는 행은 남는다", () => {

@@ -54,14 +54,15 @@ describe("조건 → 산출식", () => {
   /** 짝(key)으로 식 덩이를 집는다 — 조건 카드·계산(calc)이 쓰는 것과 같은 짝이다 */
   const byKey = (id: string, key: string) => generateFormulas(sample(id as never).spec).find((x) => x.key === key)!;
 
-  it("종신: 사망·80% 장해 한 집단 — 탈퇴율 Q = q + r − q·r/2, 유지자수·납입자수는 1 − Q", () => {
+  it("종신: 사망·80% 장해 한 집단 — 탈퇴율 Q = min(1, q + r − q·r/2), 유지자수(보장 쪽)·납입자수(보험료 쪽)는 1 − Q", () => {
     const g = byKey("whole", "group:g1");
     expect(g.section).toBe("유지자수·납입자수");
     expect(g.path).toBe("benefits[0]|rates[0]|rates[1]");        // 담보·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
-    expect(g.text).toContain("Q_{x+t} = q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2");
-    expect(g.text).toContain("유지자수\nl_{x+t+1} = l_{x+t} × ( 1 − Q_{x+t} )");
-    expect(g.text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q_{x+t} )");
+    expect(g.text).toContain("Q_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
+    expect(g.text).toContain("유지자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl_{x+t+1} = l_{x+t} × ( 1 − Q_{x+t} )");
+    // 납입자수는 따로 한 덩이 — 보험료 카드(M05)가 맡는다
+    expect(byKey("whole", "pay:g1").text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q_{x+t} )");
     // 급부는 담보의 절(보험금의 현가)에 — 사망형은 탈퇴자 전부
     const b = byKey("whole", "benefit:b1");
     expect(b.section).toBe("계산기수 — 보험금");
@@ -79,7 +80,10 @@ describe("조건 → 산출식", () => {
     const low = generateFormulas(sample("noRefund").spec);
     expect(low[0].text).toContain("w_{x+t}");
     expect(low.some((x) => x.label === "저해지·무해지환급형")).toBe(true);
-    expect(byKey("waiverSupport", "group:g1").text).toContain("− f_{x+t} + Q_{x+t}·f_{x+t}/2");
+    expect(byKey("waiverSupport", "pay:g1").text).toContain("− f_{x+t} + Q_{x+t}·f_{x+t}/2");
+    // 준비금·환급금 식도 계산할 수 있는 식이다
+    const keys = generateFormulas(sample("whole").spec).map((x) => x.key);
+    expect(keys).toEqual(expect.arrayContaining(["reserve:P", "reserve:V", "surrender:alpha", "surrender:deduct", "surrender:W", "surrender:paid", "surrender:ratio", "premium:round"]));
   });
 });
 
@@ -114,16 +118,16 @@ describe("LaTeX", () => {
       expect(mergeSpec(spec, back.spec, back.evidence).changes, s.id).toEqual([]);
     }
   });
-  it("LaTeX 에서 이율·보장금액을 고치면 그 항목만 조건에 반영되고, 조건 파일의 주석은 남는다", () => {
+  it("LaTeX 에서 이율·보장금액 배수를 고치면 그 항목만 조건에 반영되고, 조건 파일의 주석은 남는다", () => {
     const src = SAMPLES[0].yaml;
     const spec = yamlToSpec(src).spec;
     const tex = docToLatex(docOf(spec), spec.meta.productName)
       .replace("적용이율 i & 2.500\\%", "적용이율 i & 3.000\\%")
-      .replace("100,000,000원", "50,000,000원");
+      .replace("가입금액의 1배", "가입금액의 0.5배");
     const back = parseMethodDoc(latexToDoc(tex));
     const { spec: merged, changes } = mergeSpec(spec, back.spec, back.evidence);
     expect(merged.basis.interest).toBeCloseTo(0.03, 12);
-    expect(merged.benefits[0].amount).toBe(5e7);
+    expect(merged.benefits[0].multiple).toBe(0.5);
     expect(changes.join("\n")).toMatch(/basis\.interest: 2\.5% → 3%/);
     const next = patchYaml(src, merged);
     expect(next).toContain("interest: 3%");

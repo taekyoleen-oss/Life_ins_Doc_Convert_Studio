@@ -66,8 +66,8 @@ benefits:
   - id: b1
     name: 사망·80% 이상 장해
     role: death       # 사망형 — 탈퇴 사유 전부에 같은 보험금
-    amount: 100000000
-    endAge: 110
+    multiple: 1       # 보장금액 = 보험가입금액 × 1배 (보험료·준비금은 1원당으로 내고 맨 뒤에 곱한다)
+    endAge: 110       # 보험기간 — 종신(110세)
     exitRateIds: [q, r80]   # 유지자수·납입자수 = 1 − q − r + q·r/2
 ${NOTES}
 ` },
@@ -96,10 +96,9 @@ benefits:
   - id: b1
     name: 2대질병 진단
     role: incidence
-    amount: 30000000
+    multiple: 1
     endAge: 80
-    rateId: r2
-    exitRateIds: [q, r2]
+    exitRateIds: [q, r2]    # 급부 위험률은 탈퇴 사유 가운데 사망이 아닌 것(2대질병 발생률)
 ${NOTES}
 ` },
   { id: "noRefund", label: "무해지환급형 암보험 (해지율 3%)", hint: "저해지·무해지 — 해지율과 환급률", yaml: `meta:
@@ -130,10 +129,9 @@ benefits:
   - id: b1
     name: 암 진단
     role: incidence
-    amount: 50000000
+    multiple: 1
     endAge: 100
-    waitDays: 90
-    rateId: rc
+    waitDays: 90      # 면책·삭감 기간 — 90일 면책(지급 0%)
     exitRateIds: [q, rc]
 ${NOTES}
 ` },
@@ -165,13 +163,12 @@ benefits:
   - id: b1
     name: 3대질병 진단
     role: incidence
-    amount: 30000000
+    multiple: 1
     endAge: 80
-    rateId: r3
     exitRateIds: [q, r3]
 ${NOTES}
 ` },
-  { id: "wholeCancer", label: "종신보험(암진단 포함)", hint: "기본 상품 — 사망·80% 장해 + 암 진단(사망보험금의 50%, 90일 면책) · 장해·암 진단 시 납입면제", yaml: `# 산출방법서 조건 — 종신보험(암진단 포함) · 이 앱의 기본 상품
+  { id: "wholeCancer", label: "종신보험(암진단 포함)", hint: "기본 상품 — 사망·80% 장해(1배) + 암 진단(0.5배, 90일 면책) · 장해·암 진단 시 납입면제", yaml: `# 산출방법서 조건 — 종신보험(암진단 포함) · 이 앱의 기본 상품
 # 왼쪽을 고치면 오른쪽 산출방법서가 바로 바뀝니다. 이율·사업비는 "2.5%", "1.5/1000" 처럼 적습니다.
 # 한 줄을 고르면 오른쪽에서 그 조건이 만든 부분이 노랗게 표시됩니다(반대 방향도 됩니다).
 meta:
@@ -206,17 +203,16 @@ benefits:
   - id: b1
     name: 사망·80% 이상 장해
     role: death       # 사망형 — 탈퇴 사유 전부에 같은 보험금
-    amount: 100000000
-    endAge: 110
+    multiple: 1       # 보장금액 = 보험가입금액 × 1배 — 보험료·준비금은 1원당으로 내고 맨 뒤에 가입금액 × 배수를 곱한다
+    endAge: 110       # 보험기간 — 종신(110세)
     exitRateIds: [q, r80]   # 유지자수 = 1 − q − r + q·r/2 · 납입자수는 암 진단(납입면제)으로 더 준다
   - id: b2
     name: 암 진단
     role: incidence   # 진단형 — 기본 식(사망 + 암 진단이 탈퇴)
-    amount: 50000000
+    multiple: 0.5     # 사망보험금의 50%
     endAge: 100
-    waitDays: 90      # 암 면책 90일 — 첫해 급부는 (1 − 3/12) 배
-    rateId: rc
-    exitRateIds: [q, rc]    # 납입자수는 80% 이상 장해(납입면제)로 더 준다
+    waitDays: 90      # 면책·삭감 기간 90일, 지급 0% (면책) — 첫해 급부는 (1 − 3/12) 배. 50% 삭감이면 waitPayRatio: 50%
+    exitRateIds: [q, rc]    # 급부 위험률 = 탈퇴 사유 가운데 암발생률 · 납입자수는 80% 이상 장해(납입면제)로 더 준다
 ${NOTES}
 ` },
 ];

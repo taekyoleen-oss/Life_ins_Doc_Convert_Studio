@@ -107,8 +107,8 @@
       "base": 0.014286340730112467,
       "gross": 0.001624605141427518,
       "pBeta": 0.01480185308492954,
-      "gross100k": 162,
-      "monthlyGross": 81000,
+      "gross100k": 163,
+      "monthlyGross": 81500,
       "reserve100k": [
         0,
         1327,
@@ -175,5 +175,5 @@
       ]
     }
   ],
-  "monthlyGross": 342000
+  "monthlyGross": 342500
 }

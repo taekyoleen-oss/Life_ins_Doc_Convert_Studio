@@ -32,7 +32,7 @@ async function open(path: string) {
   const r = await loadFile(new File([readFileSync(path)], path.split("/").pop()!));
   const { spec, errors } = yamlToSpec(r.yaml);
   const withTables = attachTables(spec, r.sheet ?? null);
-  return { ...r, spec, errors, withTables, calc: computeSpec(withTables, { age: 40, sex: "M" as const, payYears: 20, freq: 12 }) };
+  return { ...r, spec, errors, withTables, calc: computeSpec(withTables, { age: 40, sex: "M" as const, payYears: 20, freq: 12, sumAssured: 1e8 }) };
 }
 
 /** 보험료에 쓰이는 값만 — 표 없는 조건끼리 견주려고 */
@@ -40,7 +40,7 @@ const premiumInputs = (s: MethodSpec) => ({
   interest: s.basis.interest,
   waiverRateIds: s.basis.waiverRateIds,
   rates: s.rates.map((r) => [r.id, r.name, r.role]),
-  benefits: s.benefits.map((b) => [b.name, b.role, b.amount, b.endAge, b.waitDays, b.rateId, b.exitRateIds]),
+  benefits: s.benefits.map((b) => [b.name, b.role, b.multiple, b.amount, b.endAge, b.waitDays, b.waitPayRatio, b.rateId, b.exitRateIds]),
   expenses: s.expenses.map((e) => [e.symbol, e.basis, e.rate, e.times, e.phase]),
 });
 
@@ -49,7 +49,7 @@ describe("PDF 로 가져오기 = Word 로 가져오기 (기본 상품 표준 산
     expect(Buffer.from(readFileSync(DOCX)).equals(Buffer.from(bytes))).toBe(true);
   });
 
-  it("Word: 표준 양식으로 읽고, 별첨 위험률 표를 붙여 10만원당 261·162 · 월 342,000원", async () => {
+  it("Word: 표준 양식으로 읽고, 별첨 위험률 표를 붙여 10만원당 261·163 · 월 342,500원", async () => {
     const w = await open(DOCX);
     expect(w.original?.doc.kind).toBe("docx");
     expect(w.message).toContain(STANDARD_FORMAT);
@@ -57,8 +57,8 @@ describe("PDF 로 가져오기 = Word 로 가져오기 (기본 상품 표준 산
     expect(w.sheet!.sheet.head).toEqual(["연령", "사망률(남)", "사망률(여)", "80% 이상 장해율(남)", "80% 이상 장해율(여)", "암발생률(남)", "암발생률(여)"]);
     expect(w.calc.errors).toEqual([]);
     expect(w.calc.missingRates).toEqual([]);
-    expect(w.calc.benefits.map((b) => b.per100k)).toEqual([261, 162]);
-    expect(w.calc.premium).toBe(342000);
+    expect(w.calc.benefits.map((b) => b.per100k)).toEqual([261, 163]);
+    expect(w.calc.premium).toBe(342500);
   }, 60000);
 
   it.runIf(existsSync(PDF))("PDF: 같은 문서를 PDF 로 가져와도 같은 조건 · 같은 보험료", async () => {
@@ -71,8 +71,8 @@ describe("PDF 로 가져오기 = Word 로 가져오기 (기본 상품 표준 산
     expect(p.sheet!.sheet.rows).toEqual(w.sheet!.sheet.rows);
     expect(p.calc.errors).toEqual([]);
     expect(p.calc.missingRates).toEqual([]);
-    expect(p.calc.benefits.map((b) => b.per100k)).toEqual([261, 162]);
-    expect(p.calc.premium).toBe(342000);
+    expect(p.calc.benefits.map((b) => b.per100k)).toEqual([261, 163]);
+    expect(p.calc.premium).toBe(342500);
   }, 120000);
 
   it.runIf(existsSync(PDF))("PDF 와 Word 의 조건이 글자까지 같다 (식·절·주석 포함)", async () => {

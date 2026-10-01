@@ -11,7 +11,7 @@ import { jsonToSpec } from "@/lib/conditions/yaml";
 const spec = jsonToSpec(readFileSync("samples/09_종신보험(암진단포함)_MethodSpec.json", "utf8"));
 const want = JSON.parse(readFileSync("samples/09_종신보험(암진단포함)_계산결과.json", "utf8")) as {
   contract: { sex: "M"; age: number; payYears: number; freq: number };
-  coverages: { label: string; n: number; m: number; pvb: number; nStar: number; net: number; base: number; gross: number; gross100k: number; monthlyGross: number }[];
+  coverages: { label: string; n: number; m: number; pvb: number; nStar: number; net: number; base: number; gross: number; pBeta: number; gross100k: number; monthlyGross: number; reserve100k: number[] }[];
   monthlyGross: number;
 };
 
@@ -85,7 +85,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
     // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
     expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f"]);
-    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M"]);
+    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
     for (const c of s0.cols) expect(c.values).toHaveLength(72);
     // 기준 인원에서 시작하고, 지급자수 = 유지자수 × 탈퇴율
     const col = (sym: string) => s0.cols.find((c) => c.sym === sym)!;
@@ -98,9 +98,21 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(col("l").parts(1).map((p) => p.ref)).toEqual(["l(40)", "Q(40)"]);
     expect(col("l").parts(1)[0].value).toBe(100000);
     // 표 아래 한 값들 — 엔진·엑셀과 같은 보험료
-    expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G"]);
-    expect(sheets.map((s) => s.per100k)).toEqual([261, 162]);
-    expect([per100k, premium]).toEqual([423, 342000]);
+    expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G", "G₁", "G_10만", "P_β", "α^{표준}", "α^{공제}"]);
+    expect(sheets.map((s) => s.per100k)).toEqual([261, 163]);
+    expect([per100k, premium]).toEqual([424, 342500]);
+    // 책임준비금 — 엔진(자유설계보험)의 연도별 10만원당 준비금과 같다 · P_β 도 같다
+    sheets.forEach((s, i) => {
+      const w = want.coverages[i];
+      expect(s.cols.find((c) => c.sym === "V^{10만}")!.values.slice(0, w.n + 1)).toEqual(w.reserve100k);
+      expect(s.scalars.find((x) => x.sym === "P_β")!.value / w.pBeta).toBeCloseTo(1, 7);
+    });
+    // 해지환급금 — 준비금에서 해약공제를 뺀 것(0 미만이면 0), 납입 완료 후엔 준비금과 같다 · 환급률 = W / 납입누계
+    const W = s0.cols.find((c) => c.sym === "W")!, V = s0.cols.find((c) => c.sym === "V")!, R = s0.cols.find((c) => c.sym === "환급률")!;
+    expect(W.values[1]).toBeLessThan(V.values[1]);
+    expect(W.values[30]).toBeCloseTo(V.values[30], 12);
+    expect(R.values[0]).toBe(0);
+    expect(R.values[20]).toBeGreaterThan(0.5);
   });
 
   it("한 번에 계산한다 — 같은 자리의 값을 다시 세지 않는다(화면이 멈추지 않을 만큼)", () => {
@@ -109,16 +121,17 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     const t0 = performance.now();
     const r = calcSheets(spec, want.contract);
     const took = performance.now() - t0;
-    expect([r.per100k, r.premium]).toEqual([423, 342000]);
+    expect([r.per100k, r.premium]).toEqual([424, 342500]);
     expect(took).toBeLessThan(150);
   });
 
   it("식을 고치면 계산이 바뀐다 — 조건만이 아니라 산출방법서의 식도 계산에 쓰인다", () => {
     const auto = withFormulas(spec).formulas.find((f) => f.key === "benefit:b2")!;
+    expect(auto.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     // 암 진단의 면책을 90일(첫해 1 − 3/12) 에서 없음으로 고쳐 적는다
     const edited = { ...spec, formulas: [{ section: auto.section, label: auto.label, text: auto.text.replace("if( t = 0, 1 − 3/12, 1 )", "1") }] };
     const b2 = computeSpec(edited, want.contract).benefits[1];
     expect(b2.error).toBeUndefined();
-    expect(b2.per100k).toBeGreaterThan(want.coverages[1].gross100k);
+    expect(b2.gross).toBeGreaterThan(want.coverages[1].gross);          // 첫해 급부가 늘어 1원당 보험료가 오른다 (10만원당은 반올림에 가려질 수 있다)
   });
 });

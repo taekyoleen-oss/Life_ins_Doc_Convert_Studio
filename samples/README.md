@@ -36,8 +36,8 @@
 | `05_자유설계보험_암보험_MethodSpec.json` | 자유설계보험이 낸 조건(주계약 + 특약) | 전부 + 위험률 표 4열 | 없음 |
 | `06_위험률표_종신_남녀` .csv · .xlsx | 위험률 표 창(연령 × 위험률) | 첫 행 = 열 이름, 이름이 같은 위험률에 남·여로 자동 연결 | 이름이 다른 열은 [잇기]에서 고름 |
 | `07_스캔본_든든건강보험.pdf` · `_1쪽.png` | 글자 층이 없는 스캔본 · 그림 | 그림으로 읽기(AI 가 옮겨 적고 규칙이 읽음) — 02 와 같은 값 | API 키 · 02 와 같음 |
-| `09_종신보험(암진단포함)_MethodSpec.json` · `_계산결과.json` · `_검산.xlsx` | 기본 상품의 조건 + 위험률 표(공개) · 자유설계보험 계산 결과 · 산출방법서 식을 엑셀 수식으로 적은 검산 | JSON 은 [열기] 로 조건·표 전부 / 엑셀은 Excel 로 열어 [보험료] 시트의 차이 열(모두 0)을 본다 | 없음 |
-| `10_기본상품_종신보험(암진단포함)_산출방법서` .docx · .pdf | **PDF 로 가져와도 Word 와 같은지** — 같은 문서를 두 양식으로 둔 것(`.pdf` 는 그 `.docx` 를 Word 로 PDF 내보낸 것) | 둘 다 전부 — 이율·위험률·사업비·담보·식·절·별첨 위험률 표(연령 0~110세) → 보험료 10만원당 261·162 · 월 342,000원 | 없음 |
+| `09_종신보험(암진단포함)_MethodSpec.json` · `_계산결과.json` · `_검산.xlsx` · **`_보험료계산.xlsx`** | 기본 상품의 조건(보장금액은 가입금액의 배수 — 사망 1배 · 암 0.5배) + 위험률 표(공개) · 자유설계보험 계산 결과(10만원당 261 · 163, 가입금액 1억에 월 342,500원, 연도별 준비금) · 산출방법서 식을 엑셀 수식으로 적은 검산 · **앱이 [엑셀로 내려받기] 로 내는 파일**(주계약 한 장 — 담보 둘이 나란히, 맨 오른쪽에 결과) | JSON 은 [열기] 로 조건·표 전부 / 엑셀은 Excel 로 열어 차이 열(모두 0)을 보거나 `scripts/check-calc-xlsx.ps1` 로 다시 계산한다 | 없음 |
+| `10_기본상품_종신보험(암진단포함)_산출방법서` .docx · .pdf | **PDF 로 가져와도 Word 와 같은지** — 같은 문서를 두 양식으로 둔 것(`.pdf` 는 그 `.docx` 를 Word 로 PDF 내보낸 것) | 둘 다 전부 — 이율·위험률·사업비·담보(배수·면책·삭감)·식·절·별첨 위험률 표(연령 0~110세) → 보험료 10만원당 261·163 · 월 342,500원 | 없음 |
 | `08_위험률표_종합_남녀.csv` | 위험률 표 → 조건 → 계산 앱 흐름(가상의 값, 15~80세) | 사망률(남·여) · 2대질병 · 3대질병 · 암(남·여) · 80% 장해율 — 샘플 조건의 위험률 이름과 같아 바로 이어지고, 없는 이름은 새 위험률로 | 새로 더해진 위험률의 유형 |
 
 ### 시험하다 발견한 점
@@ -78,9 +78,9 @@ node node_modules/vitest/vitest.mjs run tests/samples.test.ts
 
 - **01** — 앱의 [샘플 → 종신보험] 조건으로 앱이 낸 `.md` · `.tex` → pandoc 으로 `.docx`, 앱 HTML → 크롬 인쇄로 `.pdf`
 - **02 · 03** — 손으로 쓴 `.md` (실제 산출방법서·사업방법서 25건의 모양을 본뜸) → pandoc `.docx`, pandoc HTML → 크롬 인쇄 `.pdf`
-- **04** — 앱 샘플 "무해지환급형 암보험" 조건 파일
+- **04** — 앱 샘플 "무해지환급형 암보험" 조건 파일 (샘플을 고치면 다시 뽑는다 — 보장금액은 배수)
 - **05** — 자유설계보험 레시피 "암 진단 + 암입원 특약" → `planToSpec`
 - **06** — 자유설계보험에 들어 있는 사망률 · 80% 이상 장해율(40~110세, 남·여)
 - **07** — 02 PDF 1쪽을 그림(PNG)으로 찍고, 그 그림만 넣은 PDF
-- **09** — Studio `VERIFY_UPDATE=1 … tests/default-product.test.ts` (조건 + 공개 기본 위험률 → JSON) → 자유설계보험 `VERIFY_UPDATE=1 … tests/ui/default-product.test.ts` (계산 → `_계산결과.json`) → `python scripts/make-verify-xlsx.py` (엑셀 수식) → `powershell -ExecutionPolicy Bypass -File scripts/check-verify-xlsx.ps1` (엑셀로 다시 계산 · 차이 0 확인 · 값 저장)
+- **09** — Studio `VERIFY_UPDATE=1 … tests/default-product.test.ts` (조건 + 공개 기본 위험률 → JSON) → 자유설계보험 `VERIFY_UPDATE=1 … tests/ui/default-product.test.ts` (계산 → `_계산결과.json`) → `python scripts/make-verify-xlsx.py` (엑셀 수식) → `powershell -ExecutionPolicy Bypass -File scripts/check-verify-xlsx.ps1` (엑셀로 다시 계산 · 차이 0 확인 · 값 저장). 앱의 엑셀은 `XLSX_UPDATE=1 … tests/calc-xlsx.test.ts` (→ `_보험료계산.xlsx`) → `scripts/check-calc-xlsx.ps1` (엑셀 재계산 = 앱 = 엔진)
 - **08** — `node scripts/make-rate-sample.mjs` (곰페르츠 곡선으로 만든 가상의 값 — 실제 경험률이 아님)

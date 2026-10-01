@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { yamlToSpec } from "@/lib/conditions/yaml";
 import { BASE_RATES_CSV } from "@/lib/base-rates";
-import { withFormulas } from "@/lib/methoddoc/formulas";
-import { computeSpec } from "@/lib/methoddoc/calc";
+import { eventRate, withFormulas } from "@/lib/methoddoc/formulas";
+import { computeByPayMethod, computeSpec } from "@/lib/methoddoc/calc";
 import { docToMarkdown, renderMethodDoc } from "@/lib/methoddoc/render";
 import { waiverRates } from "@/lib/methoddoc/spec";
 import { DEFAULT_SAMPLE_ID, SAMPLES } from "@/lib/samples";
@@ -22,12 +22,13 @@ const cond = yamlToSpec(sample.yaml);
 const spec = attachTables(cond.spec, sampleSheet(cond.spec.rates, BASE_RATES_CSV, "기본 위험률 표"));
 
 describe("기본 상품 종신보험(암진단 포함)", () => {
-  it("조건: 오류 없음 · 담보 둘 · 암 진단 = 사망보험금의 50%, 90일 면책 · 납입면제 사유 = 80% 장해·암", () => {
+  it("조건: 오류 없음 · 담보 둘 · 사망 1배 · 암 진단 0.5배(사망보험금의 50%), 90일 면책 · 납입면제 사유 = 80% 장해·암", () => {
     expect(cond.errors).toEqual([]);
     expect(spec.meta.productName).toBe("종신보험(암진단 포함)");
     const [death, cancer] = spec.benefits;
-    expect([death.role, death.amount, death.exitRateIds]).toEqual(["death", 1e8, ["q", "r80"]]);
-    expect([cancer.role, cancer.amount! / death.amount!, cancer.waitDays, cancer.rateId, cancer.exitRateIds, cancer.endAge]).toEqual(["incidence", 0.5, 90, "rc", ["q", "rc"], 100]);
+    expect([death.role, death.multiple, death.exitRateIds]).toEqual(["death", 1, ["q", "r80"]]);
+    // 급부 위험률은 따로 적지 않는다 — 탈퇴 사유 가운데 사망이 아닌 것(암발생률)
+    expect([cancer.role, cancer.multiple, cancer.waitDays, cancer.rateId, eventRate(spec, cancer)?.id, cancer.exitRateIds, cancer.endAge]).toEqual(["incidence", 0.5, 90, undefined, "rc", ["q", "rc"], 100]);
     expect(waiverRates(spec).map((r) => r.id)).toEqual(["r80", "rc"]);
   });
 
@@ -41,7 +42,7 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
   it("산출식: 집단마다 납입면제 f 는 그 집단의 탈퇴 사유를 뺀 것 · 암 진단은 첫해 (1 − 3/12)", () => {
     const f = withFormulas(spec).formulas;
     // 담보 둘의 탈퇴 사유가 달라 집단도 둘이다 (사망·80% 장해 / 사망·암)
-    const main = f.find((x) => x.key === "group:g1")!.text, can = f.find((x) => x.key === "group:g2")!.text;
+    const main = f.find((x) => x.key === "pay:g1")!.text, can = f.find((x) => x.key === "pay:g2")!.text;
     expect(main).toContain("f_x : 암발생률 — 납입만 면제되는 사유");
     expect(can).toContain("f_x : 80% 이상 장해율 — 납입만 면제되는 사유");
     expect(main).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q_{x+t} − f_{x+t} + Q_{x+t}·f_{x+t}/2 )");
@@ -50,15 +51,22 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
     expect(md).toContain("f_x : 80% 이상 장해율 · 암발생률");                     // 가.(4) 납입면제 사유 — 되읽는 표시
     expect(md).toContain("f_{x+t} : 그 집단에서 납입만 면제되는 사유의 발생률");
-    expect(md).toContain("| 면책 | 90일 |");
+    expect(md).toContain("| 면책·삭감 | 90일 면책 |");
+    expect(md).toContain("| 보장금액 | 가입금액의 0.5배 |");
+    expect(md).toContain("| 보험기간 | 100세 |");
     expect(md).toContain("유지자수·납입자수의 집단 2개");
   });
 
-  it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (10만원당 261 · 162)", () => {
-    const got = computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12 });
+  it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 163 · 가입금액 1억 기준 월 342,500원)", () => {
+    const got = computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 1e8 });
     expect(got.errors).toEqual([]);
-    expect(got.benefits.map((b) => b.per100k)).toEqual([261, 162]);
-    expect(got.premium).toBe(342000);
+    expect(got.benefits.map((b) => [b.gross6, b.per100k, b.amount])).toEqual([[0.002606, 261, 1e8], [0.001625, 163, 5e7]]);
+    expect(got.premium).toBe(342500);
+    // 가입금액을 바꾸면 담보 보험료만 비례해 바뀐다(10만원당은 그대로) · 납입방법마다 N* 만 다르다
+    expect(computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 5e7 }).premium).toBe(171250);
+    const byPay = computeByPayMethod(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 1e8 });
+    expect(byPay.map((r) => r.label)).toEqual(["월납", "3개월납", "6개월납", "연납"]);
+    expect(byPay[3].premium).toBeGreaterThan(byPay[0].premium * 11);
   });
 
   it(`${FILE} — 지금 조건·표와 같다 (VERIFY_UPDATE=1 로 다시 쓴다)`, () => {

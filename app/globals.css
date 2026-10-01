@@ -61,7 +61,7 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .seg > button { padding: 2px 9px; border-radius: 6px; color: var(--muted-foreground); transition: background .12s, color .12s; }
 .seg > button:hover { color: var(--foreground); }
 .seg > button.seg-on { background: #fff; color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px #0000001a; }
-.seg-label { padding: 2px 6px 2px 8px; color: var(--muted-foreground); }
+.seg-label { margin: -2px 2px -2px -2px; padding: 3px 9px; border-radius: 7px 0 0 7px; background: #24303c; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .06em; }   /* 묶음의 제목 — 옆의 조건·산출방법서·위험률 표(고르는 단추)와 다르게 */
 .pane-tools { display: inline-flex; gap: 2px; }
 .pane-tool { font-size: 11px; padding: 2px 7px; border-radius: 6px; color: var(--muted-foreground); white-space: nowrap; }
 .pane-tool:hover:not(:disabled) { background: var(--accent); color: var(--primary); }
@@ -132,6 +132,28 @@ textarea.inp { font-family: inherit; resize: vertical; }
 .trial-bar select.inp { width: auto; min-width: 0; padding: 3px 8px; font-size: 12.5px; }
 .trial-out { margin-left: auto; font-size: 12px; color: #475569; }
 .trial-out b { font-size: 14px; color: var(--primary); }
+/* 납입방법별 보험료 — 시산 줄 안의 작은 표 */
+.trial-pay { border-collapse: collapse; font-size: 11px; }
+.trial-pay th, .trial-pay td { padding: 0 8px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.trial-pay th { font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid #cfe3f1; }
+.trial-pay td small { color: var(--muted-foreground); }
+.trial-pay .on { color: var(--primary); font-weight: 700; }
+/* 계약 단위 탭 — 주계약 · 특약 */
+.unit-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; padding: 0 2px; }
+.unit-tab { display: inline-flex; align-items: center; border: 1px solid var(--border); border-bottom: none; border-radius: 10px 10px 0 0; background: #f4f6f8; }
+.unit-tab > button[role=tab] { display: flex; flex-direction: column; align-items: flex-start; padding: 4px 12px 3px; font-size: 13px; color: var(--muted-foreground); }
+.unit-tab > button[role=tab] small { font-size: 10.5px; }
+.unit-tab.on { background: #fff; border-color: var(--primary); box-shadow: 0 -2px 0 var(--primary) inset; }
+.unit-tab.on > button[role=tab] { color: var(--primary); font-weight: 700; }
+.unit-tabs > .btn { margin-bottom: 2px; }
+/* 카드 머리의 [수식 보이기/숨기기] — 식이 있는 카드만 */
+.card-fx { border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.card-fx:hover { background: var(--accent); color: var(--primary); }
+.card-fx.on { background: var(--accent); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+/* 담보 안 — 유지자수를 어느 집단에서 가져오는지 */
+.lx-from { border-left: 3px solid #cfe3f1; background: #f6fbff; border-radius: 0 8px 8px 0; padding: 6px 10px; font-size: 12px; color: #475569; }
+/* 담보 칸 둘째 줄 — 보장금액 · 면책·삭감 기간 · 그 기간 지급. 자리가 모자라면 셋째 칸이 아랫줄로(이름과 칸은 늘 한 줄) */
+.ben-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); column-gap: 12px; row-gap: 10px; }
 /* 카드 안에서 접었다 펴는 묶음 — 담보 하나, 집단 하나 */
 .sub-open { border-color: #b9d3e8; background: #f8fbfe; box-shadow: 0 0 0 2px #4a90c210; }
 .fold-head { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; text-align: left; }
@@ -283,6 +305,25 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 .lib-name { display: block; font-size: 13px; font-weight: 600; }
 .lib-meta { display: block; font-size: 11px; color: var(--muted-foreground); }
 .lib-target { width: 280px; flex-shrink: 0; font-size: 12px; padding: 3px 6px; }
+
+/* Python 일괄 산출 */
+.modal.py-modal { max-width: 1100px; width: 100%; max-height: 94vh; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.py-cells { min-height: 0; flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.py-cell { border: 1px solid var(--border); border-left: 3px solid #cbd5e1; border-radius: 8px; background: #fff; }
+.py-cell.py-done { border-left-color: #2e9e5b; }
+.py-cell.py-error { border-left-color: #e11d48; }
+.py-cell.py-running { border-left-color: var(--primary); }
+.py-cell-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+.py-run { width: 24px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--primary); font-size: 11px; }
+.py-run:hover { background: var(--primary); color: #fff; }
+.py-no { font-family: var(--font-jetbrains), monospace; font-size: 11px; color: #94a3b8; }
+.py-title { flex: 1; text-align: left; font-size: 13px; font-weight: 600; color: #334155; }
+.py-state { font-size: 11px; color: var(--muted-foreground); }
+.py-code { margin: 0; padding: 6px 10px 8px 40px; font-family: var(--font-jetbrains), monospace; font-size: 11.5px; line-height: 1.5; white-space: pre; overflow-x: auto; color: #1e293b; background: #f8fafc; }
+.py-out { margin: 0; padding: 6px 10px 6px 40px; font-family: var(--font-jetbrains), monospace; font-size: 11.5px; white-space: pre-wrap; background: #f1f8f4; color: #14532d; border-top: 1px solid var(--border); }
+.py-out-err { background: #fff1f2; color: #881337; }
+.calc-units > button { background: #eef2f6; }
+.calc-units > button.on { background: #fff; }
 
 /* 그림으로 읽기 */
 .modal.vision { max-width: 920px; width: 100%; max-height: 92vh; display: flex; flex-direction: column; }
