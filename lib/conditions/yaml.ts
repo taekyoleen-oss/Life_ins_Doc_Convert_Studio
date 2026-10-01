@@ -361,7 +361,8 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
   const stale = (f: MethodSpec["formulas"][number]) => autoCur.some((a) => a.section === f.section && a.label === f.label
     && normFormula(a.text) === normFormula(f.text) && normFormula(a.note ?? "") === normFormula(f.note ?? ""));
   const fresh = parsed.formulas.filter((f) => !stale(f));
-  const fkey = (fs: MethodSpec["formulas"]) => fs.map((f) => JSON.stringify([f.section, f.label, f.text, f.note ?? ""])).sort();
+  // 빈칸·표기 차이(LaTeX 를 거치면 "× (" 가 "×(" 가 된다)는 바뀐 게 아니다 — 자동 식과 같은 normFormula 로 견준다
+  const fkey = (fs: MethodSpec["formulas"]) => fs.map((f) => JSON.stringify([f.section, f.label, normFormula(f.text), normFormula(f.note ?? "")])).sort();
   if (took.has("formulas") && !same(fkey(out.formulas), fkey(fresh))) {
     changes.push(`formulas: 조건의 식 ${out.formulas.length}개 → ${fresh.length}개 (${fresh.map((f) => f.label).join(", ") || "자동 식만"})`);
     out.formulas = fresh;

@@ -85,7 +85,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
     // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
     expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f"]);
-    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
+    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "F", "Q′", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
     for (const c of s0.cols) expect(c.values).toHaveLength(72);
     // 기준 인원에서 시작하고, 지급자수 = 유지자수 × 탈퇴율
     const col = (sym: string) => s0.cols.find((c) => c.sym === sym)!;
@@ -99,8 +99,8 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(col("l").parts(1)[0].value).toBe(100000);
     // 표 아래 한 값들 — 엔진·엑셀과 같은 보험료
     expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G", "G₁", "G_10만", "P_β", "α^{표준}", "α^{공제}"]);
-    expect(sheets.map((s) => s.per100k)).toEqual([261, 163]);
-    expect([per100k, premium]).toEqual([424, 342500]);
+    expect(sheets.map((s) => s.per100k)).toEqual([261, 162]);
+    expect([per100k, premium]).toEqual([423, 342000]);
     // 책임준비금 — 엔진(자유설계보험)의 연도별 10만원당 준비금과 같다 · P_β 도 같다
     sheets.forEach((s, i) => {
       const w = want.coverages[i];
@@ -118,11 +118,13 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
   it("한 번에 계산한다 — 같은 자리의 값을 다시 세지 않는다(화면이 멈추지 않을 만큼)", () => {
     // 되돌이 정의(l_{x+t+1} = l_{x+t} × …)를 칸마다 t=0 부터 다시 세면 열이 O(n²) 이 된다.
     // 담보 2개 × 72줄 × 열 19개라 그 차이가 0.7초짜리 멈춤으로 나타났다 — 모델 하나에 캐시 하나.
-    const t0 = performance.now();
+    // 절대 시간은 다른 시험(파이썬·PDF)이 함께 돌면 몇 배로 흔들린다 — 같은 순간에 잰 computeSpec(보험료만) 과의 비율로 본다.
+    // 캐시가 있으면 계산 표는 보험료만 내는 것의 2~3배, O(n²) 이면 40배였다. 세 번 재어 가장 빠른 것끼리 견준다
+    const best = (f: () => void) => Math.min(...[0, 1, 2].map(() => { const t0 = performance.now(); f(); return performance.now() - t0; }));
     const r = calcSheets(spec, want.contract);
-    const took = performance.now() - t0;
-    expect([r.per100k, r.premium]).toEqual([424, 342500]);
-    expect(took).toBeLessThan(150);
+    expect([r.per100k, r.premium]).toEqual([423, 342000]);
+    const sheet = best(() => calcSheets(spec, want.contract)), premiumOnly = best(() => computeSpec(spec, want.contract));
+    expect(sheet / premiumOnly).toBeLessThan(10);
   });
 
   it("식을 고치면 계산이 바뀐다 — 조건만이 아니라 산출방법서의 식도 계산에 쓰인다", () => {

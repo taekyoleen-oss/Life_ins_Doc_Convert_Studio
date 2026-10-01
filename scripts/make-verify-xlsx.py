@@ -59,10 +59,11 @@ lines = [
     "  보험료    담보별 보험료와 앱 값의 차이 — 차이가 0 이면 산출방법서 식 = 앱 계산",
     "",
     "식 (산출방법서 3~5절과 같다)",
-    "  탈퇴율 Q = q + r − q·r/2 ,  l_{t+1} = l_t·(1 − Q) ,  l′_{t+1} = l′_t·(1 − Q − f + Q·f/2)",
+    "  탈퇴율 Q = q + r − q·r/2 ,  l_{t+1} = l_t·(1 − Q) ,  질병 F = 1 − (1 − r)(1 − f) ,  Q′ = q + F − q·F/2 ,  l′_{t+1} = l′_t·(1 − Q′)",
+    "  (질병끼리는 곱으로, 사망과는 겹치는 부분을 절반으로 결합한다 · 보장기간 n = 만기 나이 − 가입나이, 종신(110세)은 + 1)",
     "  D = l·v^t ,  D′ = l′·v^t ,  C = l·g·v^{t+½} (사망형 g = Q, 진단형 g = 그 발생률) ,  N = Σ_{u≥t} D ,  N′ = Σ_{u≥t} D′",
     "  PVB = Σ S·C ,  N* = k·[(N′_x − N′_{x+m}) − (k−1)/(2k)·(D′_x − D′_{x+m})] ,  P = PVB/N* ,  P_base = PVB/(N′_x − N′_{x+min(n,20)})",
-    "  G = [P + (α_S + α_P·P_base)·D′_x/N* + β_S/k + β′·(N_{x+m} − N_{x+n})/N*] / (1 − β_G − γ) ,  10만원당 G = ROUND(G×100,000, 0)",
+    "  G = [P + (α_S + α_P·P_base)·D′_x/N* + β_S/k + β′·(N_{x+m} − N_{x+n})/N*] / (1 − β_G − γ) ,  10만원당 G = ROUND(ROUND(G, 6)×100,000, 0)",
     "  V_t = [Σ_{u≥t} S·C + β′·(N_{x+max(t,m)} − N_{x+n}) − P_β·(N′_{x+t} − N′_{x+m})·[t≤m]] / D_{x+t} ,  P_β = [PVB + β′·(N_{x+m} − N_{x+n})] / (N′_x − N′_{x+m})",
     "",
     "행 수는 이 계약(40세)에 맞춰져 있다 — 가입나이를 바꾸려면 앱에서 다시 만든다(python scripts/make-verify-xlsx.py).",
@@ -81,7 +82,7 @@ inputs = [
     ("가입나이 x", x, "가입나이", "남" if sex == "M" else "여"),
     ("보험료 납입기간 m", m, "납입기간", "년"),
     ("납입주기별 계수 k", k, "납입주기", "월납 12"),
-    ("보험기간(계약)", "=MAX(기수_사망장해!B3,기수_암진단!B3)+1-가입나이", "보험기간", "담보 만기 중 가장 늦은 것"),
+    ("보험기간(계약)", "=MAX(IF(기수_사망장해!B3>=110,기수_사망장해!B3+1,기수_사망장해!B3),IF(기수_암진단!B3>=110,기수_암진단!B3+1,기수_암진단!B3))-가입나이", "보험기간", "담보 만기 중 가장 늦은 것"),
     ("α_S 신계약비(가입금액)", exp["α_S"], "알파S", "보험가입금액 비례"),
     ("α_P 신계약비(기준연납순보험료 배수)", exp["α_P"], "알파P", "보장기간 20년 미만이면 × n/20"),
     ("β_S 유지비(납입중)", exp["β_S"], "베타S", "매년 보험가입금액 — 1회 납입당 β_S/k"),
@@ -126,15 +127,15 @@ def coverage(sheet, ben, other, waiver, event_is_q, app):
     rng = lambda c: f"${c}${R0}:${c}${last}"
     months = round(ben.get("waitDays", 0) / 30.4) if ben.get("waitDays") else 0
     rows = [
-        ("담보", ben["name"]), ("보장금액", ben["amount"]), ("보장 종료 나이", ben["endAge"]),
-        ("보장기간 n", "=MIN(보험기간,B3+1-가입나이)"), ("납입기간 m", "=MIN(납입기간,B4)"),
+        ("담보", ben["name"]), ("보장금액", app["amount"]), ("만기 나이", ben["endAge"]),
+        ("보장기간 n", "=MIN(보험기간,IF(B3>=110,B3+1,B3)-가입나이)"), ("납입기간 m", "=MIN(납입기간,B4)"),
         ("면책(개월)", months), ("첫해 급부 배율", "=MAX(0,1-B6/12)"),
         ("탈퇴 사유", f"사망 + {rates[other]['name']}"), ("납입면제 f", rates[waiver]["name"]),
         ("급부 g", "탈퇴 전부 (사망형 — g = Q)" if event_is_q else f"{rates[other]['name']} (진단형)"),
     ]
     for i, (a, b) in enumerate(rows, 1):
         w.cell(i, 1, a).font = BOLD; w.cell(i, 2, b)
-        if a in ("보장금액", "보장 종료 나이", "면책(개월)"):
+        if a in ("보장금액", "만기 나이", "면책(개월)"):
             w.cell(i, 2).fill = INPUT
     # 보험료 — 식 · 엑셀 값 · 앱 값 · 차이
     w["D1"], w["E1"], w["F1"], w["G1"] = "항목", "엑셀(수식)", "앱(자유설계보험)", "차이"
@@ -150,7 +151,7 @@ def coverage(sheet, ben, other, waiver, event_is_q, app):
         ("β_S 부가 = β_S/k", "=베타S/납입주기", None),
         ("β′ 부가 = β′·(N_m − N_n)/N*", f"=베타후*(INDEX({rng('M')},B5+1)-$M${last})/E3", None),
         ("G (영업보험료, 1원당)", "=(E4+E7+E8+E9)/(1-베타G-감마)", app["gross"]),
-        ("10만원당 G (반올림)", "=ROUND(E10*100000,0)", app["gross100k"]),
+        ("10만원당 G (1원당 6자리 → 10만원당 반올림)", "=ROUND(ROUND(E10,6)*100000,0)", app["gross100k"]),
         ("월보험료 = 10만원당 G × 보장금액/10만", "=E11*B2/100000", app["monthlyGross"]),
         ("P_β (준비금용 순보험료)", f"=(E2+베타후*(INDEX({rng('M')},B5+1)-$M${last}))/($N${R0}-INDEX({rng('N')},B5+1))", app["pBeta"]),
     ]
@@ -177,7 +178,7 @@ def coverage(sheet, ben, other, waiver, event_is_q, app):
         w.cell(r, 5, f"=INDEX(위험률!${RATE_COL[waiver]}:${RATE_COL[waiver]},{age_row})")
         w.cell(r, 6, f"=MIN(1,C{r}+D{r}-C{r}*D{r}/2)")
         w.cell(r, 7, 100000 if t == 0 else f"=G{r - 1}*MAX(0,1-F{r - 1})")
-        w.cell(r, 8, 100000 if t == 0 else f"=H{r - 1}*MAX(0,1-F{r - 1}-E{r - 1}+F{r - 1}*E{r - 1}/2)")
+        w.cell(r, 8, 100000 if t == 0 else f"=H{r - 1}*MAX(0,1-MIN(1,C{r - 1}+(1-(1-D{r - 1})*(1-E{r - 1}))-C{r - 1}*(1-(1-D{r - 1})*(1-E{r - 1}))/2))")
         w.cell(r, 9, f"=G{r}*현가율^A{r}")
         w.cell(r, 10, f"=H{r}*현가율^A{r}")
         w.cell(r, 11, f"=G{r}*{ev}{r}*현가율^(A{r}+0.5)")

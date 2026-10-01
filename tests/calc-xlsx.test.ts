@@ -66,7 +66,11 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, `${Q}3`)?.f).toBe("MIN(1,((F3+G3)-((F3*G3)/2)))");     // Q = min(1, q + r − q·r/2)
     expect(cell(sheet1, `${l}3`)).toEqual({ v: 100000 });                  // 기준 인원은 값
     expect(cell(sheet1, `${l}4`)).toEqual({ f: `(${l}3*(1-${Q}3))` });     // l_{x+t+1} = l_{x+t} × (1 − Q_{x+t})
-    expect(cell(sheet1, `${lp}4`)?.f).toContain(`${lp}3*(((1-${Q}3)-H3)`); // 납입자수는 f(암발생률 = H 열)로 더 준다
+    // 납입자수 — 질병(장해 G · 납입면제 암 H)을 곱으로 묶은 F, 사망(F 열)과는 겹치는 부분 절반인 Q′ 로 준다
+    const F = colOf("F "), Qp = colOf("Q′ ");
+    expect(cell(sheet1, `${F}3`)?.f).toBe("(1-((1-G3)*(1-H3)))");
+    expect(cell(sheet1, `${Qp}3`)?.f).toBe(`MIN(1,((F3+${F}3)-((F3*${F}3)/2)))`);
+    expect(cell(sheet1, `${lp}4`)).toEqual({ f: `(${lp}3*(1-${Qp}3))` });
     expect(cell(sheet1, `${d}3`)?.f).toBe(`(${l}3*${Q}3)`);                 // 지급자수 d = l × Q
     expect(cell(sheet1, `${D}3`)).toEqual({ f: `(${l}3*I3)` });             // D = l·v^t
     expect(cell(sheet1, `${N}3`)?.f).toBe(`SUM(${D}3:${D}74)`);             // N = Σ_{u≥t} D (n = 71 → 3~74행)
@@ -80,8 +84,8 @@ describe("보험료 계산 → 엑셀 수식", () => {
     // 둘째 담보(암 진단)의 구역 — 같은 위험률 열(사망률 F · 암발생률 H)을 쓴다
     const Q2 = colOf("Q ", 1);
     expect(cell(sheet1, `${Q2}3`)?.f).toBe("MIN(1,((F3+H3)-((F3*H3)/2)))");
-    expect(cell(sheet1, `${Q2}64`)).not.toBeNull();                          // n = 61 → 3~64행
-    expect(cell(sheet1, `${Q2}65`)).toBeNull();
+    expect(cell(sheet1, `${Q2}63`)).not.toBeNull();                          // 100세 만기 → n = 60 → 3~63행
+    expect(cell(sheet1, `${Q2}64`)).toBeNull();
   });
 
   it("맨 오른쪽 결과 — 담보마다 n · m · 배수 · N* · PVB · P · G · G₁ · 10만원당 · 담보 보험료 · P_β 가 수식이고, 합계", () => {
@@ -98,7 +102,7 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, `${v2}${r0 - 1}`)?.s).toBe("암 진단");
     expect(cell(sheet1, `${sum}${r0 - 1}`)?.s).toBe("합계");
     expect(cell(sheet1, `${v1}${r0}`)).toEqual({ v: 71 });
-    expect(cell(sheet1, `${v2}${r0}`)).toEqual({ v: 61 });
+    expect(cell(sheet1, `${v2}${r0}`)).toEqual({ v: 60 });
     expect(cell(sheet1, `${v1}${r0 + 2}`)).toEqual({ v: 1 });
     expect(cell(sheet1, `${v2}${r0 + 2}`)).toEqual({ v: 0.5 });
     expect(cell(sheet1, `${v2}${r0 + 3}`)?.f).toBe(`sum_assured*$${v2}$${r0 + 2}`);
@@ -115,6 +119,6 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(at(sum, "담보 보험료")?.f).toBe(`SUM(${v1}${rowOf("담보 보험료")}:${v2}${rowOf("담보 보험료")})`);
     // 앱이 낸 값(엑셀이 다시 계산하면 같아야 한다 — scripts/check-calc-xlsx.ps1)
     const got = calcSheets(spec, contract);
-    expect([got.per100k, got.premium]).toEqual([424, 342500]);
+    expect([got.per100k, got.premium]).toEqual([423, 342000]);
   });
 });

@@ -14,7 +14,7 @@ import RateSheetPane from "./RateSheetPane";
 // 보험료 계산 화면(스프레드시트)은 열 때만 받는다
 const PremiumSheet = dynamic(() => import("./PremiumSheet"), { ssr: false });
 import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
-import { itemColumns, sanitizeLibrary, type RateLibrary } from "@/lib/rate-library";
+import { itemColumns, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
 import { DEFAULT_SAMPLE_ID, SAMPLES } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
@@ -120,7 +120,16 @@ export default function Studio() {
     fetch("/rate-library.json").then((r) => (r.ok ? r.json() : null)).then((j) => setLibrary(sanitizeLibrary(j))).catch(() => { /* 없으면 공개 기본 위험률만 */ });
   }, []);
   useEffect(() => {
-    const s = readStore();
+    // 위험률 근거를 가상 이름으로 — 예전에 위험률 모음·다른 앱에서 실제 출처(회사·회차·호수)가 들어온 저장본을 한 번 고친다(최근 작업 목록도)
+    const VSRC = `${KEY}:virtual-source-v1`;
+    let s = readStore();
+    if (!readJson(VSRC)) {
+      const v = s ? virtualizeSources(s) : s;
+      if (v && v !== s) { writeStore(v); s = v; }
+      const rec = readJson(`${KEY}:recent`);
+      if (Array.isArray(rec)) writeJson(`${KEY}:recent`, rec.map((r) => (r && typeof r.yaml === "string" ? { ...r, yaml: virtualizeSources(r.yaml) } : r)));
+      writeJson(VSRC, 1);
+    }
     // 이어서 작업 — 처음이면 샘플 세트 그대로. 저장된 조건에 표가 없으면(옛 저장본) 견본 표에서 그 조건의 위험률과 이름이 맞는 열을 붙여 준다 — 화면은 늘 조건 + 표 한 세트
     if (s) {
       setYaml(s); setSaved(s);
@@ -332,7 +341,7 @@ export default function Studio() {
    */
   const addFromLibrary = (picks: LibPick[]) => {
     const fresh = picks.filter((p) => p.target === "new");
-    const ids = fresh.length ? addRates(fresh.map((p) => ({ name: p.item.name, role: guessRole(`${p.item.category} ${p.item.name}`), source: p.item.source || undefined }))) : [];
+    const ids = fresh.length ? addRates(fresh.map((p) => ({ name: p.item.name, role: guessRole(`${p.item.category} ${p.item.name}`), source: virtualSource(undefined, p.item.name) }))) : [];
     if (ids.length !== fresh.length) return;                    // 조건 파일 오류 — addRates 가 알렸다
     const target = (p: LibPick) => (p.target === "new" ? ids[fresh.indexOf(p)] : p.target);
     let st = sheet;

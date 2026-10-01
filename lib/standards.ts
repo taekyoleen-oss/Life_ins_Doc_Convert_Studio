@@ -16,8 +16,8 @@ const sample = (id: string) => SAMPLES.find((s) => s.id === id)!.yaml;
 
 export const STANDARDS: Standard[] = [
   { id: "whole", name: "종신보험", hint: "사망·80% 이상 장해 — 탈퇴 사유 둘, 종신", yaml: sample("whole") },
-  { id: "disease", name: "질병보험", hint: "2대질병 진단 — 진단하면 소멸, 80세 만기", yaml: sample("twoMajor") },
-  { id: "cancer", name: "암보험", hint: "무해지환급형 — 적용해지율·환급률", yaml: sample("noRefund") },
+  { id: "disease", name: "질병보험", hint: "뇌출혈·급성심근경색증 진단 — 담보 둘, 납입자수는 두 질병을 곱으로 결합, 80세 만기", yaml: sample("twoMajor") },
+  { id: "cancer", name: "암보험", hint: "무해지환급형 · 암 단일탈퇴 — 적용해지율·환급률", yaml: sample("cancer") },
 ];
 
 export const standardFile = (s: Standard) => `표준_산출방법서_${s.name}`;

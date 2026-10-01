@@ -71,103 +71,6 @@ benefits:
     exitRateIds: [q, r80]   # 유지자수·납입자수 = 1 − q − r + q·r/2
 ${NOTES}
 ` },
-  { id: "twoMajor", label: "2대질병 진단보험 (80세 만기)", hint: "진단형 — 사망과 진단이 함께 탈퇴", yaml: `meta:
-  productName: 2대질병 진단보험
-  kind: 표준형(완전 환급)
-product:
-  category: 생명보험 / 건강(진단)
-  terms:
-    - { term: 80세만기, pay: 10·15·20년납, age: 만15세 ~ 60세 }
-  payFreqs: [월납]
-  sumLimit: 1천만원 ~ 5천만원
-  renewal: 비갱신형
-basis:
-  interest: 2.5%
-  standardInterest: 3.25%
-  waiver: false
-rates:
-${Q}
-  - id: r2
-    name: 2대질병 발생률
-    role: incidence
-    source: 경험생명표(가상) 뇌출혈 + 급성심근경색증 발생률
-${EXPENSES}
-benefits:
-  - id: b1
-    name: 2대질병 진단
-    role: incidence
-    multiple: 1
-    endAge: 80
-    exitRateIds: [q, r2]    # 급부 위험률은 탈퇴 사유 가운데 사망이 아닌 것(2대질병 발생률)
-${NOTES}
-` },
-  { id: "noRefund", label: "무해지환급형 암보험 (해지율 3%)", hint: "저해지·무해지 — 해지율과 환급률", yaml: `meta:
-  productName: 무해지환급형 암보험
-  kind: 무해지환급형
-product:
-  category: 생명보험 / 건강(암)
-  types: [1종(무해지환급형), 2종(표준형)]
-  terms:
-    - { term: 100세만기, pay: 10·20·30년납, age: 만15세 ~ 65세, ageF: 만15세 ~ 70세 }
-  payFreqs: [월납, 연납]
-  renewal: 비갱신형
-basis:
-  interest: 2.5%
-  standardInterest: 3.25%
-  waiver: false
-  lapse:
-    - { label: 무해지환급형, rate: 3%, duringPayOnly: true }
-  lowRatio: 0%        # 납입기간 중 해지환급금 = 표준형 × 0%
-rates:
-${Q}
-  - id: rc
-    name: 암발생률
-    role: incidence
-    source: 경험생명표(가상) 암발생률
-${EXPENSES}
-benefits:
-  - id: b1
-    name: 암 진단
-    role: incidence
-    multiple: 1
-    endAge: 100
-    waitDays: 90      # 면책·삭감 기간 — 90일 면책(지급 0%)
-    exitRateIds: [q, rc]
-${NOTES}
-` },
-  { id: "waiverSupport", label: "보험료납입지원 3대질병", hint: "추가 납입면제 사유 — 80% 이상 장해", yaml: `meta:
-  productName: 보험료납입지원 적용 3대질병보험
-  kind: 표준형(완전 환급)
-product:
-  category: 생명보험 / 건강(진단)
-  terms:
-    - { label: 주계약, term: 80세만기, pay: 20년납, age: 만15세 ~ 60세 }
-    - { label: 보험료납입지원, term: 80세만기, pay: 20년납, age: 만15세 ~ 60세 }
-  payFreqs: [월납]
-basis:
-  interest: 2.5%
-  standardInterest: 3.25%
-  waiver: true        # 3대질병은 이미 탈퇴 사유 — 80% 이상 장해만 납입을 추가로 면제
-rates:
-${Q}
-  - id: r3
-    name: 3대질병 발생률
-    role: incidence
-    source: 경험생명표(가상) 암 + 뇌출혈 + 급성심근경색증 발생률
-  - id: f80
-    name: 80% 이상 장해율
-    role: waiver
-    source: 경험생명표(가상) 80%이상 재해장해율 + 질병장해율
-${EXPENSES}
-benefits:
-  - id: b1
-    name: 3대질병 진단
-    role: incidence
-    multiple: 1
-    endAge: 80
-    exitRateIds: [q, r3]
-${NOTES}
-` },
   { id: "wholeCancer", label: "종신보험(암진단 포함)", hint: "기본 상품 — 사망·80% 장해(1배) + 암 진단(0.5배, 90일 면책) · 장해·암 진단 시 납입면제", yaml: `# 산출방법서 조건 — 종신보험(암진단 포함) · 이 앱의 기본 상품
 # 왼쪽을 고치면 오른쪽 산출방법서가 바로 바뀝니다. 이율·사업비는 "2.5%", "1.5/1000" 처럼 적습니다.
 # 한 줄을 고르면 오른쪽에서 그 조건이 만든 부분이 노랗게 표시됩니다(반대 방향도 됩니다).
@@ -214,5 +117,233 @@ benefits:
     waitDays: 90      # 면책·삭감 기간 90일, 지급 0% (면책) — 첫해 급부는 (1 − 3/12) 배. 50% 삭감이면 waitPayRatio: 50%
     exitRateIds: [q, rc]    # 급부 위험률 = 탈퇴 사유 가운데 암발생률 · 납입자수는 80% 이상 장해(납입면제)로 더 준다
 ${NOTES}
+` },
+  { id: "cancer", label: "암진단 보장보험 (무해지환급형 · 해지율 3%)", hint: "암 단일탈퇴 — 사망 시 책임준비금 지급 · 90일 면책 · 무해지", yaml: `# 산출방법서 조건 — 암진단 보장보험
+# 사망 시에는 책임준비금을 지급하므로 사망은 급부·준비금에 순효과가 없다 → 암발생률만 탈퇴율로 쓰는 단일탈퇴.
+meta:
+  productName: 암진단 보장보험
+  kind: 무해지환급형
+product:
+  category: 생명보험 / 건강(암)
+  types: [1종(무해지환급형), 2종(표준형)]
+  terms:
+    - { term: 100세만기, pay: 10·20·30년납, age: 만15세 ~ 65세, ageF: 만15세 ~ 70세 }
+  payFreqs: [월납, 연납]
+  renewal: 비갱신형
+basis:               # 기존 암보험 산출방법서(설계형 암보험 cancer-2026)와 같은 기초율·사업비
+  interest: 3.25%
+  standardInterest: 3.25%
+  waiver: false
+  lapse:
+    - { label: 무해지환급형, rate: 3%, duringPayOnly: true }
+  lowRatio: 0%        # 납입기간 중 해지환급금 = 표준형 × 0%
+rates:
+  - id: rc
+    name: 암발생률
+    role: incidence
+    source: 경험생명표(가상) 암발생률
+expenses:
+  - { group: 계약체결비용, symbol: α_S, basis: 보험가입금액, rate: 5/1000, phase: 초년도 }
+  - { group: 계약체결비용, symbol: α_P, basis: 기준연납순보험료, times: 1배, phase: 초년도 }
+  - { group: 계약관리비용, symbol: β_S, basis: 매년 보험가입금액, rate: 1.2/1000, phase: 납입중 }
+  - { group: 계약관리비용, symbol: β_G, basis: 영업보험료, rate: 7%, phase: 납입중 }
+  - { group: 계약관리비용, symbol: β′, basis: 매년 보험가입금액, rate: 1/1000, phase: 납입후 }
+  - { group: 수금비용, symbol: γ, basis: 영업보험료, rate: 4% }
+benefits:
+  - id: b1
+    name: 암 진단
+    role: incidence
+    multiple: 1
+    endAge: 100
+    waitDays: 90      # 면책·삭감 기간 — 90일 면책(지급 0%) → 첫해 급부 × 3/4
+    exitRateIds: [rc]   # 단일탈퇴 — 사망은 탈퇴 사유에 넣지 않는다(사망 시 책임준비금 지급)
+surrender:
+  deductionYears: 7
+  notes:
+    - 해약공제 기준 신계약비는 적용기초율과 표준기초율로 구한 신계약비 중 작은 쪽으로 한다.
+reserve:
+  notes:
+    - 사망 시에는 책임준비금을 지급하므로 사망은 급부 현가와 준비금에 순효과가 없다. 그래서 암발생률만 탈퇴율로 쓰는 단일탈퇴로 산출한다.
+    - 회계연도말 보험료적립금은 적용기초율 적립금과 표준기초율 적립금 중 큰 금액으로 한다.
+    - 연중 보간은 하지 않고 연말 기준으로 산출한다.
+` },
+  { id: "twoMajor", label: "2대질병 진단보험 (80세 만기)", hint: "뇌출혈·급성심근경색증 담보를 따로 — 납입자수는 1 − (1 − 뇌출혈)(1 − 급성심근경색증)", yaml: `# 산출방법서 조건 — 2대질병 진단보험
+# 뇌출혈 진단과 급성심근경색증 진단을 따로 보장한다. 담보마다 그 질병이 아직 생기지 않은 사람(유지자수 l)에게 보험금을 준다.
+# 보험료는 둘 중 하나라도 생기면 면제 — 납입자수의 질병 발생률은 F = 1 − (1 − 뇌출혈) × (1 − 급성심근경색증)(질병끼리 곱),
+# 사망과는 Q′ = q + F − q·F/2(겹치는 부분 절반). 자동 식이 이 규칙으로 만든다.
+meta:
+  productName: 2대질병 진단보험
+  kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 건강(진단)
+  terms:
+    - { term: 80세만기, pay: 10·15·20년납, age: 만15세 ~ 60세 }
+  payFreqs: [월납]
+  sumLimit: 1천만원 ~ 5천만원
+  renewal: 비갱신형
+basis:
+  interest: 2.5%
+  standardInterest: 3.25%
+  waiver: true        # 뇌출혈 또는 급성심근경색증 진단 시 이후 보험료 면제
+  waiverRateIds: [rs, ra]
+rates:
+${Q}
+  - id: rs
+    name: 뇌출혈 발생률
+    role: incidence
+    source: 경험생명표(가상) 뇌출혈 발생률
+  - id: ra
+    name: 급성심근경색증 발생률
+    role: incidence
+    source: 경험생명표(가상) 급성심근경색증 발생률
+${EXPENSES}
+benefits:
+  - id: b1
+    name: 뇌출혈 진단
+    role: incidence
+    multiple: 1
+    endAge: 80
+    exitRateIds: [q, rs]    # 뇌출혈이 아직 생기지 않은 생존자에게 지급 — 지급하면 이 담보는 소멸
+  - id: b2
+    name: 급성심근경색증 진단
+    role: incidence
+    multiple: 1
+    endAge: 80
+    exitRateIds: [q, ra]    # 급성심근경색증이 아직 생기지 않은 생존자에게 지급
+${NOTES}
+` },
+  { id: "hospital", label: "입원보험(특약) · 암입원 1일당", hint: "반복지급(일당형) — 사망만 탈퇴 · 급부 = 암입원 기대일수 · 90일 면책", yaml: `# 산출방법서 조건 — 암입원특약
+# 입원 1일당 정액. 입원은 여러 번 생겨도 담보가 소멸하지 않으므로 탈퇴 사유는 사망뿐이다.
+# 급부 발생률 = 1일 기준 암입원율 × 365 = 한 해 기대 입원일수.
+meta:
+  productName: 암입원특약
+  kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 특약(입원)
+  terms:
+    - { label: 암입원특약, term: 100세만기, pay: 10·20년납, age: 만15세 ~ 65세 }
+  payFreqs: [월납]
+  sumLimit: 1일당 1만원 ~ 5만원
+  renewal: 비갱신형
+basis:
+  interest: 2.5%
+  standardInterest: 3.25%
+  waiver: false       # 특약은 납입면제·해지율을 적용하지 않는다
+rates:
+${Q}
+  - id: ch
+    name: 암입원 기대일수
+    role: recurring
+    source: 경험생명표(가상) 암입원율 × 365일
+${EXPENSES}
+benefits:
+  - id: b1
+    name: 암 입원(1일당)
+    unit: 암입원특약
+    role: recurring   # 반복지급 — 입원 1일마다 지급하고 담보는 그대로
+    amount: 30000     # 1일당 3만원 — 일당은 가입금액의 배수가 아니라 따로 정한다
+    endAge: 100
+    waitDays: 90      # 암 관련 90일 면책 → 첫해 급부 × 3/4
+    rateId: ch        # 급부 발생률 — 탈퇴 사유가 아닌 위험률이라 따로 적는다
+    exitRateIds: [q]
+${NOTES}
+` },
+  { id: "surgery", label: "수술보험(특약) · 암수술", hint: "수술 시 정액 — 탈퇴 사망·암 · 급부 = 암수술률(암발생률 × 0.8) · 90일 면책", yaml: `# 산출방법서 조건 — 암수술특약
+# 암으로 수술을 받으면 정액을 준다. 탈퇴 사유는 사망과 암 발생, 급부 발생률은 암수술률(가상 — 암발생률 × 0.8).
+meta:
+  productName: 암수술특약
+  kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 특약(수술)
+  terms:
+    - { label: 암수술특약, term: 100세만기, pay: 10·20년납, age: 만15세 ~ 65세 }
+  payFreqs: [월납]
+  sumLimit: 100만원 ~ 1천만원
+  renewal: 비갱신형
+basis:
+  interest: 2.5%
+  standardInterest: 3.25%
+  waiver: false
+rates:
+${Q}
+  - id: rc
+    name: 암발생률
+    role: incidence
+    source: 경험생명표(가상) 암발생률
+  - id: cs
+    name: 암수술률
+    role: incidence
+    source: 경험생명표(가상) 암수술률 (암발생률 × 0.8)
+${EXPENSES}
+benefits:
+  - id: b1
+    name: 암 수술
+    unit: 암수술특약
+    role: incidence
+    multiple: 0.1     # 보장금액 = 가입금액 × 0.1 (1억이면 1천만원)
+    endAge: 100
+    waitDays: 90
+    rateId: cs        # 급부 발생률은 탈퇴 사유(암발생률)와 다른 암수술률
+    exitRateIds: [q, rc]
+${NOTES}
+` },
+  { id: "support", label: "보험료납입지원특약 (3대질병)", hint: "3대질병 진단 시 남은 보험료를 매월 지원 — 급부 = 남은 기간 월 지원액의 확정연금 현가", yaml: `# 산출방법서 조건 — 보험료납입지원특약(3대질병)
+# 암·뇌출혈·급성심근경색증 가운데 하나라도 진단되면 주계약 납입기간이 끝날 때까지 매월 지원액을 준다(지급약정기간 — 생존과 상관없이 확정).
+# 보장금액 = 월 지원액(주계약 월보험료). 급부 = 진단 시점(연중앙)부터 납입기간 끝까지 남은 달의 확정연금 현가.
+meta:
+  productName: 보험료납입지원특약(3대질병)
+  kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 특약(납입지원)
+  terms:
+    - { label: 보험료납입지원특약, term: 80세만기, pay: 주계약 납입기간과 같음, age: 만15세 ~ 60세 }
+  payFreqs: [월납]
+  renewal: 비갱신형
+basis:
+  interest: 2.5%
+  standardInterest: 3.25%
+  waiver: false       # 지원 사유가 곧 탈퇴 사유 — 진단되면 이 특약은 소멸한다
+rates:
+${Q}
+  - id: rc
+    name: 암발생률
+    role: incidence
+    source: 경험생명표(가상) 암발생률
+  - id: rs
+    name: 뇌출혈 발생률
+    role: incidence
+    source: 경험생명표(가상) 뇌출혈 발생률
+  - id: ra
+    name: 급성심근경색증 발생률
+    role: incidence
+    source: 경험생명표(가상) 급성심근경색증 발생률
+expenses:           # 납입 후 유지비(β′)는 두지 않는다 — 지원은 납입기간에 끝나 그 뒤에는 관리할 급부가 없다
+  - { group: 계약체결비용, symbol: α_S, basis: 보험가입금액, rate: 1%, phase: 초년도 }
+  - { group: 계약체결비용, symbol: α_P, basis: 기준연납순보험료, times: 1배, phase: 초년도 }
+  - { group: 계약관리비용, symbol: β_S, basis: 매년 보험가입금액, rate: 1.5/1000, phase: 납입중 }
+  - { group: 계약관리비용, symbol: β_G, basis: 영업보험료, rate: 4.5%, phase: 납입중 }
+  - { group: 수금비용, symbol: γ, basis: 영업보험료, rate: 2.5% }
+benefits:
+  - id: b1
+    name: 3대질병 진단 시 보험료 지원
+    unit: 보험료납입지원특약
+    role: incidence
+    amount: 100000    # 월 지원액 10만원 — 주계약 월보험료
+    endAge: 80
+    exitRateIds: [q, rc, rs, ra]   # 급부 = 사망 아닌 탈퇴 사유(암·뇌출혈·급성심근경색증) 가운데 하나라도
+${NOTES}
+formulas:             # 보험금의 현가 — 보장금액의 배수 S 를 남은 달의 확정연금 현가로 바꾼 식(자동 식 위에 얹힌다)
+  - section: 계산기수 — 보험금
+    label: 보험금의 현가 — 3대질병 진단 시 보험료 지원
+    text: |-
+      보장금액의 배수 — 진단(연중앙)부터 납입기간 끝까지 남은 달마다 월 지원액을 확정 지급한다
+      S_t = if( t < m, ( 1 − v^{m − t − ½} )/( 1 − v^{1/12} ), 0 )
+      급부 발생자
+      C_{x+t} = l_{x+t}·R_{x+t}·v^{t+½}
+      보험금 현가의 누계
+      M_{x+t} = Σ_{u=t}^{n−1} S_u·C_{x+u}
+      보험금 현가 (PVB) — 월 지원액 1원당
+      PVB = M_x
+    note: S_t 는 월 지원액 1원을 남은 12·(m − t) − 6 달 동안 매월 초에 주는 확정연금의 진단 시점 현가다. 지급약정기간 동안에는 생존과 상관없이 준다. 납입기간이 끝난 뒤(t ≥ m)에는 지원할 보험료가 없어 0 이다. R 은 유지자수 식의 질병 발생률(암·뇌출혈·급성심근경색증의 곱 결합)이다.
 ` },
 ];

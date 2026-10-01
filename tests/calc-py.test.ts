@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { calcPython, pyName, pythonScript, toPython } from "@/lib/methoddoc/calc-py";
 import { computeSpec, parseEquation } from "@/lib/methoddoc/calc";
-import { jsonToSpec } from "@/lib/conditions/yaml";
+import { jsonToSpec, yamlToSpec } from "@/lib/conditions/yaml";
+import { SAMPLES } from "@/lib/samples";
+import { attachTables, sampleSheet } from "@/lib/sheet";
+import { BASE_RATES_CSV } from "@/lib/base-rates";
 
 /**
  * 보험료 계산 → 파이썬 셀. 산출방법서의 식을 그대로 옮긴 코드라, 파이썬이 돌려 낸 값이 앱의 값과 같아야 한다.
@@ -56,5 +59,20 @@ describe("보험료 계산 → 파이썬", () => {
     expect(got.map((g) => [g.name, g.per100k, g.premium])).toEqual(want.benefits.map((b) => [b.name, b.per100k, b.premium]));
     // 준비금도 찍힌다
     expect(r.stdout).toContain("t, V(10만원당), W(10만원당), 환급률");
+  }, 60000);
+
+  // 샘플마다 — 2대질병(납입자수 곱 결합 식) · 일당형 · 급부 위험률을 따로 적은 수술 · 확정연금 급부(납입지원)까지 파이썬이 같은 값을 낸다
+  it.skipIf(!py).each(SAMPLES.map((s) => [s.id, s.yaml] as const))("샘플 %s: 파이썬으로 돌린 10만원당·담보 보험료가 앱과 같다", (_id, yaml) => {
+    const sp = yamlToSpec(yaml).spec;
+    const withRates = attachTables(sp, sampleSheet(sp.rates, BASE_RATES_CSV));
+    const dir = mkdtempSync(join(tmpdir(), "calc-py-"));
+    const file = join(dir, "calc.py");
+    writeFileSync(file, pythonScript(calcPython(withRates, contract)));
+    const r = spawnSync(py!, [file], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+    expect(r.status, r.stderr).toBe(0);
+    const got = JSON.parse(r.stdout.split("\n").find((l) => l.startsWith("RESULT "))!.slice(7)) as { name: string; per100k: number; premium: number }[];
+    const want = computeSpec(withRates, contract);
+    expect(want.errors).toEqual([]);
+    expect(got.map((g) => [g.name, g.per100k, g.premium])).toEqual(want.benefits.map((b) => [b.name, b.per100k, b.premium]));
   }, 60000);
 });

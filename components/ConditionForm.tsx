@@ -5,10 +5,10 @@ import { isMap, isScalar, parseDocument } from "yaml";
 import { pathKey, pct, type YamlEdit, type YamlPath } from "@/lib/conditions/yaml";
 import { matchBlocks, splitPaths, under } from "@/lib/conditions/link";
 import { parseRate, parseTimes } from "@/lib/methoddoc/parse";
-import { benefitModels, eventRate, groupModels, reasonOf, waitLabel, withFormulas, type BenefitModel, type GroupModel } from "@/lib/methoddoc/formulas";
+import { benefitModels, eventCauses, eventRate, groupModels, reasonOf, waitLabel, withFormulas, type BenefitModel, type GroupModel } from "@/lib/methoddoc/formulas";
 import { calcSheets, checkFormula, computeByPayMethod, computeSpec, PAY_METHODS, SUM_ASSURED_DEFAULT, type CalcContract, type CalcResult, type CalcSheets } from "@/lib/methoddoc/calc";
 import { subSup } from "@/lib/methoddoc/render";
-import { MAIN_UNIT, RATE_ROLE_LABEL, unitNames, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
+import { endAgeLabel, MAIN_UNIT, RATE_ROLE_LABEL, unitNames, WHOLE_LIFE_AGE, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
 import { guessRole, newRateId } from "@/lib/sheet";
 import { EXPENSE_PRESET } from "@/lib/samples";
 import { SECTION_OF } from "@/lib/snippets";
@@ -530,7 +530,7 @@ function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formula
           <Fold key={i} open={open === k} onToggle={() => setOpen(open === k ? -1 : k)}
             title={<>{k + 1}. {str(x.name) || `담보 ${k + 1}`}</>}
             chips={[BEN_ROLES.find(([r]) => r === str(x.role))?.[1], s?.multiple !== undefined ? `${s.multiple}배 = ${krw(s.multiple * sumAssured)}` : s?.amount !== undefined ? krw(s.amount) : "금액 없음",
-              s?.endAge ? `${s.endAge}세` : undefined, s?.waitDays ? waitLabel(s) : undefined, g && `집단: ${g.label}`]}
+              s?.endAge ? endAgeLabel(s.endAge) : undefined, s?.waitDays ? waitLabel(s) : undefined, g && `집단: ${g.label}`]}
             tools={<>
               <button type="button" className="card-icon" onClick={() => move(i, -1)} title="위로">▲</button>
               <button type="button" className="card-icon" onClick={() => move(i, 1)} title="아래로">▼</button>
@@ -587,11 +587,11 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
         <F p={at("name")} label="담보 이름" wide />
         <Sel p={at("role")} label="급부 유형" options={BEN_ROLES.map(([k, l]) => [k, l])} hint={BEN_ROLES.find(([k]) => k === role)?.[2]}
           onPick={(v) => { const id = suggestRate(rates, String(v)); return [{ path: at("role"), value: v }, { path: at("rateId"), value: undefined }, { path: at("exitRateIds"), value: autoExit(rates, String(v), id) }]; }} />
-        <F p={at("endAge")} label="보험기간" kind="num" unit="세" dl="dl-endage" hint={end >= 110 ? "종신 (110세)" : `${end}세 만기 — 보장기간 n = ${end}세 + 1 − 가입나이`} />
+        <F p={at("endAge")} label="보험기간" kind="num" unit="세" dl="dl-endage" hint={end >= WHOLE_LIFE_AGE ? `종신 — 사망률 표 끝(${end}세)의 해까지 보장` : `${end}세 만기 — ${end - 1}세까지 보장, 보장기간 n = ${end}세 − 가입나이`} />
       </Grid>
       <div className="ben-grid">
         <Sel p={at("multiple")} label="보장금액" options={MULTIPLES}
-          hint={mult !== undefined ? `가입금액 × ${mult} = ${krw(mult * sumAssured)} (시산 가입금액 기준)` : amount !== undefined ? `옛 조건의 절대 금액 ${krw(amount)} — 배수를 고르면 가입금액 × 배수로 바뀝니다` : "가입금액 대비 배수"}
+          hint={mult !== undefined ? `가입금액 × ${mult} = ${krw(mult * sumAssured)} (시산 가입금액 기준)` : amount !== undefined ? `따로 정한 금액 ${krw(amount)}${role === "recurring" ? " (1일당)" : ""} — 입원 일당·월 지원액처럼 가입금액과 따로 정하는 담보. 배수를 고르면 가입금액 × 배수로 바뀝니다` : "가입금액 대비 배수"}
           onPick={(v) => [{ path: at("multiple"), value: v === "" ? undefined : Number(v) }, { path: at("amount"), value: undefined }]} />
         <Sel p={at("waitDays")} label="면책·삭감 기간" options={WAIT_DAYS}
           onPick={(v) => [{ path: at("waitDays"), value: !v || v === "" || Number(v) === 0 ? undefined : Number(v) }, ...(!v || Number(v) === 0 ? [{ path: at("waitPayRatio"), value: undefined }] : [])]} />
@@ -601,7 +601,7 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
       </div>
       <div data-path={`benefits[${i}].exitRateIds`}>
         <p className="fld-label">유지자수 집단 (탈퇴 위험률)</p>
-        <p className="fld-hint mb-1">이 담보가 소멸하는 사유 전부입니다. 급부 위험률은 여기서 정해집니다 — {role === "death" ? "사망형은 탈퇴 사유 전부가 급부" : `사망이 아닌 사유(${ev?.name ?? "없음"})가 급부`}. 보험료 카드의 집단 가운데 고르거나 직접 고릅니다(새 집단이 생깁니다).</p>
+        <p className="fld-hint mb-1">이 담보가 소멸하는 사유 전부입니다. 급부 위험률은 여기서 정해집니다 — {role === "death" ? "사망형은 탈퇴 사유 전부가 급부" : `사망이 아닌 사유(${(ev?.name ?? (s ? eventCauses(spec, s).map((r) => r.name).join(" · ") : "")) || "없음"})가 급부`}. 보험료 카드의 집단 가운데 고르거나 직접 고릅니다(새 집단이 생깁니다).</p>
         <select className="inp mb-1.5" value={mine?.id ?? ""} onFocus={() => f.select(`benefits[${i}].exitRateIds`)}
           onChange={(e) => { const g = groups.find((y) => y.id === e.target.value); if (g) f.set(at("exitRateIds"), g.exits.map((r) => r.id)); }}>
           {!mine && <option value="">—</option>}
@@ -911,8 +911,14 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const bens = list(raw.benefits);
   // ── 계약 단위(주계약·특약) — 담보의 unit 이름에서 나온다. 탭을 고르면 보장·보험료 카드가 그 단위의 담보만 보인다
   const units = useMemo(() => unitNames(spec), [spec]);
-  const [unitSel, setUnit] = useState(MAIN_UNIT);
-  const unit = units.includes(unitSel) ? unitSel : MAIN_UNIT;
+  const [unitSel, setUnit] = useState<string | null>(null);
+  // 다른 상품(샘플·파일)을 열면 고른 탭을 비운다 — 앞 상품에서 고른 주계약 탭이 특약만 있는 상품에 남지 않게
+  const product = spec.meta.productName;
+  const [unitFor, setUnitFor] = useState(product);
+  if (unitFor !== product) { setUnitFor(product); setUnit(null); }
+  // 고르기 전에는 담보가 있는 첫 단위 — 특약만 있는 조건(입원·수술 특약 샘플)이 빈 주계약 탭으로 열리지 않게
+  const unitOfBen = (x: Record<string, unknown>) => str(x.unit).trim() || MAIN_UNIT;
+  const unit = unitSel && units.includes(unitSel) ? unitSel : units.find((u) => bens.some((x) => unitOfBen(x) === u)) ?? MAIN_UNIT;
   const unitIdxs = bens.map((x, i) => (((str(x.unit).trim() || MAIN_UNIT) === unit) ? i : -1)).filter((i) => i >= 0);
   const unitIds = unitIdxs.map((i) => spec.benefits[i]?.id).filter(Boolean) as string[];
   const unitGroups = groups.filter((g) => g.benefitIdx.some((i) => unitIdxs.includes(i)));

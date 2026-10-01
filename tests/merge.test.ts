@@ -18,41 +18,43 @@ const roundtrip = (spec: ReturnType<typeof yamlToSpec>["spec"], edit: (md: strin
   return { doc, back, ...mergeSpec(spec, back.spec, back.evidence, { standard: !!back.format }) };
 };
 
+const twoMajor = () => yamlToSpec(SAMPLES.find((x) => x.id === "twoMajor")!.yaml);
+
 describe("고친 산출방법서 → 조건 (지운 것도 반영)", () => {
   it("담보 표의 면책을 '없음' 으로, 연령 구간 주석을 지우면 조건에서도 빠진다", () => {
-    const { spec } = yamlToSpec(SAMPLES[1].yaml);
+    const { spec } = twoMajor();
     spec.benefits[0].waitDays = 90;
     spec.benefits[0].steps = [{ fromAge: 40, toAge: 59, multiple: 1 }, { fromAge: 60, toAge: 80, multiple: 0.5 }];
     const { spec: out, changes } = roundtrip(spec, (md) => md.replace("| 면책·삭감 | 90일 면책 |", "| 면책·삭감 | 없음 |").replace(/^> ※ .*연령 구간 배수.*$/m, ""));
-    expect(changes).toEqual(["benefits: 1개 → 1개 갱신"]);
+    expect(changes).toEqual(["benefits: 2개 → 2개 갱신"]);
     expect(out.benefits[0].waitDays).toBeUndefined();
     expect(out.benefits[0].steps).toBeUndefined();
     // 급부 위험률은 탈퇴 사유에서 정해지므로 rateId 는 적지 않는다
-    expect(out.benefits[0]).toMatchObject({ id: spec.benefits[0].id, multiple: 1, endAge: 80, exitRateIds: ["q", "r2"] });
+    expect(out.benefits[0]).toMatchObject({ id: spec.benefits[0].id, multiple: 1, endAge: 80, exitRateIds: ["q", "rs"] });
     expect(out.benefits[0].rateId).toBeUndefined();
   });
 
   it("위험률 표에서 담보가 쓰지 않는 행을 지우면 조건에서 빠지고, 쓰는 행은 남는다", () => {
-    const { spec } = yamlToSpec(SAMPLES[1].yaml);
+    const { spec } = twoMajor();
     spec.rates.push({ id: "z", name: "안 쓰는 발생률", role: "incidence" });
     const { spec: out, changes } = roundtrip(spec, (md) => md.replace(/^\| 안 쓰는 발생률 \|.*$\n/m, ""));
     expect(changes).toEqual(['rates: "안 쓰는 발생률" 삭제']);
-    expect(out.rates.map((r) => r.id)).toEqual(["q", "r2"]);
+    expect(out.rates.map((r) => r.id)).toEqual(["q", "rs", "ra"]);
     // 담보가 쓰는 행을 지워도(문서 실수) 담보가 가리키므로 남는다
-    const kept = roundtrip(spec, (md) => md.replace(/^\| 2대질병 발생률 \|.*$\n/m, ""));
-    expect(kept.spec.rates.some((r) => r.id === "r2")).toBe(true);
+    const kept = roundtrip(spec, (md) => md.replace(/^\| 뇌출혈 발생률 \|.*$\n/m, ""));
+    expect(kept.spec.rates.some((r) => r.id === "rs")).toBe(true);
   });
 
   it("담보 표에만 적은 위험률은 계열로 더해 잇고 경고한다", () => {
-    const { spec } = yamlToSpec(SAMPLES[1].yaml);
-    const { back, spec: out, changes } = roundtrip(spec, (md) => md.replace("| 급부 위험률 | 2대질병 발생률 |", "| 급부 위험률 | 3대질병 발생률 |"));
+    const { spec } = twoMajor();
+    const { back, spec: out, changes } = roundtrip(spec, (md) => md.replace("| 급부 위험률 | 뇌출혈 발생률 |", "| 급부 위험률 | 3대질병 발생률 |"));
     expect(back.warnings.some((w) => /"3대질병 발생률".*위험률 표에 없어.*더했습니다/.test(w))).toBe(true);
     const added = out.rates.find((r) => r.name === "3대질병 발생률")!;
     expect(added.role).toBe("incidence");
     expect(out.benefits[0].rateId).toBe(added.id);
     // 담보의 위험률이 바뀌어 문서의 옛 자동 식(유지자수·납입자수)이 새 자동 식과 달라졌어도, 그것은 사람이 고친 식이 아니다 — 조건의 식으로 남지 않는다
-    expect(changes).toEqual(['rates: "3대질병 발생률" 추가', "benefits: 1개 → 1개 갱신"]);
-    expect(out.formulas).toEqual([]);
+    expect(changes).toEqual(['rates: "3대질병 발생률" 추가', "benefits: 2개 → 2개 갱신"]);
+    expect(out.formulas).toEqual(spec.formulas);     // 사람이 고친 식(납입자수 두 덩이)은 그대로
   });
 
   it("새 위험률 id 는 산출식 기호(q · r · g · f · w)를 따른다", () => {

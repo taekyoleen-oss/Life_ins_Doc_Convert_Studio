@@ -1,6 +1,34 @@
 import { BASE_RATES_CSV, BASE_RATES_SOURCE } from "./base-rates";
 import type { RateRef, Sex } from "./methoddoc/spec";
 import { baseName, cellNum, parseDelimited, sexOf } from "./sheet";
+import { parseDocument } from "yaml";
+import { editYaml, type YamlEdit } from "./conditions/yaml";
+
+/**
+ * 위험률 근거는 가상 이름으로만 적는다 — 두 저장소가 공개이고 앱도 배포되므로 실제 출처(회사·회차·호수)를 조건·산출방법서에 남기지 않는다.
+ * 앞의 실제 출처를 떼고 "경험생명표(가상) <대상 위험률>" 로 쓴다. 대상이 남지 않으면(회사 이름뿐) 위험률 이름을 쓴다.
+ */
+export const VIRTUAL_SOURCE = "경험생명표(가상)";
+const REAL_HEAD = /^(?:\s*(?:보험개발원|[가-힣A-Za-z]+\s*\d{4}\s*-\s*\d+\s*호(?:\s*에\s*의한)?|제\s*\d+\s*회|무배당|예정|경험생명표|경험|에\s*의한)\s*)+/;
+export function virtualSource(source: string | undefined, name: string): string {
+  const s = (source ?? "").trim();
+  if (s.startsWith(VIRTUAL_SOURCE)) return s;
+  const tail = s.replace(/\(\s*남자\s*,\s*여자\s*\)\s*의?/g, " ").replace(/\s*[을를]\s*사용함\s*$/, "").replace(REAL_HEAD, "").replace(/\s+/g, " ").trim();
+  const target = /[률율]/.test(tail) ? tail : name.replace(/^제\s*\d+\s*회\s*경험생명표\s*/, "").trim();
+  return `${VIRTUAL_SOURCE} ${target}`;
+}
+/** 조건 파일의 위험률 근거를 모두 가상 이름으로 — 그 칸만 고친다(주석은 그대로) */
+export function virtualizeSources(yaml: string): string {
+  type Raw = { rates?: { name?: unknown; source?: unknown }[] } | null;
+  let raw: Raw;
+  try { raw = parseDocument(yaml).toJS() as Raw; } catch { return yaml; }
+  const edits: YamlEdit[] = (Array.isArray(raw?.rates) ? raw.rates : []).flatMap((r, i) => {
+    const src = typeof r?.source === "string" ? r.source : "";
+    if (!src.trim() || src.trim().startsWith(VIRTUAL_SOURCE)) return [];
+    return [{ path: ["rates", i, "source"], value: virtualSource(src, String(r?.name ?? "")) }];
+  });
+  return edits.length ? editYaml(yaml, edits) : yaml;
+}
 
 /**
  * 기본 위험률 모음 — 필요할 때 골라 위험률 표 창에 넣는 위험률.

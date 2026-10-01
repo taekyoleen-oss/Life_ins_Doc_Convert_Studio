@@ -18,11 +18,21 @@ import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId,
  */
 const csv = readFileSync("samples/08_위험률표_종합_남녀.csv", "utf8");
 const sample = (id: string) => yamlToSpec(SAMPLES.find((s) => s.id === id)!.yaml).spec;
+/** 표 잇기 장치를 보는 조건 — 2대질병을 합산 위험률 하나(r2)로 둔 모양(08 표의 열 이름과 맞는다). 2대질병 샘플은 이제 뇌출혈·급성심근경색증을 따로 둔다 */
+const twoSum = () => yamlToSpec([
+  "meta: { productName: 2대질병 진단보험 }",
+  "basis: { interest: 2.5%, standardInterest: 3.25%, waiver: false }",
+  "rates:",
+  "  - { id: q, name: 사망률, role: death, source: 경험생명표(가상) 사망률 }",
+  "  - { id: r2, name: 2대질병 발생률, role: incidence, source: 경험생명표(가상) 뇌출혈 + 급성심근경색증 발생률 }",
+  "benefits:",
+  "  - { id: b1, name: 2대질병 진단, role: incidence, multiple: 1, endAge: 80, exitRateIds: [q, r2] }",
+].join("\n")).spec;
 const ids = (st: SheetState) => st.map.map((m) => (m.to === "rate" ? `${m.rateId}${m.sex ?? ""}` : m.to));
 
 describe("표를 올리면 — 이름으로 잇고, 없는 이름은 새 위험률로", () => {
-  it("2대질병 샘플: 사망률(남·여)→q, 2대질병 발생률→r2, 나머지 3계열은 새 위험률(남·여 열은 한 계열)", () => {
-    const spec = sample("twoMajor");
+  it("2대질병(합산 위험률) 조건: 사망률(남·여)→q, 2대질병 발생률→r2, 나머지 3계열은 새 위험률(남·여 열은 한 계열)", () => {
+    const spec = twoSum();
     const sheet = sheetFromText("08.csv", csv);
     let st: SheetState = { sheet, map: autoMap(sheet, spec.rates) };
     expect(ids(st)).toEqual(["age", "qM", "qF", "r2", "skip", "skip", "skip", "skip"]);
@@ -61,7 +71,7 @@ describe("표를 올리면 — 이름으로 잇고, 없는 이름은 새 위험�
 });
 
 describe("조건에 더하면 표에 빈 열, 지우면 연결 해제", () => {
-  const spec = sample("twoMajor");
+  const spec = twoSum();
   const sheet = sheetFromText("s", "연령\t사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
   const st0: SheetState = { sheet, map: autoMap(sheet, spec.rates) };
 
@@ -90,7 +100,7 @@ describe("조건에 더하면 표에 빈 열, 지우면 연결 해제", () => {
 });
 
 describe("표 창에서 바로 고치기 — 칸 값 · 열 이름", () => {
-  const spec = sample("twoMajor");
+  const spec = twoSum();
   const sheet = sheetFromText("s", "연령\t사망률\t2대질병 발생률\n40\t0.001\t0.002\n41\t0.0011\t0.0021");
   const st0: SheetState = { sheet, map: autoMap(sheet, spec.rates) };
   it("값을 고치면 붙는 표(→ 산출방법서 별첨 · JSON)가 바뀌고, 수가 아니면 그 칸은 빠진다", () => {
@@ -110,7 +120,7 @@ describe("표 창에서 바로 고치기 — 칸 값 · 열 이름", () => {
 
 describe("산출방법서에 위험률을 더해 올리면 — 조건에 더해지고, 담보가 쓰면 식에도", () => {
   it("1.2 표에 행을 더하고 담보의 탈퇴 위험률에 적으면 mergeSpec 이 조건에 더한다 → 표에는 빈 열(addEmptyColumn) → 값을 채우면 JSON 에", () => {
-    const spec = sample("twoMajor");
+    const spec = twoSum();
     let md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
     md = md.replace(/^(\| 2대질병 발생률 \|.*)$/m, "$1\n| 뇌졸중 발생률 | r9 | 최초발생 | 가상 | 별첨 |")
       .replace("| 탈퇴 위험률 | 사망률 및 2대질병 발생률 |", "| 탈퇴 위험률 | 사망률 및 2대질병 발생률 및 뇌졸중 발생률 |");

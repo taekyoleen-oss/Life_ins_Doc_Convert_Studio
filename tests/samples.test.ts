@@ -62,7 +62,7 @@ describe("03 사업방법서 발췌 — 판매 범위 표 → M01 가입 조건"
 
 describe("04·05·06 조건 파일 · 자유설계보험 JSON · 위험률 표", () => {
   it("04 YAML 은 그대로 조건이 된다", async () => {
-    const { spec, errors } = await open("04_조건파일_무해지암보험.yaml");
+    const { spec, errors } = await open("04_조건파일_암진단보장보험.yaml");
     expect(errors).toEqual([]);
     expect(spec).toEqual(yamlToSpec(SAMPLES[2].yaml).spec);
   });

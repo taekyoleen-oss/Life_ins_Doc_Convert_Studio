@@ -45,7 +45,10 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     const main = f.find((x) => x.key === "pay:g1")!.text, can = f.find((x) => x.key === "pay:g2")!.text;
     expect(main).toContain("f_x : 암발생률 — 납입만 면제되는 사유");
     expect(can).toContain("f_x : 80% 이상 장해율 — 납입만 면제되는 사유");
-    expect(main).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q_{x+t} − f_{x+t} + Q_{x+t}·f_{x+t}/2 )");
+    // 질병(장해 r · 암 f)은 곱으로, 사망과는 겹치는 부분 절반 — 두 집단의 납입자수가 같다
+    expect(main).toContain("F_{x+t} = 1 − ( 1 − r_{x+t} )·( 1 − f_{x+t} )");
+    expect(main).toContain("Q′_{x+t} = min( 1, q_{x+t} + F_{x+t} − q_{x+t}·F_{x+t}/2 )");
+    expect(main).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q′_{x+t} )");
     // 면책은 보장금액의 배수 S 로 — 첫해만 (1 − 3/12) 배
     expect(f.find((x) => x.key === "benefit:b2")!.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
@@ -53,17 +56,17 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(md).toContain("f_{x+t} : 그 집단에서 납입만 면제되는 사유의 발생률");
     expect(md).toContain("| 면책·삭감 | 90일 면책 |");
     expect(md).toContain("| 보장금액 | 가입금액의 0.5배 |");
-    expect(md).toContain("| 보험기간 | 100세 |");
+    expect(md).toContain("| 보험기간 | 100세 만기 |");
     expect(md).toContain("유지자수·납입자수의 집단 2개");
   });
 
-  it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 163 · 가입금액 1억 기준 월 342,500원)", () => {
+  it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 162 · 가입금액 1억 기준 월 342,000원)", () => {
     const got = computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 1e8 });
     expect(got.errors).toEqual([]);
-    expect(got.benefits.map((b) => [b.gross6, b.per100k, b.amount])).toEqual([[0.002606, 261, 1e8], [0.001625, 163, 5e7]]);
-    expect(got.premium).toBe(342500);
+    expect(got.benefits.map((b) => [b.gross6, b.per100k, b.amount])).toEqual([[0.002606, 261, 1e8], [0.001624, 162, 5e7]]);
+    expect(got.premium).toBe(342000);
     // 가입금액을 바꾸면 담보 보험료만 비례해 바뀐다(10만원당은 그대로) · 납입방법마다 N* 만 다르다
-    expect(computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 5e7 }).premium).toBe(171250);
+    expect(computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 5e7 }).premium).toBe(171000);
     const byPay = computeByPayMethod(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 1e8 });
     expect(byPay.map((r) => r.label)).toEqual(["월납", "3개월납", "6개월납", "연납"]);
     expect(byPay[3].premium).toBeGreaterThan(byPay[0].premium * 11);
