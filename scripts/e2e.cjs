@@ -41,7 +41,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     (await p.textContent(".doc-body h1")).includes("종신보험(암진단 포함)") && (await p.locator(".form-body .card").count()) >= 9
     && heads0.join(",") === "연령,사망률(남),사망률(여),80% 이상 장해율(남),80% 이상 장해율(여),암발생률(남),암발생률(여)", heads0.join(","));
   ok("첫 화면: 암 진단 담보(90일 면책·사망보험금의 50%) · 납입면제 사유 80% 장해·암", (await p.locator(".doc-body tr", { hasText: "면책" }).allTextContents()).some((t) => t.includes("90일"))
-    && (await p.locator(".doc-body p", { hasText: "납입자수는 보험료 계산에 하나만 쓴다" }).count()) === 1);
+    && (await p.locator(".doc-body p", { hasText: "납입면제 사유는 80% 이상 장해율 · 암발생률 이다" }).count()) === 1);
   ok("첫 화면: 산출방법서에 별첨 위험률 표 · 상태줄 '표 없음' 없음", (await p.locator(".doc-body h2", { hasText: "별첨" }).count()) === 1 && !(await p.textContent("footer")).includes("표 없음"));
   await p.screenshot({ path: `${OUT}/s1_first.png` });
 
@@ -97,9 +97,37 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   // 0-2) 보장 카드 — 담보 하나가 조건 + 보험금 현가 식 한 묶음, 유지자수는 보험료 카드에서 가져온다
   await p.click(".card[data-card=B01] .card-head");
   await p.waitForTimeout(600);
+  const hlB = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
+  ok("B01 을 열면 담보 표·유지자수·보험금의 현가 식만 비친다 (납입자수·순보험료 식은 아니다)",
+    hlB.some((t) => t.startsWith("보장금액")) && hlB.some((t) => t.includes("보험금의 현가 — 암 진단")) && hlB.some((t) => t.includes("유지자수 — 유지자("))
+    && !hlB.some((t) => t.includes("납입자수 — ")) && !hlB.some((t) => t.includes("순보험료")), hlB.join(" / ").slice(0, 300));
   await p.click(".card[data-card=B01] .card-fx");                              // 이 카드의 식을 켠다
   await p.waitForTimeout(400);
   const lxFrom = (await p.textContent(".card[data-card=B01] .lx-from")).replace(/\s+/g, " ");
+  // 담보 칸 하나를 고르면 그 행과 그 칸에 기대는 식만 — 보장금액은 표의 보장금액 행 + 보험금의 현가 식
+  await p.focus(".card[data-card=B01] .sub-open [data-path$='.multiple'] select");
+  await p.waitForTimeout(400);
+  const hlM = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
+  ok("보장금액 칸 → 담보 표의 보장금액 행과 그 담보의 보험금의 현가 식만 비친다",
+    hlM.filter((t) => t.startsWith("보장금액가입금액")).length === 1 && !hlM.some((t) => t.startsWith("급부 유형")) && hlM.some((t) => t.includes("보험금의 현가 —"))
+    && !hlM.some((t) => /유지자수 — |납입자수 — /.test(t)), hlM.join(" / ").slice(0, 300));
+  // 위험률을 고르면 이 담보의 탈퇴 위험률 행과 가.(2) 예정위험률의 그 행
+  await p.focus(".card[data-card=B01] .sub-open [data-path$='.exitRateIds'] input[type=checkbox]");
+  await p.waitForTimeout(400);
+  const hlR = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
+  ok("위험률 칸 → 예정위험률 표의 그 행 + 담보 표의 탈퇴 위험률 행이 비친다",
+    hlR.some((t) => t.startsWith("사망률q")) && hlR.some((t) => t.startsWith("탈퇴 위험률")), hlR.join(" / ").slice(0, 300));
+  // [＋ 위험률] — 조건에 새 위험률이 생기고 이 담보의 탈퇴 사유로 골라진다 → 산출방법서 가.(2) 에 행이 는다 → 되돌린다
+  const rateRows = async () => p.locator(".doc-body tr", { hasText: "경험생명표(가상)" }).count();
+  const rr0 = await rateRows(), newRows0 = await p.locator(".doc-body tr", { hasText: "새 위험률" }).count();
+  await p.locator(".card[data-card=B01] .sub-open .pane-tool", { hasText: "＋ 위험률" }).click();
+  await p.waitForTimeout(800);
+  const newRows = await p.locator(".doc-body tr", { hasText: "새 위험률" }).count();
+  ok("[＋ 위험률] → 새 위험률이 조건·산출방법서(예정위험률·탈퇴 위험률 행)에 생기고 이 담보에 골라진다",
+    newRows0 === 0 && newRows >= 2 && (await p.locator(".card[data-card=B01] .sub-open label", { hasText: "새 위험률" }).locator("input").isChecked()), `${rr0} · ${newRows}`);
+  await p.locator(".pane-tool", { hasText: "되돌리기" }).click();
+  await p.waitForTimeout(800);
+  ok("되돌리기 → 새 위험률이 빠진다", (await p.locator(".doc-body tr", { hasText: "새 위험률" }).count()) === 0);
   ok("B01: 담보마다 유지자수 l 은 그 집단의 것이고, 납입자수는 보험료 카드에서 본다",
     lxFrom.includes("유지자(사망X, 80% 이상 장해X)") && lxFrom.includes("보험료 카드에서 보기"), lxFrom.slice(0, 80));
   ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위·급부 위험률 칸도 없다(탭·탈퇴 사유에서 정해진다) · 증액·감액 구간도 없다",
@@ -164,8 +192,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(400);
   ok("M08 의 식: P_β · V · 해약공제 신계약비 · 해약공제 · W · 납입누계 · 환급률", (await p.locator(".card[data-card=M08] .formula-card").count()) === 7);
   const outline = await p.$$eval("#print-area h2, #print-area h3", (e) => e.map((x) => x.textContent));
-  ok("산출방법서가 실무 양식의 장 구성 — 1. 보험료의 계산에 관한 사항(가~사) · 2. 책임준비금 · 3. 해지환급금",
-    outline.join(" | ") === "개요 | 1. 보험료의 계산에 관한 사항 | 가. 예정기초율 | 나. 보장 내용 | 다. 기호의 정의 | 라. 유지자수·납입자수 | 마. 계산기수 — 보험료 | 바. 계산기수 — 보험금 | 사. 순보험료 및 영업보험료 | 2. 책임준비금의 계산에 관한 사항 | 3. 해지환급금의 계산에 관한 사항 | 4. 별첨 — 위험률 표",
+  ok("산출방법서가 실무 양식의 장 구성(v6 — 보장 내용 절 없음, 담보 표는 보험금의 현가 식 위) — 1. 보험료(가~바) · 2. 책임준비금 · 3. 해지환급금",
+    outline.join(" | ") === "개요 | 1. 보험료의 계산에 관한 사항 | 가. 예정기초율 | 나. 기호의 정의 | 다. 유지자수·납입자수 | 라. 계산기수 — 보험료 | 마. 계산기수 — 보험금 | 바. 순보험료 및 영업보험료 | 2. 책임준비금의 계산에 관한 사항 | 3. 해지환급금의 계산에 관한 사항 | 4. 별첨 — 위험률 표",
     outline.join(" | "));
   await p.screenshot({ path: `${OUT}/s1b_cards.png` });
 

@@ -60,7 +60,7 @@ describe("조건 → 산출식", () => {
   it("종신: 사망·80% 장해 한 집단 — 탈퇴율 Q = min(1, q + r − q·r/2), 유지자수(보장 쪽)·납입자수(보험료 쪽)는 1 − Q", () => {
     const g = byKey("whole", "group:g1");
     expect(g.section).toBe("유지자수·납입자수");
-    expect(g.path).toBe("benefits[0]|rates[0]|rates[1]");        // 담보·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다
+    expect(g.path).toBe("benefits[0].exitRateIds|rates[0]|rates[1]");   // 담보의 탈퇴 사유·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다(보장금액·면책 칸은 아니다)
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
     expect(g.text).toContain("Q_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
     expect(g.text).toContain("유지자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl_{x+t+1} = l_{x+t} × ( 1 − Q_{x+t} )");

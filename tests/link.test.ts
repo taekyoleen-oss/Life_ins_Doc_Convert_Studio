@@ -34,10 +34,12 @@ describe("조건 줄 → 산출방법서 블록", () => {
     expect(got.filter((t) => /^계약|^수금/.test(t))).toHaveLength(6);
     expect(got.some((t) => /^G = \[/.test(t))).toBe(true);
   });
-  it("담보 안의 금액 줄 → 담보 표의 그 담보 행과 그 담보의 유지자수·납입자수 식", () => {
+  it("담보 안의 금액 줄 → 담보 표의 보장금액 행과 그 담보의 보험금의 현가 식만 (유지자수·납입자수 식은 아니다)", () => {
     const got = hl(lineOf(/multiple: 1/));
     expect(got.some((t) => /^보장금액 \| 가입금액의 1배/.test(t))).toBe(true);    // 담보마다 세로 표 — 보장금액은 가입금액의 배수
-    expect(got.some((t) => /l_\{x\+t\+1\} = l_\{x\+t\}/.test(t))).toBe(true);
+    expect(got.some((t) => /^급부 유형 \|/.test(t))).toBe(false);                  // 표의 다른 행은 비추지 않는다
+    expect(got.some((t) => /PVB = M_x/.test(t))).toBe(true);
+    expect(got.some((t) => /l_\{x\+t\+1\} = l_\{x\+t\}|l′_\{x\+t\+1\}/.test(t))).toBe(false);
   });
   it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 담보식", () => {
     const got = hl(lineOf(/id: r80/));

@@ -55,11 +55,14 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(f.find((x) => x.key === "benefit:b2")!.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
     expect(md).toContain("f_x : 80% 이상 장해율 · 암발생률");                     // 가.(4) 납입면제 사유 — 되읽는 표시
-    expect(md).toContain("f_{x+t} : 납입을 멈추게 하는 질병의 발생률");
+    expect(md).not.toContain("f_{x+t} : 납입을 멈추게 하는 질병의 발생률");    // v6 — 결합은 납입자수 식에만(가.(4) 는 사유와 f_x 줄)
     expect(md).toContain("| 면책·삭감 | 90일 면책 |");
     expect(md).toContain("| 보장금액 | 가입금액의 0.5배 |");
     expect(md).toContain("| 보험기간 | 100세 만기 |");
-    expect(md).toContain("유지자수 집단 2개");
+    // v6 — 보장 내용 절이 없고, 담보 표는 그 담보의 보험금의 현가 식 바로 위에
+    expect(md).not.toContain("유지자수 집단 2개");
+    expect(md).not.toContain("### 나. 보장 내용");
+    expect(md).toMatch(/\| 탈퇴 위험률 \| 사망률 및 암발생률 \|\n\n\[식\] 보험금의 현가 — 암 진단/);
   });
 
   it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 162 · 가입금액 1억 기준 월 342,000원)", () => {

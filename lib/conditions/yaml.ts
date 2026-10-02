@@ -371,7 +371,9 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
     changes.push(`reserve.notes: ${out.reserve.notes.length}줄 → ${parsed.reserve.notes.length}줄`);
     out.reserve = { notes: parsed.reserve.notes };
   }
-  if (took.has("surrender") && !same(out.surrender, parsed.surrender)) {
+  // 해약공제 기간은 적지 않으면 7년이다(자동 식이 같은 글자를 낸다) — 문서가 7년이라 적어도 조건에 없던 칸이면 바뀐 것이 아니다
+  const dy = (s: MethodSpec["surrender"]) => ({ ...s, deductionYears: s.deductionYears ?? 7 });
+  if (took.has("surrender") && !same(dy(out.surrender), dy(parsed.surrender))) {
     changes.push(`surrender: 해약공제 ${out.surrender.deductionYears ?? "—"}년 · 주석 ${out.surrender.notes.length}줄 → ${parsed.surrender.deductionYears ?? "—"}년 · ${parsed.surrender.notes.length}줄`);
     out.surrender = parsed.surrender;
   }

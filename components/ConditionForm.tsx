@@ -33,6 +33,8 @@ type Obj = Record<string, unknown>;
 type Status = "done" | "editing" | "error" | "optional";
 interface CardDef {
   id: string; code: string; title: string; paths: string[]; status: Status; summary: string[]; help: string; message?: string; body: ReactNode; dirty?: boolean;
+  /** 이 카드가 고치는 조건(바뀜 표시·오른쪽에서 고른 칸의 카드 펼치기). 없으면 paths. paths 는 열 때 산출방법서에서 비출 자리다 */
+  owns?: string[];
   /** 이 카드에 식이 있다 — 머리에 [수식 보이기/숨기기] 단추가 붙는다(기본 숨김) */
   formulas?: boolean;
 }
@@ -44,7 +46,7 @@ interface Ctx {
   /** 그 칸에 사용자가 단 YAML 주석(불러온 문서면 원문 위치·확신도) */
   note(p: YamlPath): string | undefined;
   err(key: string): string | undefined;
-  select(key: string): void;
+  select(key: string | string[]): void;
   /** 산출방법서의 식 한 덩이를 고친다(조건의 formulas 로) · 되돌린다 */
   setFormula(f: FormulaSpec, text: string): void;
   resetFormula(f: FormulaSpec): void;
@@ -518,11 +520,9 @@ function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formula
                 <>
                   <div className="lx-from">
                     <p>
-                      유지자수 <b>l</b> 은 집단 <b>“{mo.group.label}”</b> 의 것입니다
-                      {mo.group.benefitIdx.length > 1 && <> (이 집단을 쓰는 담보 {mo.group.benefitIdx.length}개)</>}. 납입자수 l′ 는
+                      유지자수 <b>l</b> = <b>{mo.group.label}</b>{mo.group.benefitIdx.length > 1 && <> (담보 {mo.group.benefitIdx.length}개가 함께 씀)</>} · 납입자수 l′ = {mo.payer.label}
                       <button type="button" className="pane-tool ml-1" onClick={() => onGroup(mo.payer.id)}>보험료 카드에서 보기</button>
                     </p>
-                    {!show && <p className="mt-1 text-[11.5px] text-muted-foreground">급부 위험률: {mo.b.role === "death" ? "탈퇴 사유 전부 (사망형)" : mo.event?.rate.name ?? "—"} · 지급자수 d = l × 급부 위험률</p>}
                   </div>
                   <Formulas items={formulas.filter((y) => y.key === `group:${mo.group.id}`)} show={show} />
                   {show && <div className="ml-2 font-mono text-[11.5px] leading-5 text-[#475569]" dangerouslySetInnerHTML={{ __html: `${subSup(mo.payout)} <span class="text-muted-foreground">— 지급자수 (표에서만 보인다)</span>` }} />}
@@ -573,7 +573,7 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
           : <label className="fld"><span className="fld-label text-muted-foreground">그 기간 지급</span><select className="inp fld-box" disabled value=""><option value="">—</option></select><span className="fld-hint">면책·삭감 기간이 없습니다</span></label>}
       </div>
       <div data-path={`benefits[${i}].exitRateIds`}>
-        <p className="fld-label">유지자수 집단 (탈퇴 위험률)</p>
+        <p className="fld-label">위험률 — 탈퇴 사유 (유지자수 집단)</p>
         <p className="fld-hint mb-1">급부 위험률 = {role === "death" ? "탈퇴 사유 전부" : `${(ev?.name ?? (s ? eventCauses(spec, s).map((r) => r.name).join(" · ") : "")) || "없음"} (사망이 아닌 탈퇴 사유)`}</p>
         <select className="inp mb-1.5" value={mine?.id ?? ""} onFocus={() => f.select(`benefits[${i}].exitRateIds`)}
           onChange={(e) => { const g = groups.find((y) => y.id === e.target.value); if (g) f.set(at("exitRateIds"), g.exits.map((r) => r.id)); }}>
@@ -583,11 +583,13 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
         <div className="flex flex-wrap gap-2">
           {rates.map((r) => (
             <label key={r.id} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
-              <input type="checkbox" className="accent-[var(--primary)]" checked={exits.includes(r.id)} onFocus={() => f.select(`benefits[${i}].exitRateIds`)} onChange={(e) => toggleExit(r.id, e.target.checked)} />
+              <input type="checkbox" className="accent-[var(--primary)]" checked={exits.includes(r.id)} onFocus={() => f.select([`benefits[${i}].exitRateIds`, `rate:${r.id}`])} onChange={(e) => toggleExit(r.id, e.target.checked)} />
               {r.name}
             </label>
           ))}
-          {!rates.length && <span className="text-xs text-muted-foreground">M04 에서 위험률을 먼저 더하세요</span>}
+          {/* 새 위험률 — 조건(M04)에 더하고 이 담보의 탈퇴 사유로 고른다. 위험률 표에는 빈 열이 생기고 산출방법서 가.(2) 에 행이 는다 */}
+          <button type="button" className="pane-tool" title="새 위험률을 더하고 이 담보의 탈퇴 사유로 고릅니다 — 이름·유형·근거는 M04 에서, 값은 위험률 표에서"
+            onClick={() => { const id = newRateId("incidence", rates.map((r) => r.id)); f.edit([{ path: ["rates"], add: true, value: { id, name: "새 위험률", role: "incidence" } }, { path: at("exitRateIds"), value: [...exits, id] }]); f.select([`benefits[${i}].exitRateIds`, `rate:${id}`]); }}>＋ 위험률</button>
         </div>
         {role === "recurring" && (
           <div className="mt-2"><Sel p={at("rateId")} label="급부 위험률 (일당형 — 연간 기대 입원일수)" options={rates.map((r): [string, string] => [r.id, `${r.name} (${RATE_ROLE_LABEL[r.role]})`])} /></div>
@@ -903,7 +905,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     edit: onEdit,
     note: (p) => { const n = doc.getIn(p, true); return isScalar(n) && n.comment ? n.comment.trim() : undefined; },
     err: (key) => general.find((m) => m.startsWith(`${key} `) || m.startsWith(`${key}:`)),
-    select: (key) => onSelect([key]),
+    select: (key) => onSelect(Array.isArray(key) ? key : [key]),
     setFormula: (f, text) => {
       const i = formulaAt(f);
       if (i >= 0) onEdit([{ path: ["formulas", i, "text"], value: text }]);
@@ -931,6 +933,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const unit = unitSel && units.includes(unitSel) ? unitSel : units.find((u) => bens.some((x) => unitOfBen(x) === u)) ?? MAIN_UNIT;
   const unitIdxs = bens.map((x, i) => (((str(x.unit).trim() || MAIN_UNIT) === unit) ? i : -1)).filter((i) => i >= 0);
   const unitIds = unitIdxs.map((i) => spec.benefits[i]?.id).filter(Boolean) as string[];
+  const unitGroupIds = groups.filter((g) => g.benefitIdx.some((i) => unitIdxs.includes(i))).map((g) => g.id);
   const unitPayers = useMemo(() => payerModels(spec), [spec]).filter((p) => p.benefitIdx.some((i) => unitIdxs.includes(i)));
   const used = (id: string) => bens.filter((x) => str(x.rateId) === id || (Array.isArray(x.exitRateIds) && x.exitRateIds.map(String).includes(id))).map((x) => str(x.name));
   const bad = (re: RegExp) => general.find((x) => re.test(x));
@@ -978,7 +981,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
           <Formulas items={byKey(/^pv:(D′|NStar)$/)} show={formulasOn.includes("M05")} />
         </div>
         <CalcPanel calc={calc} ids={unitIds} kind="pay" onSheet={onPremiumSheet} /></> },
-    { id: "B01", code: "B01", title: "보장 — 담보마다 유지자수 (l) · 보험금의 현가 (C · M · PVB)", paths: ["benefits", "formula:group", "formula:benefit", "formula:pv.D"], formulas: true,
+    { id: "B01", code: "B01", title: "보장 — 담보마다 유지자수 (l) · 보험금의 현가 (C · M · PVB)", paths: [...unitIds.map((id) => `formula:benefit.${id}`), ...unitGroupIds.map((id) => `formula:group.${id}`), "formula:pv.D"], owns: ["benefits"], formulas: true,
       status: status(benErr, unitBens.length > 0 && unitBens.every((x) => x.multiple !== undefined || x.amount !== undefined)), message: benErr,
       summary: [`담보 ${unitBens.length}개`, ...unitBens.slice(0, 2).map((x) => `${x.name} ${x.multiple !== undefined ? `${x.multiple}배` : krw(x.amount)}`),
         unitBens.some((x) => x.waitDays) ? "면책·삭감 있음" : "", editChip(edited(/^(group|benefit|pv:D$)/))],
@@ -1009,7 +1012,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   ];
 
   const touches = (paths: string[]) => changed.some((s) => paths.some((p) => under(s, p) || under(p, s)));
-  for (const c of cards) c.dirty = touches(c.paths);
+  for (const c of cards) c.dirty = touches([...c.paths, ...(c.owns ?? [])]);
 
   // 바뀐 칸 표시 — 가장 안쪽(칸)만. 카드는 머리의 "바뀜" 딱지가 맡는다
   useEffect(() => {
@@ -1025,7 +1028,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   // 오른쪽에서 고른 조건이 든 카드를 펼친다 — 한 번에 하나만
   useEffect(() => {
     if (!highlight.length) return;
-    const ids = cards.filter((x) => highlight.some((s) => x.paths.some((p) => under(s, p) || under(p, s)))).map((x) => x.id);
+    const ids = cards.filter((x) => highlight.some((s) => [...x.paths, ...(x.owns ?? [])].some((p) => under(s, p) || under(p, s)))).map((x) => x.id);
     if (ids.length && !ids.some((id) => open.includes(id))) setOpen(() => [ids[0]]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlight]);
