@@ -63,7 +63,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const g5 = await p.textContent(".card[data-card=M05]");
   const hl5 = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 30)));
   ok("M05 보험료: 납입자수는 하나 — 납입자(사망X, 80% 이상 장해X, 암X) · 납입자수 쪽 식(l′ · D′ · N′ · N*)만 · 열면 그 식이 강조된다",
-    g5.includes("납입자(사망X, 80% 이상 장해X, 암X)") && !g5.includes("유지자(") && g5.includes("낼 사람")
+    g5.includes("납입자(사망X, 80% 이상 장해X, 암X)") && !g5.includes("유지자(") && !g5.includes("낼 사람")
     && hl5.some((t) => t.includes("납입자수 —")) && hl5.some((t) => t.includes("연납 환산 납입기수")) && !hl5.some((t) => t.startsWith("유지자수 —")), `${hl5.join(" / ")}`);
   const box5 = await p.$eval(".card[data-card=M05]", (e) => { const r = e.getBoundingClientRect(), f = e.closest(".form-body").getBoundingClientRect(); return Math.abs((r.top + r.bottom) / 2 - (f.top + f.bottom) / 2); });
   ok("카드를 열면 그 카드가 조건 창의 한가운데로 온다", box5 < 160, `가운데에서 ${Math.round(box5)}px`);
@@ -109,13 +109,13 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("담보 칸: 급부 유형 옆 보험기간, 그 아래 보장금액(배수)·면책·삭감 기간·그 기간 지급",
     ["급부 유형", "보험기간", "보장금액", "면책·삭감 기간", "그 기간 지급"].every((t) => b1.includes(t)) && (await p.inputValue(".card[data-card=B01] .sub-open [data-path$='.multiple'] select")) === "1"
     && (await p.inputValue(".card[data-card=B01] .sub-open [data-path$='.endAge'] input")) === "110", b1.slice(0, 120));
-  const fldRows = await p.$$eval(".card[data-card=B01] .fld", (els) => els.map((f) => {
+  const fldRows = await p.$$eval(".card[data-card=B01] .fld:not(.ben-grid .fld)", (els) => els.map((f) => {
     const lab = f.querySelector(".fld-label"), box = f.querySelector(".fld-box");
     if (!lab || !box) return null;
     const a = lab.getBoundingClientRect(), c = box.getBoundingClientRect();
     return Math.abs((a.top + a.height / 2) - (c.top + c.height / 2)) < 6;
   }).filter((x) => x !== null));
-  ok("입력 칸은 이름과 칸이 한 줄 (자리가 모자랄 때만 두 줄)", fldRows.length >= 5 && fldRows.every(Boolean), `${fldRows.filter(Boolean).length}/${fldRows.length}`);
+  ok("입력 칸은 이름과 칸이 한 줄 (자리가 모자랄 때만 두 줄 · 보장금액·면책·삭감 줄은 세 칸 나란히, 이름은 위)", fldRows.length >= 3 && fldRows.every(Boolean), `${fldRows.filter(Boolean).length}/${fldRows.length}`);
   await p.click(".card[data-card=B01] .lx-from button");
   await p.waitForTimeout(600);
   ok("[보험료 카드에서 보기] → M05 가 펼쳐지고 납입자수 식(하나)이 강조된다",
@@ -158,7 +158,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click(".card[data-card=M08] .card-head");
   await p.waitForTimeout(900);
   const m8 = (await p.textContent(".card[data-card=M08]")).replace(/\s+/g, " ");
-  ok("M08: 준비금·환급금 설명과 10만원당 V · W · 환급률 시산 표(담보 둘)", m8.includes("책임준비금 V") && m8.includes("해지환급금 W") && (await p.locator(".card[data-card=M08] .calc-table").count()) === 2
+  ok("M08: 계산에 반영되는 조건 표(해약공제 기간 · 해약공제 신계약비 · 결산 적립금 max(V, V^{표준}) 식) + 10만원당 V · W · 환급률 산출 결과(담보 둘)", m8.includes("계산에 반영되는 조건") && (await p.locator(".card[data-card=M08] .note-item .katex").count()) === 3 && (await p.locator(".card[data-card=M08] .note-item").count()) === 4 && (await p.locator(".card[data-card=M08] .calc-table").count()) === 2
     && /준비금 V \(10만원당\)[\d,]+/.test(m8) && /환급률[\d.]+%/.test(m8), m8.slice(0, 100));
   await p.click(".card[data-card=M08] .card-fx");
   await p.waitForTimeout(400);
@@ -176,7 +176,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("보험료 계산 표: 위험률 → 현가율 둘 → 유지자수·납입자수·지급자수 → 현가·누계 → 보장금액 배수·급부 현가",
     /사망률/.test(cHead[3]) && cHead.filter((t) => t.includes("현가율")).length === 2
     && cHead.some((t) => t.includes("유지자수")) && cHead.some((t) => t.includes("납입자수"))
-    && cHead.some((t) => t.includes("지급자수")) && cHead.some((t) => t.includes("현가의 누계")) && cHead.some((t) => t.includes("책임준비금")) && cHead.some((t) => t.includes("환급률")) && cHead.length === 29, `${cHead.length}열`);
+    && cHead.some((t) => t.includes("지급자수")) && cHead.some((t) => t.includes("현가의 누계")) && cHead.some((t) => t.includes("책임준비금")) && cHead.some((t) => t.includes("환급률")) && cHead.length === 31, `${cHead.length}열`);
   const inputs = (await p.textContent(".calc-modal .calc-left")).replace(/\s+/g, " ");
   ok("왼쪽에 계약·기초율 — 가입나이·가입금액·보장기간·납입기간·납입주기·이율·현가율·배수·보장금액·사업비",
     ["가입나이 x", "보험가입금액", "보장기간 n", "납입기간 m", "납입주기 k", "적용이율 i", "현가율 v", "보장금액 배수", "보장금액", "α_S", "γ"].every((t) => inputs.includes(t)), inputs.slice(0, 120));

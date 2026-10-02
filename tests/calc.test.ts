@@ -85,7 +85,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
     // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
     expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f^{(1)}", "f^{(2)}"]);   // 유지자수 q·r · 납입자수 f⁽¹⁾ 장해 · f⁽²⁾ 암
-    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "F", "Q′", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
+    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "F", "Q′", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "V^{표준}", "V^{결산}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
     for (const c of s0.cols) expect(c.values).toHaveLength(72);
     // 기준 인원에서 시작하고, 지급자수 = 유지자수 × 탈퇴율
     const col = (sym: string) => s0.cols.find((c) => c.sym === sym)!;

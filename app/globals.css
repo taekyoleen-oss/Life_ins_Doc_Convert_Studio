@@ -153,7 +153,10 @@ textarea.inp { font-family: inherit; resize: vertical; }
 /* 담보 안 — 유지자수를 어느 집단에서 가져오는지 */
 .lx-from { border-left: 3px solid #cfe3f1; background: #f6fbff; border-radius: 0 8px 8px 0; padding: 6px 10px; font-size: 12px; color: #475569; }
 /* 담보 칸 둘째 줄 — 보장금액 · 면책·삭감 기간 · 그 기간 지급. 자리가 모자라면 셋째 칸이 아랫줄로(이름과 칸은 늘 한 줄) */
-.ben-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); column-gap: 12px; row-gap: 10px; }
+.ben-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 12px; row-gap: 10px; align-items: start; }
+.ben-grid .fld-box { flex-basis: 100%; }                 /* 세 칸이 나란히 — 이름은 늘 칸 위에 */
+.note-list { display: grid; gap: 6px; }
+.note-item { display: grid; gap: 2px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
 /* 카드 안에서 접었다 펴는 묶음 — 담보 하나, 집단 하나 */
 .sub-open { border-color: #b9d3e8; background: #f8fbfe; box-shadow: 0 0 0 2px #4a90c210; }
 .fold-head { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; text-align: left; }
