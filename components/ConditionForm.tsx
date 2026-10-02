@@ -5,7 +5,7 @@ import { isMap, isScalar, parseDocument } from "yaml";
 import { pathKey, pct, type YamlEdit, type YamlPath } from "@/lib/conditions/yaml";
 import { matchBlocks, splitPaths, under } from "@/lib/conditions/link";
 import { parseRate, parseTimes } from "@/lib/methoddoc/parse";
-import { benefitModels, eventCauses, eventRate, groupModels, reasonOf, waitLabel, withFormulas, type BenefitModel, type GroupModel } from "@/lib/methoddoc/formulas";
+import { benefitModels, eventCauses, eventRate, groupModels, payerModels, waitLabel, withFormulas, type BenefitModel, type GroupModel, type PayerModel } from "@/lib/methoddoc/formulas";
 import { calcSheets, checkFormula, computeByPayMethod, computeSpec, PAY_METHODS, SUM_ASSURED_DEFAULT, type CalcContract, type CalcResult, type CalcSheets } from "@/lib/methoddoc/calc";
 import { subSup } from "@/lib/methoddoc/render";
 import { endAgeLabel, MAIN_UNIT, RATE_ROLE_LABEL, unitNames, WHOLE_LIFE_AGE, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
@@ -432,14 +432,13 @@ function RatesBody({ rates, used, tableNote, onLibrary }: { rates: RateItem[]; u
  * 집단은 따로 적는 항목이 아니라 "탈퇴 사유가 같은 담보들"이다: 여기서 탈퇴 사유를 고치면 그 집단을 쓰는 담보들이 함께 바뀌고,
  * 담보(B01)에서 집단을 바꾸면 그 담보만 옮겨 간다.
  */
-function GroupsBody({ groups, rates, spec, formulas, show }: { groups: GroupModel[]; rates: RateItem[]; spec: MethodSpec; formulas: FormulaSpec[]; show: boolean }) {
+function GroupsBody({ payers, rates, spec, formulas, show }: { payers: PayerModel[]; rates: RateItem[]; spec: MethodSpec; formulas: FormulaSpec[]; show: boolean }) {
   const f = useForm();
-  const [open, setOpen] = useState(0);
   const waiverIds = ((f.get(["basis", "waiverRateIds"]) as unknown[] | undefined) ?? []).map(String);
   const waiverOn = f.get(["basis", "waiver"]) === true;
   /**
    * 납입면제 사유 고르기 — 유형이 '납입면제'인 위험률은 그 자체로 사유이고, 다른 유형(예: 암 발생률 — 암진단 급부이면서 사망 담보의 납입면제 사유)은
-   * 유형을 그대로 두고 basis.waiverRateIds 에 넣는다. 그 집단의 탈퇴 사유이기도 한 사유는 식이 알아서 다시 빼지 않는다.
+   * 유형을 그대로 두고 basis.waiverRateIds 에 넣는다.
    */
   const toggleWaiver = (i: number, v: boolean) => {
     const r = rates[i];
@@ -447,36 +446,19 @@ function GroupsBody({ groups, rates, spec, formulas, show }: { groups: GroupMode
     const next = rates.filter((x) => x.role !== "waiver" && (x.id === r.id ? v : waiverIds.includes(x.id))).map((x) => x.id);
     f.set(["basis", "waiverRateIds"], next.length ? next : undefined);
   };
-  const setExits = (g: GroupModel, id: string, on: boolean) => {
-    const ids = rates.map((r) => r.id).filter((x) => (x === id ? on : g.exits.some((e) => e.id === x)));
-    f.edit(g.benefitIdx.map((i) => ({ path: ["benefits", i, "exitRateIds"], value: ids })));
-  };
   return (
     <div className="space-y-3">
       <p className="text-xs leading-relaxed text-muted-foreground">
-        보험료를 <b>낼 사람</b> 쪽입니다. 기준 인원 10만 명에서 그 집단의 탈퇴 사유와 <b>납입만 면제되는 사유</b>가 생긴 만큼 줄여
-        <b> 납입자수 l′</b> 를 만들고, 그 현가 D′·누계 N′ 로 납입기수 N* 를 냅니다. 유지자수 l(받을 사람)은 보장마다 다르므로 아래 [보장] 카드의 담보 안에 있습니다.
+        보험료를 <b>낼 사람</b> 쪽입니다. 보험료 계산에는 <b>납입자수 l′ 를 하나</b>만 씁니다 — 계약을 끝내는 탈퇴 사유(모든 담보에 공통, 보통 사망)와
+        <b> 납입면제 사유</b>가 생긴 사람을 빼고, 그 현가 D′·누계 N′ 로 납입기수 N* 를 냅니다. 질병끼리는 곱으로 묶고 사망과는 겹치는 부분을 절반으로 결합합니다.
+        유지자수 l(보험금을 받을 사람)은 담보마다 다르므로 아래 [보장] 카드의 담보 안에 있습니다.
       </p>
-      {!groups.length && <p className="rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800">담보가 없습니다 — 아래 [보장] 카드에서 담보를 먼저 더하세요.</p>}
-      {groups.map((g, gi) => (
-        <Fold key={g.id} open={open === gi} onToggle={() => setOpen(open === gi ? -1 : gi)}
-          title={<>집단 {gi + 1} · {g.label}</>} chips={[`담보 ${g.benefitIdx.length}`, g.waivers.length ? `납입면제 ${g.waivers.map((w) => reasonOf(w.rate)).join("·")}` : "납입자수 = 유지자수"]}>
-          <div data-path={g.benefitIdx.map((i) => `benefits[${i}].exitRateIds`).join("|")}>
-            <p className="fld-label">탈퇴 위험률 — 이 집단을 줄이는 사유 전부</p>
-            <p className="fld-hint mb-1">최초발생(진단)은 넣고, 반복지급(일당)은 넣지 않습니다. 고치면 이 집단의 담보 {g.benefitIdx.map((i) => `“${spec.benefits[i]?.name ?? i}”`).join(" · ")} 가 함께 바뀝니다.</p>
-            <div className="flex flex-wrap gap-2">
-              {rates.map((r) => (
-                <label key={r.id} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
-                  <input type="checkbox" className="accent-[var(--primary)]" checked={g.exits.some((e) => e.id === r.id)}
-                    onFocus={() => f.select(`benefits[${g.benefitIdx[0]}].exitRateIds`)} onChange={(e) => setExits(g, r.id, e.target.checked)} />
-                  {r.name}
-                </label>
-              ))}
-            </div>
-          </div>
-          <Formulas items={formulas.filter((x) => x.key === `pay:${g.id}`)} show={show}
-            hint={`탈퇴율 ${g.syms.length > 1 ? "Q" : g.syms[0]?.sym ?? "q"} 는 이 집단의 유지자수 식(보장 카드)에서 정한 것입니다.`} />
-        </Fold>
+      {!payers.length && <p className="rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800">담보가 없습니다 — 아래 [보장] 카드에서 담보를 먼저 더하세요.</p>}
+      {payers.map((p) => (
+        <div key={p.id} className="sub space-y-1.5">
+          <p className="sub-title">{p.label} <span>{p.benefitIdx.map((i) => spec.benefits[i]?.name).filter(Boolean).join(" · ")} 담보의 보험료에 쓴다</span></p>
+          <Formulas items={formulas.filter((x) => x.key === `pay:${p.id}`)} show={show} />
+        </div>
       ))}
       <div data-path="basis.waiver" className="sub space-y-2">
         <p className="sub-title">납입만 면제되는 사유 <span>보장은 이어지고 납입만 멈추는 사유 — 납입자수 l′ 에서만 뺍니다</span></p>
@@ -547,7 +529,7 @@ function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formula
                     <p>
                       유지자수 <b>l</b> 은 집단 <b>“{mo.group.label}”</b> 의 것입니다
                       {mo.group.benefitIdx.length > 1 && <> (이 집단을 쓰는 담보 {mo.group.benefitIdx.length}개)</>}. 납입자수 l′ 는
-                      <button type="button" className="pane-tool ml-1" onClick={() => onGroup(mo.group.id)}>보험료 카드에서 보기</button>
+                      <button type="button" className="pane-tool ml-1" onClick={() => onGroup(mo.payer.id)}>보험료 카드에서 보기</button>
                     </p>
                     {!show && <p className="mt-1 text-[11.5px] text-muted-foreground">급부 위험률: {mo.b.role === "death" ? "탈퇴 사유 전부 (사망형)" : mo.event?.rate.name ?? "—"} · 지급자수 d = l × 급부 위험률</p>}
                   </div>
@@ -591,7 +573,7 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
       </Grid>
       <div className="ben-grid">
         <Sel p={at("multiple")} label="보장금액" options={MULTIPLES}
-          hint={mult !== undefined ? `가입금액 × ${mult} = ${krw(mult * sumAssured)} (시산 가입금액 기준)` : amount !== undefined ? `따로 정한 금액 ${krw(amount)}${role === "recurring" ? " (1일당)" : ""} — 입원 일당·월 지원액처럼 가입금액과 따로 정하는 담보. 배수를 고르면 가입금액 × 배수로 바뀝니다` : "가입금액 대비 배수"}
+          hint={mult !== undefined ? `가입금액 × ${mult} = ${krw(mult * sumAssured)} (산출 조건의 가입금액 기준)` : amount !== undefined ? `따로 정한 금액 ${krw(amount)}${role === "recurring" ? " (1일당)" : ""} — 입원 일당·월 지원액처럼 가입금액과 따로 정하는 담보. 배수를 고르면 가입금액 × 배수로 바뀝니다` : "가입금액 대비 배수"}
           onPick={(v) => [{ path: at("multiple"), value: v === "" ? undefined : Number(v) }, { path: at("amount"), value: undefined }]} />
         <Sel p={at("waitDays")} label="면책·삭감 기간" options={WAIT_DAYS}
           onPick={(v) => [{ path: at("waitDays"), value: !v || v === "" || Number(v) === 0 ? undefined : Number(v) }, ...(!v || Number(v) === 0 ? [{ path: at("waitPayRatio"), value: undefined }] : [])]} />
@@ -701,7 +683,7 @@ function ReservePanel({ sheets, ids }: { sheets: CalcSheets | null; ids: string[
   const col = (s: CalcSheets["sheets"][number], sym: string) => s.cols.find((c) => c.sym === sym);
   return (
     <div className="calc-panel">
-      <p className="text-[12.5px] font-semibold text-[#334155]">시산 — 10만원당 책임준비금 V · 해지환급금 W · 환급률 (맨 위 [시산보험료 조건] 의 계약으로)</p>
+      <p className="text-[12.5px] font-semibold text-[#334155]">산출 결과 — 10만원당 책임준비금 V · 해지환급금 W · 환급률 (맨 위 [산출 조건] 의 계약으로)</p>
       {sheets.sheets.filter((s) => ids.includes(s.id)).map((s) => {
         const V = col(s, "V^{10만}"), W = col(s, "W"), R = col(s, "환급률");
         if (!V) return <p key={s.id} className="fld-hint">{s.name}: 준비금 식을 세우지 못했습니다 {s.warnings.join(" · ")}</p>;
@@ -726,7 +708,7 @@ function NotesBody({ formulas, show, sheets, ids, onSheet }: { formulas: Formula
     <div className="space-y-3">
       <p className="text-xs leading-relaxed text-muted-foreground">
         보험료를 낸 뒤의 <b>책임준비금 V</b>(장래 보험금·유지비의 현가 − 장래 순보험료의 현가, 유지자수 현가로 나눈 것)와, 거기서 해약공제(신계약비를 납입기간과 해약공제 기간 중 짧은 쪽에
-        걸쳐 균등 상각)를 뺀 <b>해지환급금 W</b>, 납입누계 대비 <b>환급률</b>입니다. 식은 조건에서 자동으로 만들고 여기서 고칠 수 있으며, 아래 시산·[보험료 계산] 표·엑셀·파이썬에 그대로 쓰입니다.
+        걸쳐 균등 상각)를 뺀 <b>해지환급금 W</b>, 납입누계 대비 <b>환급률</b>입니다. 식은 조건에서 자동으로 만들고 여기서 고칠 수 있으며, 아래 산출 결과·[보험료 계산] 표·엑셀·파이썬에 그대로 쓰입니다.
       </p>
       <Grid><F p={["surrender", "deductionYears"]} label="해약공제 기간" kind="num" unit="년" hint="납입기간과 이 기간 중 짧은 쪽에 걸쳐 균등하게 줄어듭니다 (비우면 7년)" /></Grid>
       <StringList p={["reserve", "notes"]} label="책임준비금 관련 사항" placeholder="예: 연중 보간은 하지 않고 …" />
@@ -782,50 +764,57 @@ function FormulasBody({ idxs }: { idxs: number[] }) {
   );
 }
 
-// ── 시산 — 식대로 계산해 본 값 ────────────────────────────────────────────────
+// ── 산출 결과 — 식대로 계산한 값 ──────────────────────────────────────────────
 /**
- * 지금 조건과 **지금 산출방법서에 실린 식**으로 계산한 보험료. 식을 고치면 여기 값이 바로 바뀐다 — 식이 계산에 쓰인다는 증거다.
+ * 지금 조건과 **지금 산출방법서에 실린 식**으로 계산한 결과. 식을 고치면 여기 값이 바로 바뀐다 — 식이 계산에 쓰인다는 증거다.
+ * 카드마다 그 카드의 식이 낸 값만 보인다 — M05 납입자수(집단별 m · N*), B01 보험금(담보별 n · PVB), M07 보험료.
  * 계약 한 점(가입나이·납입기간·주기·가입금액)은 산출방법서의 정보가 아니므로 조건에 저장하지 않는다(화면에서만).
  */
-function CalcPanel({ calc, ids, cols, onSheet }: { calc: CalcResult; ids: string[]; cols: ("pvb" | "nStar" | "net" | "gross")[]; onSheet: () => void }) {
+function CalcPanel({ calc, ids, kind, onSheet }: { calc: CalcResult; ids: string[]; kind: "pay" | "benefit" | "premium"; onSheet: () => void }) {
   const rows = calc.benefits.filter((b) => ids.includes(b.id));
+  // 납입자수는 계약 단위마다 하나 — 담보가 여럿이어도 한 줄(담보의 보험기간이 납입기간보다 짧아 m 이 다를 때만 m 마다)
+  const pays = [...new Map(rows.map((b) => [`${b.payer}|${b.m}`, b])).values()];
   return (
     <div className="calc-panel">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12.5px] font-semibold text-[#334155]">시산 — 맨 위 [시산보험료 조건] 의 계약으로</span>
+        <span className="text-[12.5px] font-semibold text-[#334155]">산출 결과 — 맨 위 [산출 조건] 의 계약으로</span>
         <button type="button" className="btn ml-auto" onClick={onSheet} title="한 해 한 줄의 표로 계산 과정을 봅니다">＝ 보험료 계산</button>
       </div>
       {calc.missingRates.length > 0 && <p className="mt-1 text-[11.5px] text-amber-700">값 표가 없어 0 으로 둔 위험률: {calc.missingRates.join(", ")} — [위험률 표] 에서 열을 이으세요</p>}
-      <table className="calc-table mt-1.5">
-        <thead><tr><th>담보</th><th>기간</th>
-          {cols.includes("pvb") && <th>보험금 현가 PVB</th>}
-          {cols.includes("nStar") && <th>납입기수 N*</th>}
-          {cols.includes("net") && <th>순보험료 10만원당</th>}
-          {cols.includes("gross") && <th>1원당 G (6자리)</th>}
-          {cols.includes("gross") && <th>영업보험료 10만원당</th>}
-          {cols.includes("gross") && <th>담보 보험료</th>}
-        </tr></thead>
-        <tbody>
-          {rows.map((b) => (
-            <tr key={b.id}>
-              <td>{b.name}{b.error && <span className="fld-err"> — {b.error}</span>}</td>
-              <td className="num">{b.n}년 / {b.m}년납</td>
-              {cols.includes("pvb") && <td className="num">{won0(b.pvb)}</td>}
-              {cols.includes("nStar") && <td className="num">{won0(b.nStar)}</td>}
-              {cols.includes("net") && <td className="num">{won0(b.net * 1e5)}</td>}
-              {cols.includes("gross") && <td className="num">{b.gross6.toFixed(6)}</td>}
-              {cols.includes("gross") && <td className="num">{won0(b.per100k)}</td>}
-              {cols.includes("gross") && <td className="num">{won0(b.premium)} 원 <small className="text-muted-foreground">({krw(b.amount)})</small></td>}
-            </tr>
-          ))}
-          {rows.length > 1 && cols.includes("gross") && (
-            <tr className="calc-sum"><td colSpan={5}>합계</td><td className="num">{won0(rows.reduce((s, b) => s + b.per100k, 0))}</td><td className="num">{won0(rows.reduce((s, b) => s + b.premium, 0))} 원</td></tr>
-          )}
-          {rows.length > 1 && cols.includes("pvb") && !cols.includes("gross") && (
-            <tr className="calc-sum"><td colSpan={2}>보험금 현가의 합</td><td className="num">{won0(rows.reduce((s, b) => s + b.pvb, 0))}</td><td /></tr>
-          )}
-        </tbody>
-      </table>
+      {kind === "pay" && <>
+        <table className="calc-table mt-1.5">
+          <thead><tr><th>납입자수</th><th>납입기간 m</th><th>납입기수 N*</th></tr></thead>
+          <tbody>{pays.map((b) => (
+            <tr key={`${b.payer}|${b.m}`}><td>{b.payer}{b.error && <span className="fld-err"> — {b.error}</span>}</td><td className="num">{b.m}년</td><td className="num">{won0(b.nStar)}</td></tr>
+          ))}</tbody>
+        </table>
+      </>}
+      {kind === "benefit" && (
+        <table className="calc-table mt-1.5">
+          <thead><tr><th>담보</th><th>유지자수</th><th>보험기간 n</th><th>보험금 현가 PVB</th></tr></thead>
+          <tbody>
+            {rows.map((b) => (
+              <tr key={b.id}><td>{b.name}{b.error && <span className="fld-err"> — {b.error}</span>}</td><td>{b.group}</td><td className="num">{b.n}년</td><td className="num">{won0(b.pvb)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {kind === "premium" && (
+        <table className="calc-table mt-1.5">
+          <thead><tr><th>담보</th><th>보험금 현가 PVB</th><th>납입기수 N*</th><th>순보험료 10만원당</th><th>1원당 G (6자리)</th><th>영업보험료 10만원당</th><th>담보 보험료</th></tr></thead>
+          <tbody>
+            {rows.map((b) => (
+              <tr key={b.id}>
+                <td>{b.name}{b.error && <span className="fld-err"> — {b.error}</span>}</td>
+                <td className="num">{won0(b.pvb)}</td><td className="num">{won0(b.nStar)}</td><td className="num">{won0(b.net * 1e5)}</td>
+                <td className="num">{b.gross6.toFixed(6)}</td><td className="num">{won0(b.per100k)}</td>
+                <td className="num">{won0(b.premium)} 원 <small className="text-muted-foreground">({krw(b.amount)})</small></td>
+              </tr>
+            ))}
+            {rows.length > 1 && <tr className="calc-sum"><td colSpan={5}>합계</td><td className="num">{won0(rows.reduce((s, b) => s + b.per100k, 0))}</td><td className="num">{won0(rows.reduce((s, b) => s + b.premium, 0))} 원</td></tr>}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -880,7 +869,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const sheets = useMemo(() => (open.includes("M08") ? calcSheets(spec, calcOn) : null), [spec, calcOn, open]);
   const sumAssured = calcOn.sumAssured ?? SUM_ASSURED_DEFAULT;
   /** B01 에서 "보험료 카드에서 보기" — M05 의 그 집단을 펼쳐 비춘다 */
-  const onGroupCard = (gid: string) => { openCard("M05"); onSelect([`formula:pay.${gid}`]); };
+  const onGroupCard = (pid: string) => { openCard("M05"); onSelect([`formula:pay.${pid}`]); };
   const byKey = (re: RegExp) => full.formulas.filter((f) => f.key && re.test(f.key));
   /** 조건의 formulas 중 자동 식을 덮은 것(카드에서 고친 식)이 아닌 것 — M09 가 다룬다 */
   const autoKeys = new Set(full.formulas.filter((f) => f.key).map((f) => `${f.section}|${f.label}`));
@@ -922,6 +911,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const unitIdxs = bens.map((x, i) => (((str(x.unit).trim() || MAIN_UNIT) === unit) ? i : -1)).filter((i) => i >= 0);
   const unitIds = unitIdxs.map((i) => spec.benefits[i]?.id).filter(Boolean) as string[];
   const unitGroups = groups.filter((g) => g.benefitIdx.some((i) => unitIdxs.includes(i)));
+  const unitPayers = useMemo(() => payerModels(spec), [spec]).filter((p) => p.benefitIdx.some((i) => unitIdxs.includes(i)));
   const used = (id: string) => bens.filter((x) => str(x.rateId) === id || (Array.isArray(x.exitRateIds) && x.exitRateIds.map(String).includes(id))).map((x) => str(x.name));
   const bad = (re: RegExp) => general.find((x) => re.test(x));
   const status = (err: string | undefined, done: boolean, optional = false): Status => (err ? "error" : done ? "done" : optional ? "optional" : "editing");
@@ -944,7 +934,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     { id: "M01", code: "M01", title: "상품 기본정보", paths: ["meta", "product"], status: status(errM01, !!str(m.productName)), message: errM01,
       summary: [str(m.productName) || "이름 없음", str(m.kind), sp.product?.terms?.length ? `가입 조건 ${sp.product.terms.length}행` : "",
         sp.product?.payFreqs?.join("·") ?? ""],
-      help: "상품 이름·종류·작성일과 가입 조건(보험의 종류·보험종목·보험기간·납입기간·가입나이·납입주기·가입금액 한도·갱신)입니다. 가입 조건은 사업방법서의 판매 범위 표처럼 적어 산출방법서 개요에 싣는 정보입니다. 보험료를 계산할 계약 한 점(성별·가입나이·납입기간·납입주기·가입금액)은 산출방법서의 정보가 아니어서 맨 위 [시산보험료 조건] 에만 있고 조건에 저장하지 않습니다.",
+      help: "상품 이름·종류·작성일과 가입 조건(보험의 종류·보험종목·보험기간·납입기간·가입나이·납입주기·가입금액 한도·갱신)입니다. 가입 조건은 사업방법서의 판매 범위 표처럼 적어 산출방법서 개요에 싣는 정보입니다. 보험료를 계산할 계약 한 점(성별·가입나이·납입기간·납입주기·가입금액)은 산출방법서의 정보가 아니어서 맨 위 [산출 조건] 에만 있고 조건에 저장하지 않습니다.",
       body: <ProductBody /> },
     { id: "M03", code: "M03", title: "이자율·저해지", paths: ["basis.interest", "basis.standardInterest", "basis.minGuaranteed", "basis.averagePublished", "basis.lapse", "basis.lowRatio"],
       status: status(errM03, sp.basis.interest !== undefined), message: errM03,
@@ -957,17 +947,17 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       help: "위험률마다 이름·유형(사망·최초발생·반복지급·납입면제·해지·기타)·근거를 적습니다. 유형이 담보·납입면제와의 연결을 정합니다. 값 표는 아래 [위험률 표]에서 이어집니다 — 표를 올리면 같은 이름의 열이 자동으로 이어지고, 여기서 위험률을 더하면 표에 빈 열이 생깁니다. 이 표가 산출방법서 별첨과 자유설계보험 계산에 그대로 쓰입니다.",
       body: <RatesBody rates={rates} used={used} tableNote={tableNote} onLibrary={onLibrary} /> },
     { id: "M05", code: "M05", title: "보험료 — 납입자수 (l′) · 납입기수 (N*)", paths: ["basis.waiver", "basis.waiverRateIds", "formula:pay", "formula:pv.D′", "formula:pv.NStar"], formulas: true,
-      status: waiverOff ? "error" : unitGroups.length ? "done" : "editing",
+      status: waiverOff ? "error" : unitPayers.length ? "done" : "editing",
       message: waiverOff ? "추가 납입면제 사유를 켰지만 고른 위험률이 없습니다. 아래에서 고르세요." : undefined,
-      summary: [`집단 ${unitGroups.length}개`, ...unitGroups.slice(0, 2).map((g) => g.label), b.waiver === true ? `납입면제: ${waiverRates.map((r) => r.name).join(" · ") || "없음"}` : "납입자수 = 유지자수",
+      summary: [...unitPayers.map((p) => p.label), b.waiver === true ? `납입면제: ${waiverRates.map((r) => r.name).join(" · ") || "없음"}` : "납입면제 없음",
         "D′ · N′ · N*", editChip(edited(/^(pay|pv:D′|pv:NStar)/))],
-      help: "보험료를 내는 사람 쪽입니다. 기준 인원 10만 명에서 탈퇴 사유와 납입만 면제되는 사유가 생긴 만큼 줄여 납입자수 l′ 를 만들고, 이를 현재 가치로 옮겨(D′) 누계(N′)와 납입기수 N* 를 냅니다. 유지자수 l(받을 사람)은 보장마다 다르므로 [보장] 카드의 담보 안에 있습니다. 탈퇴 사유가 같은 담보는 l′ 가 같으므로 한 집단으로 묶어 식을 한 번만 싣습니다. 식을 고치면 산출방법서와 계산에 함께 반영됩니다.",
-      body: <><GroupsBody groups={unitGroups} rates={rates} spec={sp} formulas={full.formulas} show={formulasOn.includes("M05")} />
+      help: "보험료를 내는 사람 쪽입니다. 보험료 계산에는 납입자수 l′ 를 하나만 씁니다 — 계약을 끝내는 탈퇴 사유(모든 담보에 공통, 보통 사망)와 납입면제 사유가 생긴 사람을 빼서, 납입자(사망X, 장해X, 암X)처럼 적습니다. 이를 현재 가치로 옮겨(D′) 누계(N′)와 납입기수 N* 를 냅니다. 보험기간은 쓰지 않고 납입기간 m 만 씁니다. 유지자수 l(받을 사람)은 담보마다 다르므로 [보장] 카드에 있습니다.",
+      body: <><GroupsBody payers={unitPayers} rates={rates} spec={sp} formulas={full.formulas} show={formulasOn.includes("M05")} />
         <div className="border-t border-border pt-2">
-          <p className="fld-label mb-1">납입자수의 현가·납입기수 — 담보마다 같은 식(기간 n·m 만 다르다)</p>
+          <p className="fld-label mb-1">납입자수의 현가·납입기수 — 납입기간 m 동안의 납입자수로</p>
           <Formulas items={byKey(/^pv:(D′|NStar)$/)} show={formulasOn.includes("M05")} />
         </div>
-        <CalcPanel calc={calc} ids={unitIds} cols={["nStar"]} onSheet={onPremiumSheet} /></> },
+        <CalcPanel calc={calc} ids={unitIds} kind="pay" onSheet={onPremiumSheet} /></> },
     { id: "B01", code: "B01", title: "보장 — 담보마다 유지자수 (l) · 보험금의 현가 (C · M · PVB)", paths: ["benefits", "formula:group", "formula:benefit", "formula:pv.D"], formulas: true,
       status: status(benErr, unitBens.length > 0 && unitBens.every((x) => x.multiple !== undefined || x.amount !== undefined)), message: benErr,
       summary: [`담보 ${unitBens.length}개`, ...unitBens.slice(0, 2).map((x) => `${x.name} ${x.multiple !== undefined ? `${x.multiple}배` : krw(x.amount)}`),
@@ -979,19 +969,19 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
           <p className="fld-label mb-1">유지자수의 현가·누계 — 담보마다 같은 식</p>
           <Formulas items={byKey(/^pv:(D|H)$/)} show={formulasOn.includes("B01")} />
         </div>
-        <CalcPanel calc={calc} ids={unitIds} cols={["pvb"]} onSheet={onPremiumSheet} /></> },
+        <CalcPanel calc={calc} ids={unitIds} kind="benefit" onSheet={onPremiumSheet} /></> },
     { id: "M06", code: "M06", title: "사업비", paths: ["expenses"], status: status(errM06, nExp > 0), message: errM06,
       summary: [`${nExp}줄`, sp.expenses.some((e) => /^(α_S|α_P|β_S|β_G)$/.test(e.symbol)) ? "산출방법서형" : ""],
       help: "산출방법서형은 α_S·α_P·β_S·β_G·β′·γ 를 씁니다. 보장기간이 20년보다 짧으면 α_P 는 n/20 배로 줄입니다. 이 값들이 다음 카드의 영업보험료 식에 그대로 들어갑니다.", body: <ExpenseBody count={nExp} /> },
     { id: "M07", code: "M07", title: "보험료의 계산 (P · G · 10만원당)", paths: ["formula:premium"], formulas: true, status: calc.errors.length ? "error" : "done",
       message: calc.errors.length ? `식으로 계산할 수 없습니다 — ${calc.errors[0]}` : undefined,
       summary: ["P · 기준연납 · G · 반올림", unitCalc.length ? `10만원당 ${won0(unitCalc.reduce((s, x) => s + x.per100k, 0))}원` : "", editChip(edited(/^premium:/))],
-      help: "보험금 현가를 납입기수로 나눠 순보험료 P 를 내고, 사업비를 얹어 영업보험료 G 를 냅니다. 1원당 G 를 소수 여섯째 자리까지 만들고(G₁), × 100,000 을 원 단위로 반올림한 것이 10만원당 보험료입니다. 담보 보험료 = 10만원당 × (가입금액 × 배수 ÷ 10만) 으로 맨 뒤에서 한꺼번에 곱합니다. 아래 시산은 지금 식으로 바로 계산한 값이고, [보험료 계산] 을 누르면 한 해 한 줄의 표로 그 과정을 다 볼 수 있습니다.",
+      help: "보험금 현가를 납입기수로 나눠 순보험료 P 를 내고, 사업비를 얹어 영업보험료 G 를 냅니다. 1원당 G 를 소수 여섯째 자리까지 만들고(G₁), × 100,000 을 원 단위로 반올림한 것이 10만원당 보험료입니다. 담보 보험료 = 10만원당 × (가입금액 × 배수 ÷ 10만) 으로 맨 뒤에서 한꺼번에 곱합니다. 아래 산출 결과은 지금 식으로 바로 계산한 값이고, [보험료 계산] 을 누르면 한 해 한 줄의 표로 그 과정을 다 볼 수 있습니다.",
       body: <><Formulas items={byKey(/^premium:/)} show={formulasOn.includes("M07")} />
-        <CalcPanel calc={calc} ids={unitIds} cols={["pvb", "nStar", "net", "gross"]} onSheet={onPremiumSheet} /></> },
+        <CalcPanel calc={calc} ids={unitIds} kind="premium" onSheet={onPremiumSheet} /></> },
     { id: "M08", code: "M08", title: "책임준비금·해지환급금 (V · W)", paths: ["reserve", "surrender", "formula:reserve", "formula:surrender"], formulas: true, status: status(undefined, nNotes > 0 || num(sr.deductionYears) !== undefined, true),
       summary: [sp.surrender.deductionYears ? `해약공제 ${sp.surrender.deductionYears}년` : "해약공제 7년", nNotes ? `문장 ${nNotes}` : "", "P_β · V · 해약공제 · W · 환급률", editChip(edited(/^(reserve|surrender):/))],
-      help: "연말 책임준비금 V 는 장래 보험금·유지비의 현가에서 장래 순보험료(P_β)의 현가를 빼 유지자수의 현가로 나눈 것이고, 해지환급금 W 는 거기서 해약공제(신계약비를 납입기간과 해약공제 기간 중 짧은 쪽에 걸쳐 균등 상각)를 뺀 것입니다. 식은 조건에서 자동으로 만들고 여기서 고칠 수 있으며, 아래 시산과 [보험료 계산] 표·엑셀·파이썬에 연도별 열로 들어갑니다.",
+      help: "연말 책임준비금 V 는 장래 보험금·유지비의 현가에서 장래 순보험료(P_β)의 현가를 빼 유지자수의 현가로 나눈 것이고, 해지환급금 W 는 거기서 해약공제(신계약비를 납입기간과 해약공제 기간 중 짧은 쪽에 걸쳐 균등 상각)를 뺀 것입니다. 식은 조건에서 자동으로 만들고 여기서 고칠 수 있으며, 아래 산출 결과과 [보험료 계산] 표·엑셀·파이썬에 연도별 열로 들어갑니다.",
       body: <NotesBody formulas={byKey(/^(reserve|surrender):/)} show={formulasOn.includes("M08")} sheets={sheets} ids={unitIds} onSheet={onPremiumSheet} /> },
     { id: "M09", code: "M09", title: "따로 적는 식", paths: ["formulas"], status: status(undefined, ownIdxs.length > 0, true),
       summary: [ownIdxs.length ? `식 ${ownIdxs.length}개` : "없음"],
@@ -1092,7 +1082,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       <div ref={box} className="form-body thin-scroll">
         {/* 시산보험료 조건 — 산출방법서의 정보가 아니라 "이 조건으로 계산해 보는" 계약 한 점. 조건 파일에 저장하지 않는다 */}
         <div className="trial-bar">
-          <b>시산보험료 조건</b>
+          <b>산출 조건</b>
           <select className="inp" value={calcOn.sex ?? "M"} onChange={(e) => setCalcOn({ ...calcOn, sex: e.target.value as Sex })}><option value="M">남</option><option value="F">여</option></select>
           <select className="inp" value={calcOn.age} onChange={(e) => setCalcOn({ ...calcOn, age: Number(e.target.value) })}>{[0, 20, 30, 40, 50, 60].map((a) => <option key={a} value={a}>{a}세</option>)}</select>
           <select className="inp" value={calcOn.payYears} onChange={(e) => setCalcOn({ ...calcOn, payYears: Number(e.target.value) })}>{[5, 10, 15, 20, 30].map((a) => <option key={a} value={a}>{a}년납</option>)}</select>

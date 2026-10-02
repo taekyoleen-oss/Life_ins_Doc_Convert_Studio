@@ -84,7 +84,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(s0.error).toBeUndefined();
     expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
     // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
-    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f"]);
+    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f^{(1)}", "f^{(2)}"]);   // 유지자수 q·r · 납입자수 f⁽¹⁾ 장해 · f⁽²⁾ 암
     expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "F", "Q′", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
     for (const c of s0.cols) expect(c.values).toHaveLength(72);
     // 기준 인원에서 시작하고, 지급자수 = 유지자수 × 탈퇴율
@@ -119,12 +119,12 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     // 되돌이 정의(l_{x+t+1} = l_{x+t} × …)를 칸마다 t=0 부터 다시 세면 열이 O(n²) 이 된다.
     // 담보 2개 × 72줄 × 열 19개라 그 차이가 0.7초짜리 멈춤으로 나타났다 — 모델 하나에 캐시 하나.
     // 절대 시간은 다른 시험(파이썬·PDF)이 함께 돌면 몇 배로 흔들린다 — 같은 순간에 잰 computeSpec(보험료만) 과의 비율로 본다.
-    // 캐시가 있으면 계산 표는 보험료만 내는 것의 2~3배, O(n²) 이면 40배였다. 세 번 재어 가장 빠른 것끼리 견준다
+    // 캐시가 있으면 계산 표(열 28개 + 표준이율 모델)는 보험료만 내는 것의 약 7배, O(n²) 이면 40배였다. 세 번 재어 가장 빠른 것끼리 견준다
     const best = (f: () => void) => Math.min(...[0, 1, 2].map(() => { const t0 = performance.now(); f(); return performance.now() - t0; }));
     const r = calcSheets(spec, want.contract);
     expect([r.per100k, r.premium]).toEqual([423, 342000]);
     const sheet = best(() => calcSheets(spec, want.contract)), premiumOnly = best(() => computeSpec(spec, want.contract));
-    expect(sheet / premiumOnly).toBeLessThan(10);
+    expect(sheet / premiumOnly).toBeLessThan(20);
   });
 
   it("식을 고치면 계산이 바뀐다 — 조건만이 아니라 산출방법서의 식도 계산에 쓰인다", () => {

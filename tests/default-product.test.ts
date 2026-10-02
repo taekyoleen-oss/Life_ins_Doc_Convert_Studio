@@ -39,25 +39,27 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(r80.tables!.F!.values[40]).toBeCloseTo(0.000167, 12);
   });
 
-  it("산출식: 집단마다 납입면제 f 는 그 집단의 탈퇴 사유를 뺀 것 · 암 진단은 첫해 (1 − 3/12)", () => {
+  it("산출식: 유지자수는 담보마다(유지자 둘), 납입자수는 하나 — 납입자(사망X, 80% 이상 장해X, 암X) · 암 진단은 첫해 (1 − 3/12)", () => {
     const f = withFormulas(spec).formulas;
-    // 담보 둘의 탈퇴 사유가 달라 집단도 둘이다 (사망·80% 장해 / 사망·암)
-    const main = f.find((x) => x.key === "pay:g1")!.text, can = f.find((x) => x.key === "pay:g2")!.text;
-    expect(main).toContain("f_x : 암발생률 — 납입만 면제되는 사유");
-    expect(can).toContain("f_x : 80% 이상 장해율 — 납입만 면제되는 사유");
-    // 질병(장해 r · 암 f)은 곱으로, 사망과는 겹치는 부분 절반 — 두 집단의 납입자수가 같다
-    expect(main).toContain("F_{x+t} = 1 − ( 1 − r_{x+t} )·( 1 − f_{x+t} )");
+    expect(f.filter((x) => x.key?.startsWith("group:")).map((x) => x.label)).toEqual(["유지자수 — 유지자(사망X, 80% 이상 장해X)", "유지자수 — 유지자(사망X, 암X)"]);
+    const pays = f.filter((x) => x.key?.startsWith("pay:"));
+    expect(pays.map((x) => x.label)).toEqual(["납입자수 — 납입자(사망X, 80% 이상 장해X, 암X)"]);
+    const main = pays[0].text;
+    expect(main).toContain("f^{(1)}_x : 80% 이상 장해율");
+    expect(main).toContain("f^{(2)}_x : 암발생률");
+    // 질병(장해 · 암)은 곱으로, 사망과는 겹치는 부분 절반
+    expect(main).toContain("F_{x+t} = 1 − ( 1 − f^{(1)}_{x+t} )·( 1 − f^{(2)}_{x+t} )");
     expect(main).toContain("Q′_{x+t} = min( 1, q_{x+t} + F_{x+t} − q_{x+t}·F_{x+t}/2 )");
     expect(main).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q′_{x+t} )");
     // 면책은 보장금액의 배수 S 로 — 첫해만 (1 − 3/12) 배
     expect(f.find((x) => x.key === "benefit:b2")!.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
     expect(md).toContain("f_x : 80% 이상 장해율 · 암발생률");                     // 가.(4) 납입면제 사유 — 되읽는 표시
-    expect(md).toContain("f_{x+t} : 그 집단에서 납입만 면제되는 사유의 발생률");
+    expect(md).toContain("f_{x+t} : 납입을 멈추게 하는 질병의 발생률");
     expect(md).toContain("| 면책·삭감 | 90일 면책 |");
     expect(md).toContain("| 보장금액 | 가입금액의 0.5배 |");
     expect(md).toContain("| 보험기간 | 100세 만기 |");
-    expect(md).toContain("유지자수·납입자수의 집단 2개");
+    expect(md).toContain("유지자수 집단 2개");
   });
 
   it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 162 · 가입금액 1억 기준 월 342,000원)", () => {
