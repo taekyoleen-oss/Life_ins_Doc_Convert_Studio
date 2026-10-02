@@ -1,4 +1,4 @@
-// Life_ins_Doc_Convert_Studio 동작 확인 — 선택 연결·파일 열기·LaTeX 반영·입력 카드·위험률 표·수식 견본·화면 조절·Word·한글 표준 양식·그림으로 읽기(가짜 API)
+// Life_ins_Doc_Convert_Studio 동작 확인 — 선택 연결·파일 열기·LaTeX 반영·입력 카드·위험률 표·수식 견본·화면 조절·Word 표준 양식·그림으로 읽기(가짜 API)
 /* eslint-disable @typescript-eslint/no-require-imports -- node 로 바로 돌리는 CommonJS 스크립트 */
 const path = require("path"), fs = require("fs");
 const PW = path.join(process.env.LOCALAPPDATA, "npm-cache/_npx/9833c18b2d85bc59/node_modules/playwright-core/index.js");
@@ -607,10 +607,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click("details:has(summary:has-text('샘플')) summary");
   await p.click("details:has(summary:has-text('샘플')) .menu-list button:has-text('종신보험 (')");
   await p.waitForSelector(".doc-body h1:has-text('종신보험')");
-  await p.click(".tab:has-text('Word·한글')");
+  await p.click(".tab:has-text('Word')");
   const [dlw] = await Promise.all([p.waitForEvent("download"), p.click("button:has-text('Word 내려받기')")]);
   const docx = fs.readFileSync(await dlw.path());
-  ok("[Word·한글] Word 내려받기 → 표준 산출방법서 .docx", dlw.suggestedFilename().endsWith(".docx") && /표준 산출방법서 v\d/.test(docx.toString("utf8")), dlw.suggestedFilename());
+  ok("[Word] Word 내려받기 → 표준 산출방법서 .docx", dlw.suggestedFilename().endsWith(".docx") && /표준 산출방법서 v\d/.test(docx.toString("utf8")), dlw.suggestedFilename());
   // Word 에서 고쳤다고 친다 — 압축 없는 ZIP 이라 같은 길이의 글자는 바로 바꿀 수 있다: 적용이율 2.5→3, 기준연납순보험료 식(Word 수식)의 20→25
   const swap = (buf, from, to) => { const i = buf.indexOf(Buffer.from(from)); if (i < 0) throw new Error(`없음: ${from}`); const b = Buffer.from(buf); Buffer.from(to).copy(b, i); return b; };
   let edited = swap(docx, ">2.500%<", ">3.000%<");
@@ -621,18 +621,19 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("고친 Word 올리기 → 이율과 고친 식만 조건에 반영", /basis\.interest/.test(wlog) && /formulas/.test(wlog) && !/expenses|benefits|rates/.test(wlog), wlog.slice(0, 200));
   await p.click(".tab:has-text('산출방법서')");
   const row17 = await p.locator(".doc-body tr", { hasText: "적용이율" }).first().textContent();
-  await p.click(".tab:has-text('Word·한글')"); await p.screenshot({ path: `${OUT}/s11_word.png` }); await p.click(".tab:has-text('산출방법서')");
+  await p.click(".tab:has-text('Word')"); await p.screenshot({ path: `${OUT}/s11_word.png` }); await p.click(".tab:has-text('산출방법서')");
   ok("반영 뒤 산출방법서 적용이율 3.000% · 고친 식이 나온다", row17.includes("3.000%") && (await p.locator(".doc-body .formula", { hasText: "25" }).count()) >= 1, row17);
 
-  // 18) [Word·한글] 탭의 상품별 견본 — 한글(.hwpx) 견본을 받아 [열기] → 표준 산출방법서로 읽는다
-  await p.click(".tab:has-text('Word·한글')");
-  const [dh] = await Promise.all([p.waitForEvent("download"), p.click(".word-std tr:has-text('표준_산출방법서_질병보험') button:has-text('한글')")]);
-  const hwpx = fs.readFileSync(await dh.path());
-  ok("[Word·한글] 표준_산출방법서_질병보험.hwpx 내려받기", dh.suggestedFilename() === "표준_산출방법서_질병보험.hwpx" && hwpx.length > 20000, `${hwpx.length}B`);
-  await p.setInputFiles(OPEN, { name: "표준_산출방법서_질병보험.hwpx", mimeType: "application/hwp+zip", buffer: hwpx });
-  await p.waitForSelector(".toast:has-text('표준_산출방법서_질병보험.hwpx —')");
+  // 18) [Word] 탭의 상품별 견본 — Word 견본을 받아 [열기] → 표준 산출방법서로 읽는다 (한글 견본은 두지 않는다)
+  await p.click(".tab:has-text('Word')");
+  ok("[Word] 상품별 견본에 한글 단추가 없다 — 표준 양식은 Word 로만", (await p.locator(".word-std button", { hasText: "한글" }).count()) === 0);
+  const [dw] = await Promise.all([p.waitForEvent("download"), p.click(".word-std tr:has-text('표준_산출방법서_질병보험') button:has-text('Word')")]);
+  const stdDocx = fs.readFileSync(await dw.path());
+  ok("[Word] 표준_산출방법서_질병보험.docx 내려받기", dw.suggestedFilename() === "표준_산출방법서_질병보험.docx" && stdDocx.length > 10000, `${stdDocx.length}B`);
+  await p.setInputFiles(OPEN, { name: "표준_산출방법서_질병보험.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: stdDocx });
+  await p.waitForSelector(".toast:has-text('표준_산출방법서_질병보험.docx —')");
   const t18 = await p.textContent(".toast");
-  ok("한글 표준 산출방법서 [열기] → 표준 산출방법서로 읽음", /표준 산출방법서 v\d/.test(t18), t18);
+  ok("Word 표준 산출방법서 [열기] → 표준 산출방법서로 읽음", /표준 산출방법서 v\d/.test(t18), t18);
 
   // 19) 그림으로 읽기 — 스캔 PDF → 쪽 고르기 → Anthropic API(여기서는 가짜 응답) → 옮겨 적은 글을 규칙이 읽어 조건
   const page1 = { blocks: [

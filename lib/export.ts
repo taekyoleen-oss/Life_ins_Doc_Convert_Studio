@@ -21,7 +21,7 @@ export const exporters = {
   yaml: (yaml: string, spec: MethodSpec) => download(`${safe(spec.meta.productName)}_조건.yaml`, yaml, "text/yaml"),
   /** 다른 앱에 넘기는 형식. 식은 조건에서 다시 만들 수 있어 사용자가 적은 것만 싣는다 */
   json: (spec: MethodSpec) => download(`${safe(spec.meta.productName)}_MethodSpec.json`, JSON.stringify(spec, null, 2), "application/json"),
-  /** 표준 산출방법서 Word — Word·한글에서 고쳐 다시 올린다. guide=false 면 맨 앞 작성 안내 표를 뺀다 */
+  /** 표준 산출방법서 Word — Word 에서 고쳐 다시 올린다. guide=false 면 맨 앞 작성 안내 표를 뺀다 */
   docx: (spec: MethodSpec, guide = true) => download(`${safe(spec.meta.productName)}_산출방법서.docx`, toStandardDocx(spec, guide), DOCX_MIME),
   md: (sections: DocSection[], title: string, spec: MethodSpec) => download(`${safe(spec.meta.productName)}_산출방법서.md`, "﻿" + docToMarkdown(sections, title), "text/markdown"),
   tex: (sections: DocSection[], title: string, spec: MethodSpec) => download(`${safe(spec.meta.productName)}_산출방법서.tex`, docToLatex(sections, title), "application/x-tex"),

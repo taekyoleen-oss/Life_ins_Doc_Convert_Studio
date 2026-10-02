@@ -1,7 +1,7 @@
 // 브라우저가 받아 가는 파일을 public/ 으로 복사한다(둘 다 .gitignore — 원본만 커밋한다).
 //  - pdfjs 워커: node_modules 에서. 브라우저는 workerSrc 경로가 있어야 PDF 를 연다(1.3MB).
-//  - 표준 산출방법서 한글 파일(standards/*.hwpx): [표준 양식] 메뉴가 내려받게 한다. .docx 는 앱이 조건에서 바로 만든다.
-import { copyFileSync, mkdirSync, existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
+//  (표준 산출방법서는 Word 로만 — .docx 는 앱이 조건에서 바로 만든다. 한글 견본은 두지 않는다)
+import { copyFileSync, mkdirSync, existsSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -11,11 +11,6 @@ if (!existsSync(src)) { console.error("pdfjs-dist 워커를 찾지 못했습니�
 mkdirSync("public", { recursive: true });
 copyFileSync(src, dst);
 console.log(`${dst} (${Math.round(statSync(dst).size / 1024)}KB) 복사`);
-
-mkdirSync("public/standards", { recursive: true });
-const hwpx = existsSync("standards") ? readdirSync("standards").filter((f) => f.endsWith(".hwpx")) : [];
-for (const f of hwpx) copyFileSync(join("standards", f), join("public/standards", f.normalize("NFC")));
-console.log(`public/standards/ 한글 표준 산출방법서 ${hwpx.length}개 복사`);
 
 // 사내 위험률 모음 — private/rate-library.json(scripts/import-rate-library.py, 외부 반출 금지)이 이 PC 에 있을 때만 싣는다.
 // 없으면 빈 모음을 두어(404 없이) 앱이 공개 기본 위험률만 보인다. 둘 다 .gitignore · .vercelignore
