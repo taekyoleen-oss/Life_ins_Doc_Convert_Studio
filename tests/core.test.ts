@@ -7,7 +7,7 @@ import { docToMarkdown, renderMethodDoc } from "@/lib/methoddoc/render";
 import { eventCauses, eventRate, generateFormulas, withFormulas } from "@/lib/methoddoc/formulas";
 import { docToLatex, formulaToTex, latexToDoc, toTex } from "@/lib/methoddoc/tex";
 import { jsonToSpec, mergeSpec, patchYaml, specToYaml, yamlToSpec } from "@/lib/conditions/yaml";
-import { SAMPLES } from "@/lib/samples";
+import { SAMPLES, SHARED_SAMPLE_IDS, START_SAMPLE_ID } from "@/lib/samples";
 
 const sample = (id: string) => yamlToSpec(SAMPLES.find((s) => s.id === id)!.yaml);
 const docOf = (spec: ReturnType<typeof sample>["spec"]) => renderMethodDoc(withFormulas(spec));
@@ -22,7 +22,10 @@ describe("조건 파일(YAML)", () => {
     expect(spec.benefits[0].exitRateIds).toEqual(["q", "r80"]);
     expect(sample("cancer").spec.basis.lowRatio).toBe(0);
     // 샘플은 일곱 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약, 위험률 근거는 모두 가상
-    expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support"]);
+    expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan"]);
+    // 공유용 [샘플] 메뉴는 종신보험 · 암보험 둘, 첫 화면은 종신보험
+    expect(SHARED_SAMPLE_IDS).toEqual(["whole", "cancerPlan"]);
+    expect(START_SAMPLE_ID).toBe("whole");
     for (const x of SAMPLES) for (const r of yamlToSpec(x.yaml).spec.rates) expect(r.source, `${x.id} ${r.name}`).toMatch(/^경험생명표\(가상\) /);
   });
   it("조건 경로마다 줄 번호를 안다 (양쪽 대응 위치의 바탕)", () => {

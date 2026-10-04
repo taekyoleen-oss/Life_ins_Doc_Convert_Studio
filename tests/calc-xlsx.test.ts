@@ -113,7 +113,7 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(at(v1, "G 영업보험료")?.f).toContain("alphaS");
     expect(at(v1, "G₁ 1원당")?.f).toBe(`ROUND($${v1}$${rowOf("G 영업보험료")},6)`);
     expect(at(v1, "10만원당 보험료")?.f).toBe(`ROUND(($${v1}$${rowOf("G₁ 1원당")}*100000),0)`);
-    expect(at(v1, "담보 보험료")?.f).toBe(`$${v1}$${rowOf("10만원당 보험료")}*($${v1}$${rowOf("보장금액 (원)")}/100000)`);
+    expect(at(v1, "담보 보험료")?.f).toBe(`ROUNDDOWN($${v1}$${rowOf("10만원당 보험료")}*$${v1}$${rowOf("보장금액 (원)")}/100000,-1)`);   // 10원 미만 버림
     expect(at(v1, "P_β 준비금")?.f).toMatch(/^\(\(\$/);
     expect(at(v1, "α^공제")?.f).toMatch(/^MIN\(/);
     expect(at(sum, "담보 보험료")?.f).toBe(`SUM(${v1}${rowOf("담보 보험료")}:${v2}${rowOf("담보 보험료")})`);

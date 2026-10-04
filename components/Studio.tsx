@@ -15,7 +15,7 @@ import RateSheetPane from "./RateSheetPane";
 const PremiumSheet = dynamic(() => import("./PremiumSheet"), { ssr: false });
 import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
 import { itemColumns, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
-import { DEFAULT_SAMPLE_ID, SAMPLES } from "@/lib/samples";
+import { SAMPLES, SHARED_SAMPLE_IDS, START_SAMPLE_ID } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
 import { withFormulas } from "@/lib/methoddoc/formulas";
@@ -37,10 +37,12 @@ import { guessRole, mergeColumns, sampleSheet, setCell, setHead } from "@/lib/sh
 
 /** 샘플은 조건 + 위험률 표 한 세트 — 기본 위험률 표(공개, 남·여)에서 그 조건의 위험률과 이름이 맞는 열만 */
 const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, BASE_RATES_CSV, "기본 위험률 표") });
-/** 첫 화면 = 기본 상품 종신보험(암진단 포함). [샘플] 메뉴에서도 맨 위 */
-const DEFAULT_SAMPLE = SAMPLES.find((x) => x.id === DEFAULT_SAMPLE_ID) ?? SAMPLES[0];
-const MENU_SAMPLES = [DEFAULT_SAMPLE, ...SAMPLES.filter((x) => x !== DEFAULT_SAMPLE)];
-const SAMPLE0 = sampleSet(DEFAULT_SAMPLE.yaml);
+/** 첫 화면 = START_SAMPLE_ID(종신보험). [샘플] 메뉴는 공유용(SHARED_SAMPLE_IDS)만 — 주소에 ?all 이면 전부(개발·시험용) */
+const START_SAMPLE = SAMPLES.find((x) => x.id === START_SAMPLE_ID) ?? SAMPLES[0];
+const SHARED_SAMPLES = SHARED_SAMPLE_IDS.map((id) => SAMPLES.find((x) => x.id === id)).filter((x): x is (typeof SAMPLES)[number] => !!x);
+const SAMPLE0 = sampleSet(START_SAMPLE.yaml);
+/** 주소의 ?sample=<id> — 숨긴 샘플도 바로 연다(저장된 작업보다 먼저). ?all — [샘플] 메뉴에 모두 */
+const urlParam = (k: string) => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get(k));
 /** 최근 작업 — 패키지로 저장·연 것과 연 파일. 조건·위험률 표를 그대로 두어 바로 되살린다 */
 interface Recent { id: string; name: string; at: number; product: string; yaml: string; sheet: SheetState | null }
 const RECENT_MAX = 12;
@@ -63,6 +65,8 @@ const PANE_NAME: Record<PaneId, string> = { cond: "조건", doc: "산출방법�
 const LAYOUT0: Layout = { v: 3, split: 0.44, sheetH: 0.26, hide: [], max: null, left: "form", open: ["M01"], formulas: [] };
 
 const KEY = "life_ins_doc_convert_studio";
+/** 공유 테스트의 의견 받는 곳 — 공개 저장소의 이슈 */
+const FEEDBACK_URL = "https://github.com/taekyoleen-oss/Life_ins_Doc_Convert_Studio/issues";
 const STORE = `${KEY}:yaml`;
 const OLD_STORE = "methoddoc:yaml";            // 앱 이름을 바꾸기 전 자동 저장 키 — 한 번 옮겨 온다
 const readStore = () => {
@@ -116,6 +120,9 @@ export default function Studio() {
   // 기본 위험률 모음 — 공개 기본 위험률 + (이 PC 에 있으면) 사내 위험률 모음(public/rate-library.json ← private/, 외부 반출 금지)
   const [library, setLibrary] = useState<RateLibrary | null>(null);
   const [libOpen, setLibOpen] = useState(false);
+  const [allSamples, setAllSamples] = useState(false);
+  /** 공유 테스트 안내 — 처음 여는 사람에게 펼쳐 두고, 닫으면 다시 펼치지 않는다(머리의 [테스트 안내]로 다시) */
+  const [guide, setGuide] = useState(false);
   useEffect(() => {
     fetch("/rate-library.json").then((r) => (r.ok ? r.json() : null)).then((j) => setLibrary(sanitizeLibrary(j))).catch(() => { /* 없으면 공개 기본 위험률만 */ });
   }, []);
@@ -130,6 +137,15 @@ export default function Studio() {
       if (Array.isArray(rec)) writeJson(`${KEY}:recent`, rec.map((r) => (r && typeof r.yaml === "string" ? { ...r, yaml: virtualizeSources(r.yaml) } : r)));
       writeJson(VSRC, 1);
     }
+    setAllSamples(urlParam("all") !== null);
+    setGuide(!readJson(`${KEY}:guide-v1`));
+    // 주소로 고른 샘플 — 저장된 작업 대신 그 샘플 세트를 연다
+    const pick = SAMPLES.find((x) => x.id === urlParam("sample"));
+    if (pick) {
+      const set = sampleSet(pick.yaml);
+      setYaml(set.yaml); setSaved(set.yaml); setSheet(set.sheet);
+      hist.current = { cur: { yaml: set.yaml, sheet: set.sheet }, past: [], future: [], at: 0 };
+    } else
     // 이어서 작업 — 처음이면 샘플 세트 그대로. 저장된 조건에 표가 없으면(옛 저장본) 견본 표에서 그 조건의 위험률과 이름이 맞는 열을 붙여 준다 — 화면은 늘 조건 + 표 한 세트
     if (s) {
       setYaml(s); setSaved(s);
@@ -569,10 +585,10 @@ export default function Studio() {
           <summary className="btn">샘플 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">샘플 세트 — 조건 · 산출방법서 · 위험률 표(기본 위험률)</p>
-            {MENU_SAMPLES.map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
+            {(allSamples ? SAMPLES : SHARED_SAMPLES).map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
             <p className="menu-head">산출방법서 샘플</p>
-            <button onClick={() => loadSample(SAMPLES[0].yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>이율·금액을 고친 뒤 [조건에 반영]</small></button>
-            <button onClick={() => loadSample(SAMPLES[2].yaml, "markdown")}>Markdown 산출방법서 고쳐 보기<small>무해지 암보험 — 해지율을 바꿔 보기</small></button>
+            <button onClick={() => loadSample(START_SAMPLE.yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>종신보험 — 이율·금액을 고친 뒤 [조건에 반영]</small></button>
+            <button onClick={() => loadSample((SHARED_SAMPLES[1] ?? START_SAMPLE).yaml, "markdown")}>Markdown 산출방법서 고쳐 보기<small>암보험 — 면책 기간·보장금액을 바꿔 보기</small></button>
           </div>
         </details>
         <input ref={mergeInput} aria-label="고쳐 반영할 파일" type="file" accept={ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void applyFile(f); e.target.value = ""; }} />
@@ -592,8 +608,36 @@ export default function Studio() {
             <button onClick={print}>인쇄 · PDF 저장</button>
           </div>
         </details>
+        <button className="btn" onClick={() => setGuide((v) => !v)} aria-pressed={guide} title="공유 테스트 안내 — 무엇을 해 보면 되는지 · 저장 · 의견 보내기">테스트 안내</button>
         <button className="btn" onClick={() => setHelp(true)}>도움말</button>
       </header>
+      {/* 좁은 화면 — 넓은 PC 화면 기준으로 만든 앱이라 알린다(CSS 가 1100px 아래에서만 보인다) */}
+      <p className="narrow-warn no-print">이 앱은 <b>PC 화면(가로 1280px 이상, 크롬·엣지)</b> 기준입니다. 휴대폰·좁은 창에서는 칸이 겹치거나 잘릴 수 있습니다.</p>
+      {guide && (
+        <section className="guide-bar no-print" aria-label="테스트 안내">
+          <div className="guide-cols">
+            <div>
+              <h2>무엇을 해 보면 되나요</h2>
+              <ol>
+                <li>[샘플 ▾]에서 <b>종신보험</b> 또는 <b>암보험</b>을 엽니다(암보험은 주계약·암입원특약·암수술특약 탭).</li>
+                <li>맨 위 <b>[산출 조건]</b>에서 성별·나이·납입기간·가입금액을 바꾸면 보험료가 바로 바뀝니다(담보 보험료는 10원 미만 버림).</li>
+                <li>왼쪽 카드(M01~M09)를 열거나 칸을 고르면 오른쪽 산출방법서의 그 자리가 노랗게 표시됩니다.</li>
+                <li><b>[＝ 보험료 계산]</b>으로 한 해 한 줄의 계산 표를, [Word] 탭에서 산출방법서 Word 를 받아 볼 수 있습니다.</li>
+              </ol>
+            </div>
+            <div>
+              <h2>저장과 공유</h2>
+              <p>작업은 <b>이 브라우저에만</b> 자동 저장됩니다. 다른 사람에게 보여 주려면 <b>[패키지 ▾ → 패키지로 저장]</b>한 <code>.lifepkg</code> 파일을 보내고, 받은 사람은 [열기]로 엽니다.</p>
+              <p>위험률은 모두 가상의 값(경험생명표(가상))입니다. PC 화면(가로 1280px 이상)에서 써 주세요.</p>
+            </div>
+            <div>
+              <h2>의견 보내기</h2>
+              <p>이상한 값·불편한 점은 화면 캡처와 함께 <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">GitHub 이슈</a>로 남기거나, 이 앱을 공유해 준 담당자에게 알려 주세요.</p>
+              <button className="btn-primary" onClick={() => { setGuide(false); writeJson(`${KEY}:guide-v1`, 1); }}>안내 닫기</button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── 본문: 위(조건 | 산출방법서) · 아래(위험률 표) ── */}
       <main className="print-block flex min-h-0 flex-1 flex-col">

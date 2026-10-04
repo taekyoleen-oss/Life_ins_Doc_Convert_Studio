@@ -31,8 +31,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.evaluate(() => localStorage.clear());
   await p.waitForTimeout(900);                                   // 자동 저장 타이머(300·500ms)가 지난 뒤 한 번 더 지운다
   await p.evaluate(() => localStorage.clear());
-  await p.reload({ waitUntil: "networkidle" });
+  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 종신보험 · 샘플 둘)은 맨 끝에서 새 창으로 본다
+  await p.goto("http://localhost:3217/?sample=wholeCancer&all", { waitUntil: "networkidle" });
   await p.waitForSelector(".doc-body h1");
+  if (await p.locator(".guide-bar").count()) await p.click(".guide-bar button:has-text('안내 닫기')");
   const OPEN = "input[aria-label='열 파일']", MERGE = "input[aria-label='고쳐 반영할 파일']";
   ok("첫 화면: 종신보험 산출방법서", (await p.textContent(".doc-body h1")).includes("종신보험"));
   ok("KaTeX 수식이 그려진다", (await p.locator(".doc-body .formula .katex").count()) >= 8);
@@ -519,7 +521,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("산출방법서의 위험률 근거는 모두 경험생명표(가상)", srcCells.length >= 3 && srcCells.every((c) => c.startsWith("경험생명표(가상)")), srcCells.join(" / "));
   await p.click("summary:has-text('샘플')");
   const sampleNames = await p.$$eval("details[open] .menu-list button", (bs) => bs.map((b) => b.textContent));
-  ok("샘플 일곱 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약", ["종신보험 (", "종신보험(암진단", "암진단 보장보험", "2대질병", "입원보험(특약)", "수술보험(특약)", "보험료납입지원특약"].every((n) => sampleNames.some((b) => b.includes(n))), sampleNames.length + "개");
+  ok("?all — 샘플 여덟 모두 (종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약 · 암보험)", ["종신보험 (", "종신보험(암진단", "암진단 보장보험", "2대질병", "입원보험(특약)", "수술보험(특약)", "보험료납입지원특약", "암보험 ("].every((n) => sampleNames.some((b) => b.includes(n))), sampleNames.length + "개");
   await p.click("details[open] .menu-list button:has-text('입원보험(특약)')");
   await p.waitForTimeout(600);
   const tabSel = await p.locator(".unit-tabs button[aria-selected=true]").textContent().catch(() => "");
@@ -559,7 +561,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   // 13-2) 메뉴는 바깥을 누르면 닫힌다
   await p.click("details:has(summary:has-text('내보내기')) summary");
   ok("[내보내기] 메뉴 열림", (await p.locator("details[open] .menu-list").count()) === 1);
-  await p.locator(".doc-body h1").click();
+  await p.locator("footer").click({ position: { x: 5, y: 5 } });            // 메뉴가 덮지 않는 바깥(맨 아래 상태줄)
   ok("바깥을 누르면 메뉴가 닫힌다", (await p.locator("details[open] .menu-list").count()) === 0);
 
   // 14) LaTeX 탭 견본 → 커서 자리에 기호
@@ -681,6 +683,44 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.screenshot({ path: `${OUT}/s13_vision_pages.png` });
   const kept = await p.evaluate(() => ({ local: localStorage.getItem("life_ins_doc_convert_studio:anthropic-key"), yaml: localStorage.getItem("life_ins_doc_convert_studio:yaml") || "" }));
   ok("API 키는 이 창에만 — localStorage·조건 파일에 없음", kept.local === null && !kept.yaml.includes("sk-ant"));
+
+  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 종신보험, [샘플] 메뉴는 종신보험 · 암보험 둘
+  const q = await b.newPage({ viewport: { width: 1500, height: 900 } });
+  q.on("pageerror", (e) => errs.push("pageerror(공유) " + e.message));
+  q.on("console", (m) => { if (m.type() === "error") errs.push("console(공유) " + m.text()); });
+  await q.goto("http://localhost:3217", { waitUntil: "networkidle" });
+  await q.waitForSelector(".doc-body h1");
+  const guideT = (await q.textContent(".guide-bar").catch(() => "")) || "";
+  ok("공유 화면: 처음 열면 테스트 안내(할 일 · 저장은 이 브라우저에만 · 패키지로 보내기 · PC 권장 · 의견은 GitHub 이슈)",
+    guideT.includes("패키지로 저장") && guideT.includes("이 브라우저에만") && guideT.includes("1280px") && (await q.locator(".guide-bar a[href*='github.com']").count()) === 1, guideT.slice(0, 60));
+  await q.click(".guide-bar button:has-text('안내 닫기')");
+  await q.reload({ waitUntil: "networkidle" });
+  ok("안내를 닫으면 다시 열어도 펼쳐지지 않고, [테스트 안내] 단추로 다시 본다", (await q.locator(".guide-bar").count()) === 0 && (await q.locator("header button:has-text('테스트 안내')").count()) === 1);
+  await q.setViewportSize({ width: 900, height: 900 });
+  ok("좁은 화면(900px) — PC 화면 기준이라는 알림", await q.locator(".narrow-warn").isVisible());
+  await q.setViewportSize({ width: 1500, height: 900 });
+  ok("넓은 화면 — 알림 없음", !(await q.locator(".narrow-warn").isVisible()));
+  const h1 = await q.textContent(".doc-body h1");
+  ok("공유 화면: 첫 화면은 종신보험(사망·80% 이상 장해) — 월 253,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("253,000"), h1);
+  await q.click("summary:has-text('샘플')");
+  const shared = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => x.textContent));
+  const sets = shared.filter((t) => t.startsWith("종신보험") || t.startsWith("암보험") || t.startsWith("암진단") || t.startsWith("2대") || t.startsWith("입원") || t.startsWith("수술") || t.startsWith("보험료납입"));
+  ok("공유 화면: [샘플] 메뉴는 종신보험 · 암보험 둘뿐", sets.length === 2 && sets[0].startsWith("종신보험 (") && sets[1].startsWith("암보험 ("), sets.join(" / "));
+  await q.click("details[open] .menu-list button:has-text('암보험 (')");
+  await q.waitForTimeout(800);
+  const tabs = await q.$$eval(".unit-tabs .unit-tab", (e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
+  const trialC = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
+  ok("암보험: 탭 셋(주계약 · 암입원특약 · 암수술특약) · 사망률 없음 · 보험료가 나온다", tabs.length === 3 && tabs[1].includes("암입원특약") && tabs[2].includes("암수술특약")
+    && (await q.locator(".doc-body tr", { hasText: "사망률" }).count()) === 0 && trialC.includes("240,520"), `${tabs.join(" / ")} · ${trialC.slice(0, 120)}`);
+  await q.click(".unit-tabs .unit-tab:has-text('암입원특약')");
+  await q.click(".card[data-card=B01] .card-head");                     // 보장 카드를 펼쳐야 담보 덩이가 그려진다
+  await q.waitForTimeout(600);
+  const docC = await q.textContent(".doc-body");
+  ok("암보험: 암입원특약 탭 — 담보 하나(암 입원) · 산출방법서에 단위별 납입자(암X) 셋 · 90일 면책", (await q.locator(".card[data-card=B01] .sub").count()) === 1
+    && (docC.match(/납입자\(암X\)/g) ?? []).length >= 3 && (await q.locator(".doc-body tr", { hasText: "90일 면책" }).count()) === 3,
+    `담보 ${await q.locator(".card[data-card=B01] .sub").count()} · 납입자(암X) ${(docC.match(/납입자\(암X\)/g) ?? []).length} · 90일 면책 행 ${await q.locator(".doc-body tr", { hasText: "90일 면책" }).count()}`);
+  await q.screenshot({ path: `${OUT}/s14_shared_cancer.png` });
+  await q.close();
 
   ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
   fs.writeFileSync(`${OUT}/e2e.txt`, log.join("\n"), "utf8");

@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "prebuild": "node scripts/copy-public.mjs",
-    "predev": "node scripts/copy-public.mjs"
+    "predev": "node scripts/copy-public.mjs --dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

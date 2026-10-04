@@ -32,7 +32,7 @@ const Q = `  - id: q
 
 export interface Sample { id: string; label: string; hint: string; yaml: string }
 
-/** 첫 화면에 여는 기본 상품 */
+/** 검산 기준 상품 — samples/09 · 자유설계보험 default-product 시험이 이 상품으로 두 앱을 맞대어 본다(첫 화면은 START_SAMPLE_ID) */
 export const DEFAULT_SAMPLE_ID = "wholeCancer";
 
 export const SAMPLES: Sample[] = [
@@ -346,4 +346,80 @@ formulas:             # 보험금의 현가 — 보장금액의 배수 S 를 남
       PVB = M_x
     note: S_t 는 월 지원액 1원을 남은 12·(m − t) − 6 달 동안 매월 초에 주는 확정연금의 진단 시점 현가다. 지급약정기간 동안에는 생존과 상관없이 준다. 납입기간이 끝난 뒤(t ≥ m)에는 지원할 보험료가 없어 0 이다. R 은 유지자수 식의 질병 발생률(암·뇌출혈·급성심근경색증의 곱 결합)이다.
 ` },
+  { id: "cancerPlan", label: "암보험 (암진단 + 암입원·암수술 특약)", hint: "주계약 암진단 · 특약 둘(암입원 1일당 · 암수술) — 100세 만기 · 90일 면책 · 암 진단 시 납입면제 · 사망률 미반영", yaml: `# 산출방법서 조건 — 암보험 (주계약 암진단 + 특약 암입원 · 암수술)
+# 위 [주계약] · [암입원특약] · [암수술특약] 탭이 계약 단위다. 담보의 unit 이름이 탭을 만든다.
+# 사망률은 쓰지 않는다 — 사망 시에는 책임준비금을 지급하므로 사망은 급부·준비금에 순효과가 없다고 본다(암 단일탈퇴).
+meta:
+  productName: 암보험
+  kind: 표준형(완전 환급)
+product:
+  category: 생명보험 / 건강(암)
+  types: [표준형(완전 환급)]
+  terms:
+    - { label: 주계약(암진단), term: 100세만기, pay: 10·20·30년납, age: 만15세 ~ 65세 }
+    - { label: 암입원특약, term: 100세만기, pay: 주계약과 같음, age: 만15세 ~ 65세 }
+    - { label: 암수술특약, term: 100세만기, pay: 주계약과 같음, age: 만15세 ~ 65세 }
+  payFreqs: [월납, 연납]
+  sumLimit: 1천만원 ~ 1억원 (암입원 1일당 3만원)
+  renewal: 비갱신형
+basis:
+  interest: 2.5%      # 적용(예정)이율
+  standardInterest: 3.25%
+  waiver: true        # 납입면제 — 암 진단 시 이후 보험료를 면제한다(주계약·특약 모두 — 특약 탭의 납입자수도 암으로 준다)
+  waiverRateIds: [rc]
+rates:                # 사망률 없음 — 암발생률 · 암입원 기대일수 · 암수술률만
+  - id: rc
+    name: 암발생률
+    role: incidence
+    source: 경험생명표(가상) 암발생률
+  - id: ch
+    name: 암입원 기대일수
+    role: recurring
+    source: 경험생명표(가상) 암입원율 × 365일
+  - id: cs
+    name: 암수술률
+    role: incidence
+    source: 경험생명표(가상) 암수술률 (암발생률 × 0.8)
+${EXPENSES}
+benefits:
+  - id: b1
+    name: 암 진단
+    role: incidence   # 진단형 — 진단되면 지급하고 이 담보는 소멸
+    multiple: 1       # 보장금액 = 보험가입금액 × 1배
+    endAge: 100       # 100세 만기 — 99세까지 보장
+    waitDays: 90      # 90일 면책(지급 0%) → 첫해 급부 × 3/4
+    exitRateIds: [rc] # 암 단일탈퇴 — 사망은 탈퇴 사유에 넣지 않는다
+  - id: b2
+    name: 암 입원(1일당)
+    unit: 암입원특약
+    role: recurring   # 반복지급 — 입원 1일마다 지급하고 담보는 그대로
+    amount: 30000     # 1일당 3만원 — 일당은 가입금액의 배수가 아니라 따로 정한다
+    endAge: 100
+    waitDays: 90
+    rateId: ch        # 급부 발생률 — 탈퇴 사유가 아닌 위험률이라 따로 적는다
+    exitRateIds: []   # 탈퇴 사유 없음(사망률 미반영) — 납입자수만 암 진단(납입면제)으로 준다
+  - id: b3
+    name: 암 수술
+    unit: 암수술특약
+    role: incidence
+    multiple: 0.1     # 보장금액 = 가입금액 × 0.1 (1억이면 1천만원)
+    endAge: 100
+    waitDays: 90
+    rateId: cs        # 급부 발생률은 탈퇴 사유(암발생률)와 다른 암수술률
+    exitRateIds: [rc]
+surrender:
+  deductionYears: 7
+  notes:
+    - 해약공제 기준 신계약비는 적용기초율과 표준기초율로 구한 신계약비 중 작은 쪽으로 한다.
+reserve:
+  notes:
+    - 사망 시에는 책임준비금을 지급하므로 사망은 급부 현가와 준비금에 순효과가 없다. 그래서 사망률을 쓰지 않고 산출한다.
+    - 회계연도말 보험료적립금은 적용기초율 적립금과 표준기초율 적립금 중 큰 금액으로 한다.
+    - 연중 보간은 하지 않고 연말 기준으로 산출한다.
+` },
 ];
+
+/** 공유·시험용으로 [샘플] 메뉴에 보이는 것 — 나머지는 코드·시험에만 두고 하나씩 늘린다(주소 ?all 이면 모두, ?sample=<id> 로 바로 연다) */
+export const SHARED_SAMPLE_IDS = ["whole", "cancerPlan"];
+/** 첫 화면에 여는 상품 */
+export const START_SAMPLE_ID = "whole";

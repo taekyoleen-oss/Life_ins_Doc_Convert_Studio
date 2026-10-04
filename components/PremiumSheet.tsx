@@ -196,7 +196,7 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
                       </tr>
                     ))}
                     <tr className="calc-sum-hi"><th>10만원당</th><td>G₁(6자리) × 100,000 을 원으로 반올림</td><td className="num">{sheet.per100k.toLocaleString("ko-KR")}</td></tr>
-                    <tr className="calc-sum-hi"><th>담보 보험료</th><td>10만원당 × (보장금액 {sheet.multiple !== undefined ? `= 가입금액 × ${sheet.multiple} ` : ""}÷ 100,000{sheet.amount ? ` = ${(sheet.amount / 1e5).toLocaleString("ko-KR")}` : ""})</td><td className="num">{won(sheet.premium)}</td></tr>
+                    <tr className="calc-sum-hi"><th>담보 보험료</th><td>10만원당 × (보장금액 {sheet.multiple !== undefined ? `= 가입금액 × ${sheet.multiple} ` : ""}÷ 100,000{sheet.amount ? ` = ${(sheet.amount / 1e5).toLocaleString("ko-KR")}` : ""}) · 10원 미만 버림</td><td className="num">{won(sheet.premium)}</td></tr>
                   </tbody>
                 </table>
               </div>

@@ -574,7 +574,7 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
       </div>
       <div data-path={`benefits[${i}].exitRateIds`}>
         <p className="fld-label">위험률 — 탈퇴 사유 (유지자수 집단)</p>
-        <p className="fld-hint mb-1">급부 위험률 = {role === "death" ? "탈퇴 사유 전부" : `${(ev?.name ?? (s ? eventCauses(spec, s).map((r) => r.name).join(" · ") : "")) || "없음"} (사망이 아닌 탈퇴 사유)`}</p>
+        <p className="fld-hint mb-1">급부 위험률 = {role === "death" ? "탈퇴 사유 전부" : s?.rateId ? `${ev?.name ?? s.rateId} (탈퇴 사유와 따로 정한 급부 위험률)` : `${(ev?.name ?? (s ? eventCauses(spec, s).map((r) => r.name).join(" · ") : "")) || "없음"} (사망이 아닌 탈퇴 사유)`}</p>
         <select className="inp mb-1.5" value={mine?.id ?? ""} onFocus={() => f.select(`benefits[${i}].exitRateIds`)}
           onChange={(e) => { const g = groups.find((y) => y.id === e.target.value); if (g) f.set(at("exitRateIds"), g.exits.map((r) => r.id)); }}>
           {!mine && <option value="">—</option>}
