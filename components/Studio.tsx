@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseDocument } from "yaml";
 import CodeEditor, { type EditorApi } from "./CodeEditor";
-import ConditionForm from "./ConditionForm";
+import ConditionForm, { type RateSource } from "./ConditionForm";
+import RateImportDialog, { type ImportPick } from "./RateImportDialog";
+import RateProcessDialog, { type ProcessPick } from "./RateProcessDialog";
 import DocPreview from "./DocPreview";
 import FormulaPalette from "./FormulaPalette";
 import OriginalPane from "./OriginalPane";
@@ -14,7 +16,7 @@ import RateSheetPane from "./RateSheetPane";
 // 보험료 계산 화면(스프레드시트)은 열 때만 받는다
 const PremiumSheet = dynamic(() => import("./PremiumSheet"), { ssr: false });
 import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
-import { itemColumns, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
+import { itemColumns, itemSummary, libraryItems, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
 import { SAMPLES, SHARED_SAMPLE_IDS, START_SAMPLE_ID } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
@@ -33,7 +35,7 @@ import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId,
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 import { buildPackage, isPackage, PACKAGE_EXT, readPackage } from "@/lib/package";
 import { BASE_RATES_CSV } from "@/lib/base-rates";
-import { guessRole, mergeColumns, sampleSheet, setCell, setHead } from "@/lib/sheet";
+import { baseName, guessRole, hasNumbers, mergeColumns, sampleSheet, setCell, setHead, sexOf, type ColMap } from "@/lib/sheet";
 
 /** 샘플은 조건 + 위험률 표 한 세트 — 기본 위험률 표(공개, 남·여)에서 그 조건의 위험률과 이름이 맞는 열만 */
 const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, BASE_RATES_CSV, "기본 위험률 표") });
@@ -120,6 +122,9 @@ export default function Studio() {
   // 기본 위험률 모음 — 공개 기본 위험률 + (이 PC 에 있으면) 사내 위험률 모음(public/rate-library.json ← private/, 외부 반출 금지)
   const [library, setLibrary] = useState<RateLibrary | null>(null);
   const [libOpen, setLibOpen] = useState(false);
+  /** M04 의 [스프레드시트에서 불러오기] · [위험률 가공] 창 */
+  const [importOpen, setImportOpen] = useState(false);
+  const [processOpen, setProcessOpen] = useState(false);
   const [allSamples, setAllSamples] = useState(false);
   /** 공유 테스트 안내 — 처음 여는 사람에게 펼쳐 두고, 닫으면 다시 펼치지 않는다(머리의 [테스트 안내]로 다시) */
   const [guide, setGuide] = useState(false);
@@ -366,6 +371,66 @@ export default function Studio() {
     setSheet(st); showPane("sheet"); setLibOpen(false);
     const priv = picks.some((p) => p.item.private);
     setToast({ text: `위험률 ${picks.length}개를 표에 넣고 조건에 이었습니다 (${picks.map((p) => p.item.name).join(", ")})${priv ? " — 사내 자료(외부 반출 금지)가 들어 있습니다" : ""}`, kind: priv ? "warn" : "ok" });
+  };
+
+  // ── M04 출처 콤보 — 위험률마다 값 표를 고른다(지금 위험률 표의 열 · 기본 위험률 모음 · 개발 PC 의 사내 모음)
+  const libItems = useMemo(() => libraryItems(library), [library]);
+  const rateSources = useMemo<RateSource[]>(() => {
+    const cols = sheet ? [...new Set(sheet.sheet.head.flatMap((h, i) => (sheet.map[i]?.to !== "age" && hasNumbers(sheet.sheet, i) ? [baseName(h)] : [])))] : [];
+    return [
+      ...cols.map((n) => ({ key: `col:${n}`, label: n, group: "위험률 표의 열 (지금 표)" })),
+      ...libItems.map((it) => ({ key: `lib:${it.key}`, label: `${it.name} — ${itemSummary(it)}`, group: it.private ? "사내 위험률 모음 (개발 PC)" : "기본 위험률 모음" })),
+    ];
+  }, [sheet, libItems]);
+  const rateSourceOf = useCallback((id: string) => {
+    const i = sheet ? sheet.map.findIndex((m) => m.to === "rate" && m.rateId === id) : -1;
+    return i >= 0 ? `col:${baseName(sheet!.sheet.head[i])}` : undefined;
+  }, [sheet]);
+  /** 근거 칸 — 늘 가상 출처(경험생명표(가상) <이름>) */
+  const setRateSource = (rateId: string, name: string) => {
+    const raw = parseDocument(yaml).toJS() as { rates?: { id?: unknown }[] } | null;
+    const i = (raw?.rates ?? []).findIndex((r) => String(r?.id) === rateId);
+    if (i >= 0) onEdit([{ path: ["rates", i, "source"], value: virtualSource(undefined, name) }]);
+  };
+  const onRateSource = (rateId: string, key: string) => {
+    if (key.startsWith("lib:")) {
+      const item = libItems.find((x) => `lib:${x.key}` === key);
+      if (!item) return;
+      addFromLibrary([{ item, target: rateId }]);
+      setRateSource(rateId, item.name);
+      return;
+    }
+    const name = key.slice(4);
+    // 그 이름(성별을 뺀)의 수 열을 이 위험률에 — 이 위험률에 이어 있던 열은 풀린다
+    setSheet((st) => {
+      if (!st) return st;
+      const map = st.map.map((m, i): ColMap => {
+        if (m.to === "rate" && m.rateId === rateId) return { to: "skip" };
+        if (m.to !== "age" && hasNumbers(st.sheet, i) && baseName(st.sheet.head[i]) === name) { const sx = sexOf(st.sheet.head[i]); return { to: "rate", rateId, ...(sx ? { sex: sx } : {}) }; }
+        return m;
+      });
+      return { ...st, map };
+    });
+    setRateSource(rateId, name);
+  };
+  /** 스프레드시트에서 불러온 열 → 위험률 표 + 조건(새 위험률은 이름마다 하나 · 남·여 열은 한 위험률) */
+  const addFromImport = (picks: ImportPick[]) => {
+    const names = [...new Set(picks.filter((p) => p.target === "new").map((p) => p.name))];
+    const ids = names.length ? addRates(names.map((n) => ({ name: n, role: picks.find((p) => p.name === n)!.role, source: virtualSource(undefined, n) }))) : [];
+    if (ids.length !== names.length) return;
+    const target = (p: ImportPick) => (p.target === "new" ? ids[names.indexOf(p.name)] : p.target);
+    let st = sheet;
+    for (const t of new Set(picks.filter((p) => p.target !== "new").map((p) => p.target))) st = unlinkRate(st, t);
+    st = mergeColumns(st, picks.map((p) => ({ head: p.head, ages: p.ages, values: p.values, target: target(p) })), sheet?.sheet.name ?? "위험률 표");
+    setSheet(st); showPane("sheet"); setImportOpen(false);
+    setToast({ text: `위험률 ${new Set(picks.map((p) => p.name)).size}개(${picks.length}열)를 표에 넣고 조건에 이었습니다 — M04 에서 유형을 확인하세요`, kind: "ok" });
+  };
+  /** 가공한 위험률 → 새 위험률 + 표의 새 열(남·여) */
+  const addFromProcess = (pk: ProcessPick) => {
+    const [id] = addRates([{ name: pk.name, role: pk.role, source: pk.source }]);
+    if (!id) return;
+    setSheet((st) => mergeColumns(st, pk.cols.map((c) => ({ head: c.sex ? `${pk.name}(${c.sex === "M" ? "남" : "여"})` : pk.name, ages: c.ages, values: c.values, target: id })), st?.sheet.name ?? "위험률 표"));
+    showPane("sheet"); setProcessOpen(false);
   };
 
   const loadSheet = (sh: Sheet) => {
@@ -668,7 +733,8 @@ export default function Studio() {
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
-                        calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)} />
+                        calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)}
+                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
@@ -795,6 +861,8 @@ export default function Studio() {
       {help && <Help onClose={() => setHelp(false)} />}
       {calcOpen && <PremiumSheet spec={specT} contract={calcOn} setContract={setCalcOn} onClose={() => setCalcOpen(false)} />}
       {libOpen && <RateLibraryDialog library={library} rates={s.rates} onAdd={addFromLibrary} onClose={() => setLibOpen(false)} />}
+      {importOpen && <RateImportDialog rates={s.rates} onAdd={addFromImport} onClose={() => setImportOpen(false)} />}
+      {processOpen && <RateProcessDialog rates={specT.rates} onAdd={addFromProcess} onClose={() => setProcessOpen(false)} />}
       {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
     </div>
   );

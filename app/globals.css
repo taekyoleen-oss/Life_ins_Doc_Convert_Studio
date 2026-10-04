@@ -424,3 +424,26 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 /* 좁은 화면 경고 — PC 화면 기준 앱 */
 .narrow-warn { display: none; margin: 0; padding: 6px 16px; font-size: 12.5px; background: #fff4e5; border-bottom: 1px solid #f3d19c; color: #7a4b00; }
 @media (max-width: 1099px) { .narrow-warn { display: block; } }
+/* M04 위험률 — 산출방법서 가.(2) 예정위험률 표와 같은 열 */
+.rate-table { display: grid; gap: 4px; }
+.rate-row { display: grid; grid-template-columns: minmax(7rem, 1.3fr) auto minmax(6rem, .8fr) minmax(9rem, 1.7fr) minmax(6rem, 1fr) 22px; gap: 6px; align-items: start; }
+.rate-row > * { min-width: 0; }
+.rate-row .inp { padding: 4px 6px; font-size: 12.5px; width: 100%; }
+.rate-head { font-size: 11px; color: var(--muted-foreground); border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+/* 보험기간 — 보장 카드·산출 조건에서는 읽기만(M01 가입 조건에서 정한다) */
+.ben-term { font-size: 13px; padding: 4px 0; }
+.ben-term small, .trial-fixed small { color: var(--muted-foreground); }
+.trial-fixed { display: inline-flex; align-items: center; background: var(--muted); color: var(--foreground); cursor: default; }
+/* 스프레드시트에서 불러오기 · 위험률 가공 창 */
+.modal.imp-modal { max-width: 960px; width: 100%; max-height: 90vh; overflow: auto; }
+.imp-src { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
+.imp-src textarea { flex: 1; font-family: var(--font-jetbrains), monospace; font-size: 12px; }
+.imp-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 10px 0 6px; font-size: 13px; }
+.imp-preview { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.imp-preview th.imp-age { background: #e6f0fa; }
+.imp-preview th.imp-use { background: #eef7ee; }
+.imp-cols { margin-top: 8px; }
+.imp-cols td { white-space: normal; }
+.imp-cols .inp { padding: 3px 5px; font-size: 12.5px; }
+.proc-ids { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.proc-ids .chip { cursor: pointer; }
