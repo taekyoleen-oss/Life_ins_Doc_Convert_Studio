@@ -6,6 +6,7 @@ import CodeEditor, { type EditorApi } from "./CodeEditor";
 import ConditionForm, { type RateSource } from "./ConditionForm";
 import RateImportDialog, { type ImportPick } from "./RateImportDialog";
 import RateProcessDialog, { type ProcessPick } from "./RateProcessDialog";
+import { exprWithNames, processRates } from "@/lib/rate-process";
 import DocPreview from "./DocPreview";
 import FormulaPalette from "./FormulaPalette";
 import OriginalPane from "./OriginalPane";
@@ -433,6 +434,38 @@ export default function Studio() {
     showPane("sheet"); setProcessOpen(false);
   };
 
+  /**
+   * 담보의 결합 위험률(가공) — 사망형은 탈퇴 사유 전부의 Q(질병끼리 곱, 사망과는 겹치는 부분 절반), 여러 질병의 진단형은 R.
+   * 연령마다 계산해 위험률 표에 열로 넣고 조건(M04)에 위험률로 더해 그 담보의 급부 위험률(rateId)로 잇는다 — 값을 표에서 확인한다.
+   * 사망형의 계산 식은 그대로 Q 를 쓴다(값이 같다 — 표는 확인·근거용).
+   */
+  const onCombineRate = (bi: number) => {
+    const b = specT.benefits[bi];
+    if (!b) return;
+    const exits = (b.exitRateIds ?? []).map((id) => specT.rates.find((r) => r.id === id)).filter((r): r is NonNullable<typeof r> => !!r);
+    const deaths = exits.filter((r) => r.role === "death"), ills = exits.filter((r) => r.role !== "death");
+    const prod = (rs: typeof exits) => (rs.length === 1 ? rs[0].id : `(1 - ${rs.map((r) => `(1 - ${r.id})`).join("")})`);
+    const D = deaths.length ? prod(deaths) : "", R = ills.length ? prod(ills) : "";
+    const expr = b.role === "death" ? (D && R ? `${D} + ${R} - ${D}*${R}/2` : D || R) : R;
+    if (!expr) { setToast({ text: "결합할 위험률이 없습니다 — 유지자수(L01)에서 탈퇴 사유를 고르세요", kind: "warn" }); return; }
+    const tables = (id: string) => {
+      const r = specT.rates.find((x) => x.id === id);
+      if (!r) return undefined;
+      return r.tables?.M || r.tables?.F ? { M: r.tables.M, F: r.tables.F } : r.table ? { any: r.table } : undefined;
+    };
+    let cols: ReturnType<typeof processRates>;
+    try { cols = processRates(expr, tables).map((c) => ({ ...c, values: c.values.map((v) => Math.min(1, v)) })); }
+    catch (e) { setToast({ text: `결합 위험률을 만들 수 없습니다 — ${errText(e)}`, kind: "err" }); return; }
+    const name = `${b.name} ${b.role === "death" ? "탈퇴율" : "발생률"}(결합)`;
+    const label = exprWithNames(expr.replace(/\(1 - /g, "(1 − ").replace(/ - /g, " − "), (id) => specT.rates.find((r) => r.id === id)?.name);
+    const [id] = addRates([{ name, role: "other", source: `경험생명표(가상) ${name} (${label})` }]);
+    if (!id) return;
+    setSheet((st) => mergeColumns(st, cols.map((c) => ({ head: c.sex ? `${name}(${c.sex === "M" ? "남" : "여"})` : name, ages: c.ages, values: c.values, target: id })), st?.sheet.name ?? "위험률 표"));
+    onEdit([{ path: ["benefits", bi, "rateId"], value: id }]);
+    showPane("sheet");
+    setToast({ text: `${name} 을(를) 위험률 표와 조건(M04)에 넣고 ${b.name} 담보의 급부 위험률로 이었습니다`, kind: "ok" });
+  };
+
   const loadSheet = (sh: Sheet) => {
     if (sheet && sheet.map.some((m) => m.to !== "skip") && !window.confirm("지금 위험률 표와 연결을 새 표로 바꿀까요?")) return;
     let st: SheetState = { sheet: sh, map: autoMap(sh, parsed.spec.rates) };
@@ -734,7 +767,7 @@ export default function Studio() {
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
                         calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)}
-                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} />
+                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} onCombineRate={onCombineRate} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>

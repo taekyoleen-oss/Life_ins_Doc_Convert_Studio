@@ -447,3 +447,5 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 .imp-cols .inp { padding: 3px 5px; font-size: 12.5px; }
 .proc-ids { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .proc-ids .chip { cursor: pointer; }
+/* 결과 표의 글자 칸 머리글은 왼쪽(내용과 같은 줄) — 수 칸만 오른쪽 */
+.calc-table th.txt { text-align: left; }

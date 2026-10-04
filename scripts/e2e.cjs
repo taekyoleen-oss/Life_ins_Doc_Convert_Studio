@@ -143,9 +143,13 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     (await p.locator(".card[data-card=B01] .sub-open [data-path$='.exitRateIds'] input[type=checkbox]").count()) === 0
     && (await p.locator(".card[data-card=B01] .sub-open select[aria-label='유지자수 집단'] option:checked").textContent()).includes("유지자(사망X, 80% 이상 장해X)")
     && lxFrom.includes("납입 카드에서 보기"), lxFrom.slice(0, 80));
-  ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위·급부 위험률 칸도 없다(탭·탈퇴 사유에서 정해진다) · 증액·감액 구간도 없다",
-    (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0
-    && (await p.locator(".card[data-card=B01] [data-path$='.rateId']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0);
+  ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위 칸도 없다(탭에서) · 증액·감액 구간도 없다",
+    (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0);
+  // 급부 위험률은 늘 보인다 — 사망형은 탈퇴 사유 전부의 결합 Q(사망률 ⊕ 80% 이상 장해율)와 [결합 위험률을 위험률 표에 넣기]
+  const rate1 = (await p.textContent(".card[data-card=B01] .sub-open [data-path$='.rateId']")).replace(/\s+/g, " ");
+  ok("B01 급부 위험률: 사망형은 결합 Q = 사망률 ⊕ 80% 이상 장해율 — 결합 위험률을 위험률 표에 넣는 단추", rate1.includes("사망률 ⊕ 80% 이상 장해율") && rate1.includes("결합 위험률을 위험률 표에 넣기"), rate1.slice(0, 120));
+  const benRes = (await p.textContent(".card[data-card=B01] .calc-table")).replace(/\s+/g, " ");
+  ok("B01 산출 결과: 유지자수 집단 · 급부 위험률 열(결합 Q — 사망률 ⊕ 80% 이상 장해율)", benRes.includes("급부 위험률") && benRes.includes("결합 Q — 사망률 ⊕ 80% 이상 장해율"), benRes.slice(0, 160));
   const b1 = (await p.textContent(".card[data-card=B01] .sub-open")).replace(/\s+/g, " ");
   ok("담보 칸: 급부 유형 옆 보험기간, 그 아래 보장금액(배수)·면책·삭감 기간·그 기간 지급",
     ["급부 유형", "보험기간", "보장금액", "면책·삭감 기간", "그 기간 지급"].every((t) => b1.includes(t)) && (await p.inputValue(".card[data-card=B01] .sub-open [data-path$='.multiple'] select")) === "1"
