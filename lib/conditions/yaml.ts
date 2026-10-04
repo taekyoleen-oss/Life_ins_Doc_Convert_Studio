@@ -1,9 +1,9 @@
 import { Document, isCollection, isMap, isNode, isScalar, isSeq, LineCounter, parseDocument, stringify, type Node } from "yaml";
-import { generateFormulas } from "../methoddoc/formulas";
+import { generateFormulas, syncFromSurvivors } from "../methoddoc/formulas";
 import { normFormula, parseRate, parseTimes } from "../methoddoc/parse";
 import {
   emptySpec, hasProduct, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
-  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole,
+  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole, type SurvivorSpec,
 } from "../methoddoc/spec";
 
 /**
@@ -67,10 +67,11 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
       times: e.times !== undefined ? `${e.times}배` : undefined,
       phase: e.phase,
     })),
+    survivors: spec.survivors?.length ? spec.survivors.map((x) => clean({ id: x.id, name: x.name, unit: x.unit, exitRateIds: x.exitRateIds, payFor: x.payFor })) : undefined,
     benefits: spec.benefits.map((x) => clean({
       id: x.id, name: x.name, unit: x.unit, role: x.role, trigger: x.trigger, multiple: x.multiple, amount: x.amount, endAge: x.endAge,
       waitDays: x.waitDays, waitPayRatio: x.waitPayRatio !== undefined ? pct(x.waitPayRatio) : undefined,
-      rateId: x.rateId, exitRateIds: x.exitRateIds, steps: x.steps, points: x.points,
+      survivorId: x.survivorId, rateId: x.rateId, exitRateIds: x.exitRateIds, steps: x.steps, points: x.points,
     })),
     units: spec.units.length > 1 ? spec.units : undefined,
     reserve: spec.reserve.notes.length ? spec.reserve : undefined,
@@ -96,6 +97,7 @@ function styleFlow(doc: Document) {
   flowItems(["expenses"]);
   flowItems(["basis", "lapse"]);
   flowItems(["product", "terms"]);
+  flowItems(["survivors"]);
   { const w = doc.getIn(["basis", "waiverRateIds"], true); if (isSeq(w)) w.flow = true; }
   for (const key of ["types", "payFreqs"]) { const s = doc.getIn(["product", key], true); if (isSeq(s)) s.flow = true; }
   const bens = doc.getIn(["benefits"], true);
@@ -203,6 +205,17 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
     return ben;
   });
 
+  // 생존자 lx(k) — 적혀 있으면 담보는 survivorId 로 가져다 쓴다(없으면 담보의 탈퇴 위험률에서 만든다)
+  const survivors = arr(raw.survivors).map(obj).map((x, i): SurvivorSpec => ({
+    id: str(x.id) ?? `s${i + 1}`, ...(str(x.name) ? { name: str(x.name) } : {}), ...(str(x.unit) ? { unit: str(x.unit) } : {}),
+    exitRateIds: arr(x.exitRateIds).map(str).filter((s): s is string => !!s),
+    ...(arr(x.payFor).length ? { payFor: arr(x.payFor).map(str).filter((s): s is string => !!s) } : {}),
+  }));
+  if (survivors.length) spec.survivors = survivors;
+  arr(raw.benefits).map(obj).forEach((x, i) => { if (str(x.survivorId) && spec.benefits[i]) spec.benefits[i].survivorId = str(x.survivorId); });
+  for (const ben of spec.benefits) if (ben.survivorId && !survivors.some((s) => s.id === ben.survivorId)) errors.push({ line: 0, message: `담보 "${ben.name}" 가 없는 생존자 "${ben.survivorId}" 를 가리킵니다` });
+  for (const sv of survivors) for (const id of sv.exitRateIds) if (!spec.rates.some((r) => r.id === id)) errors.push({ line: 0, message: `생존자 "${sv.id}" 가 없는 위험률 id "${id}" 를 가리킵니다` });
+
   spec.units = arr(raw.units) as MethodSpec["units"];
   const rs = obj(raw.reserve), sr = obj(raw.surrender);
   spec.reserve = { notes: arr(rs.notes).map(str).filter((s): s is string => !!s) };
@@ -215,7 +228,7 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
   for (const ben of spec.benefits) for (const id of [ben.rateId, ...(ben.exitRateIds ?? [])]) {
     if (id && !ids.has(id)) errors.push({ line: 0, message: `담보 "${ben.name}" 가 없는 위험률 id "${id}" 를 가리킵니다` });
   }
-  return spec;
+  return syncFromSurvivors(spec);
 }
 
 export function yamlToSpec(src: string): ParsedConditions {
@@ -342,13 +355,22 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
       if (!ben.unit && prev?.unit) ben.unit = prev.unit;
       return JSON.parse(JSON.stringify(ben)) as BenefitSpec;     // undefined 칸을 지워 비교·저장이 깔끔하게
     });
-    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.multiple, b.amount, b.endAge, b.waitDays, b.waitPayRatio, b.trigger, b.rateId, b.exitRateIds, b.steps, b.points]));
+    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.multiple, b.amount, b.endAge, b.waitDays, b.waitPayRatio, b.trigger, b.survivorId, b.rateId, b.exitRateIds, b.steps, b.points]));
     if (view(out.benefits) !== view(next)) { changes.push(`benefits: ${out.benefits.length}개 → ${next.length}개 갱신`); out.benefits = next; }
+  }
+  if (took.has("survivors")) {
+    const fix = (id: string) => idMap.get(id) ?? id;
+    const next = parsed.survivors?.map((x) => ({ ...x, exitRateIds: x.exitRateIds.map(fix) }));
+    if (JSON.stringify(next ?? null) !== JSON.stringify(out.survivors ?? null)) {
+      changes.push(`survivors: 생존자 ${out.survivors?.length ?? 0}개 → ${next?.length ?? 0}개 갱신`);
+      out.survivors = next;
+      if (!next) out.benefits = out.benefits.map((b) => ({ ...b, survivorId: undefined }));
+    }
   }
   // 표준 양식의 위험률 표에서 지운 행 — 담보(갱신된)가 쓰지 않는 것만 뺀다
   if (opt.standard && took.has("rates")) {
     const kept = new Set(parsed.rates.map((r) => idMap.get(r.id) ?? r.id));
-    const used = new Set(out.benefits.flatMap((b) => [b.rateId, ...(b.exitRateIds ?? [])]).filter(Boolean));
+    const used = new Set([...out.benefits.flatMap((b) => [b.rateId, ...(b.exitRateIds ?? [])]), ...(out.survivors ?? []).flatMap((x) => x.exitRateIds)].filter(Boolean));
     const gone = out.rates.filter((r) => !kept.has(r.id) && !used.has(r.id));
     if (gone.length) { changes.push(`rates: "${gone.map((r) => r.name).join('", "')}" 삭제`); out.rates = out.rates.filter((r) => !gone.includes(r)); }
   }
@@ -417,7 +439,7 @@ export interface YamlEdit { path: YamlPath; value?: unknown; add?: boolean }
 export const pathKey = (p: YamlPath) => p.map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k)).join("");
 
 /** 새로 만드는 항목 중 한 줄로 두는 것 — specToYaml 의 styleFlow 와 같은 관례 */
-const FLOW = /^(expenses|basis\.lapse|product\.terms)\[\d+\]$|\.(exitRateIds|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
+const FLOW = /^(expenses|basis\.lapse|product\.terms|survivors)\[\d+\]$|\.(exitRateIds|payFor|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
 function markFlow(node: unknown, key: string) {
   if (!isCollection(node)) return;
   if (FLOW.test(key)) node.flow = true;

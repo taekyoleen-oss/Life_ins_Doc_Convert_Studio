@@ -77,26 +77,31 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(got.premium).toBe(want.monthlyGross);
   });
 
-  it("계산 표: 위험률 → 유지자수·납입자수·지급자수 → 현가·누계 → 보험금, 열마다 그 식", () => {
+  it("계산 표: 위험률 → 생존자 lx(k)·Dx·Nx → 이 담보의 l·지급자수 → 현가·누계 → 보험금, 열마다 그 식", () => {
     const { sheets, premium, per100k } = calcSheets(spec, want.contract);
     expect(sheets.map((s) => s.name)).toEqual(["사망·80% 이상 장해", "암 진단"]);
     const s0 = sheets[0];
     expect(s0.error).toBeUndefined();
     expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
     // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
-    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r", "f^{(1)}", "f^{(2)}"]);   // 유지자수 q·r · 납입자수 f⁽¹⁾ 장해 · f⁽²⁾ 암
-    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q", "l", "F", "Q′", "l′", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "V^{표준}", "V^{결산}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
+    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r^{(1)}", "r^{(2)}"]);   // 사망 · 장해 · 암 — 기호는 상품 전체에서 하나
+    // 이 담보의 생존자 lx(1)(사망·장해) 과 [납입] 생존자 lx(3)(사망·장해·암)이 먼저, 그 뒤로 이 담보의 l(= lx(1)) · d · 현가 · 보험금
+    expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q^{(1)}", "l^{(1)}", "D^{(1)}", "N^{(1)}", "R^{(3)}", "Q^{(3)}", "l^{(3)}", "D^{(3)}", "N^{(3)}",
+      "l", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "V^{표준}", "V^{결산}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
     for (const c of s0.cols) expect(c.values).toHaveLength(72);
     // 기준 인원에서 시작하고, 지급자수 = 유지자수 × 탈퇴율
     const col = (sym: string) => s0.cols.find((c) => c.sym === sym)!;
     expect(col("l").values[0]).toBe(100000);
-    expect(col("l′").values[0]).toBe(100000);
-    expect(col("d").values[3]).toBeCloseTo(col("l").values[3] * col("Q").values[3], 9);
-    expect(col("l").formula).toContain("l_{x+t+1} = l_{x+t}");
+    expect(col("l^{(3)}").values[0]).toBe(100000);
+    expect(col("l").values).toEqual(col("l^{(1)}").values);                                   // 보험금은 앞의 lx 를 가져다 쓴다
+    expect(col("D′").values).toEqual(col("D^{(3)}").values);                                  // 납입(N*)은 [납입] 생존자
+    expect(col("d").values[3]).toBeCloseTo(col("l").values[3] * col("Q^{(1)}").values[3], 9);
+    expect(col("l^{(1)}").formula).toContain("l^{(1)}_{x+t+1} = l^{(1)}_{x+t}");
+    expect(col("l^{(1)}").label).toBe("생존자수 lx(1)");
     expect(col("q").formula).toContain("위험률 표에서 온 값");
     // 줄마다 "이 값들로 나왔다" — l 은 앞자리 l 과 그 자리 Q 로
-    expect(col("l").parts(1).map((p) => p.ref)).toEqual(["l(40)", "Q(40)"]);
-    expect(col("l").parts(1)[0].value).toBe(100000);
+    expect(col("l^{(1)}").parts(1).map((p) => p.ref)).toEqual(["l^{(1)}(40)", "Q^{(1)}(40)"]);
+    expect(col("l^{(1)}").parts(1)[0].value).toBe(100000);
     // 표 아래 한 값들 — 엔진·엑셀과 같은 보험료
     expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G", "G₁", "G_10만", "P_β", "α^{표준}", "α^{공제}"]);
     expect(sheets.map((s) => s.per100k)).toEqual([261, 162]);

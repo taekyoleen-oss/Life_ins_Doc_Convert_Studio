@@ -51,30 +51,34 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, "B6")).toEqual({ v: 0.025 });         // 적용이율 i
     expect(cell(sheet1, "B7")).toEqual({ f: "1/(1+i_rate)" }); // 현가율 v
     expect(cell(sheet1, "B8")).toEqual({ v: 0.0325 });        // 표준이율
-    expect(colsOf(sheet1, 2).map(([, t]) => t).slice(0, 8)).toEqual(["t (경과)", "연령 x+t", "사망률", "80% 이상 장해율", "암발생률", "v^t 현가율", "v^{t+½} 현가율", "Q 탈퇴율"]);
+    expect(colsOf(sheet1, 2).map(([, t]) => t).slice(0, 8)).toEqual(["t (경과)", "연령 x+t", "사망률", "80% 이상 장해율", "암발생률", "v^t 현가율", "v^{t+½} 현가율", "Q^{(1)} 결합 탈퇴율 lx(1)"]);
   });
 
-  it("표 — 위험률(공통 열)만 값이고 현가율·유지자수·납입자수·기수·준비금·환급금은 모두 수식, 담보 둘이 한 장에", () => {
+  it("표 — 위험률(공통 열)만 값이고 현가율·생존자 lx·기수·준비금·환급금은 모두 수식, 담보 둘이 한 장에", () => {
     expect(cell(sheet1, "D2")?.s).toBe("t (경과)");
     expect(cell(sheet1, "D3")).toEqual({ v: 0 });
     expect(cell(sheet1, "E3")).toEqual({ f: "x_age+D3" });
     expect(cell(sheet1, "F4")).toEqual({ v: 0.00094 });                     // 사망률 41세 — 값
     expect(cell(sheet1, "I3")).toEqual({ f: "v_disc^(D3)" });
     expect(cell(sheet1, "J3")).toEqual({ f: "v_disc^(D3+0.5)" });
-    expect(cell(sheet1, "K1")?.s).toContain("담보 1: 사망·80% 이상 장해");
-    const Q = colOf("Q "), l = colOf("l "), lp = colOf("l′ "), d = colOf("d "), D = colOf("D "), N = colOf("N "), M = colOf("M "), V = colOf("V "), V100k = colOf("V^{10만}"), W = colOf("W "), R = colOf("환급률");
-    expect(cell(sheet1, `${Q}3`)?.f).toBe("MIN(1,((F3+G3)-((F3*G3)/2)))");     // Q = min(1, q + r − q·r/2)
-    expect(cell(sheet1, `${l}3`)).toEqual({ v: 100000 });                  // 기준 인원은 값
-    expect(cell(sheet1, `${l}4`)).toEqual({ f: `(${l}3*(1-${Q}3))` });     // l_{x+t+1} = l_{x+t} × (1 − Q_{x+t})
-    // 납입자수 — 질병(장해 G · 납입면제 암 H)을 곱으로 묶은 F, 사망(F 열)과는 겹치는 부분 절반인 Q′ 로 준다
-    const F = colOf("F "), Qp = colOf("Q′ ");
-    expect(cell(sheet1, `${F}3`)?.f).toBe("(1-((1-G3)*(1-H3)))");
-    expect(cell(sheet1, `${Qp}3`)?.f).toBe(`MIN(1,((F3+${F}3)-((F3*${F}3)/2)))`);
-    expect(cell(sheet1, `${lp}4`)).toEqual({ f: `(${lp}3*(1-${Qp}3))` });
-    expect(cell(sheet1, `${d}3`)?.f).toBe(`(${l}3*${Q}3)`);                 // 지급자수 d = l × Q
-    expect(cell(sheet1, `${D}3`)).toEqual({ f: `(${l}3*I3)` });             // D = l·v^t
-    expect(cell(sheet1, `${N}3`)?.f).toBe(`SUM(${D}3:${D}74)`);             // N = Σ_{u≥t} D (n = 71 → 3~74행)
-    expect(cell(sheet1, `${M}3`)?.f).toMatch(/^SUMPRODUCT\(/);              // M = Σ S·C
+    expect(cell(sheet1, "K1")?.s).toContain("담보 1: 사망·80% 이상 장해 (생존자 lx(1)");
+    const Q1 = colOf("Q^{(1)} "), l1 = colOf("l^{(1)} "), D1 = colOf("D^{(1)} "), N1 = colOf("N^{(1)} ");
+    const l = colOf("l "), d = colOf("d "), D = colOf("D "), N = colOf("N "), M = colOf("M "), V = colOf("V "), V100k = colOf("V^{10만}"), W = colOf("W "), R = colOf("환급률");
+    expect(cell(sheet1, `${Q1}3`)?.f).toBe("MIN(1,((F3+G3)-((F3*G3)/2)))");    // Q⁽¹⁾ = min(1, q + r − q·r/2)
+    expect(cell(sheet1, `${l1}3`)).toEqual({ v: 100000 });                // 기준 인원은 값
+    expect(cell(sheet1, `${l1}4`)).toEqual({ f: `(${l1}3*(1-${Q1}3))` });  // l⁽¹⁾_{x+t+1} = l⁽¹⁾_{x+t} × (1 − Q⁽¹⁾_{x+t})
+    expect(cell(sheet1, `${D1}3`)).toEqual({ f: `(${l1}3*I3)` });          // D⁽¹⁾ = l⁽¹⁾·v^t
+    expect(cell(sheet1, `${N1}3`)?.f).toBe(`SUM(${D1}3:${D1}74)`);         // N⁽¹⁾ = Σ_{u≥t} D⁽¹⁾ (n = 71 → 3~74행)
+    // [납입] 생존자 lx(3) — 질병(장해 G · 암 H)을 곱으로 묶은 R⁽³⁾, 사망(F 열)과는 겹치는 부분 절반인 Q⁽³⁾
+    const R3 = colOf("R^{(3)} "), Q3 = colOf("Q^{(3)} "), l3 = colOf("l^{(3)} ");
+    expect(cell(sheet1, `${R3}3`)?.f).toBe("(1-((1-G3)*(1-H3)))");
+    expect(cell(sheet1, `${Q3}3`)?.f).toBe(`MIN(1,((F3+${R3}3)-((F3*${R3}3)/2)))`);
+    expect(cell(sheet1, `${l3}4`)).toEqual({ f: `(${l3}3*(1-${Q3}3))` });
+    // 보험금은 앞의 생존자 lx 를 가져다 쓴다 — 이 담보의 l · D · N 은 lx(1) 의 칸
+    expect(cell(sheet1, `${l}3`)).toEqual({ f: `${l1}3` });
+    expect(cell(sheet1, `${D}3`)).toEqual({ f: `${D1}3` });
+    expect(cell(sheet1, `${N}3`)).toEqual({ f: `${N1}3` });
+    expect(cell(sheet1, `${d}3`)?.f).toBe(`(${l1}3*${Q1}3)`);              // 지급자수 d = l⁽¹⁾ × Q⁽¹⁾    expect(cell(sheet1, `${M}3`)?.f).toMatch(/^SUMPRODUCT\(/);              // M = Σ S·C
     // 준비금 V: 0 으로 나누면 0 (D_{x+n} = 0) · 10만원당은 ROUND · 환급금은 MAX(V − 해약공제, 0) · 환급률은 납입누계로
     expect(cell(sheet1, `${V}3`)?.f).toMatch(new RegExp(`^IF\\(${D}3=0,0,\\(\\(${M}3\\+\\(betaPrime`));
     expect(cell(sheet1, `${V100k}3`)?.f).toBe(`ROUND((${V}3*100000),0)`);
@@ -82,7 +86,7 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, `${W}3`)?.f).toBe(`${colOf("W^{표준}")}3`);              // 표준형은 W = W^표준
     expect(cell(sheet1, `${R}3`)?.f).toMatch(/^IF\(.*=0,0,/);
     // 둘째 담보(암 진단)의 구역 — 같은 위험률 열(사망률 F · 암발생률 H)을 쓴다
-    const Q2 = colOf("Q ", 1);
+    const Q2 = colOf("Q^{(2)} ");
     expect(cell(sheet1, `${Q2}3`)?.f).toBe("MIN(1,((F3+H3)-((F3*H3)/2)))");
     expect(cell(sheet1, `${Q2}63`)).not.toBeNull();                          // 100세 만기 → n = 60 → 3~63행
     expect(cell(sheet1, `${Q2}64`)).toBeNull();

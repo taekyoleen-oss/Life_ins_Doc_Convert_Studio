@@ -39,30 +39,30 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(r80.tables!.F!.values[40]).toBeCloseTo(0.000167, 12);
   });
 
-  it("산출식: 유지자수는 담보마다(유지자 둘), 납입자수는 하나 — 납입자(사망X, 80% 이상 장해X, 암X) · 암 진단은 첫해 (1 − 3/12)", () => {
+  it("산출식: 생존자 셋 — lx(1) 사망·장해 · lx(2) 사망·암 (보험금마다) · lx(3) 사망·장해·암 [납입] · 암 진단은 첫해 (1 − 3/12)", () => {
     const f = withFormulas(spec).formulas;
-    expect(f.filter((x) => x.key?.startsWith("group:")).map((x) => x.label)).toEqual(["유지자수 — 유지자(사망X, 80% 이상 장해X)", "유지자수 — 유지자(사망X, 암X)"]);
-    const pays = f.filter((x) => x.key?.startsWith("pay:"));
-    expect(pays.map((x) => x.label)).toEqual(["납입자수 — 납입자(사망X, 80% 이상 장해X, 암X)"]);
-    const main = pays[0].text;
-    expect(main).toContain("f^{(1)}_x : 80% 이상 장해율");
-    expect(main).toContain("f^{(2)}_x : 암발생률");
+    const surv = f.filter((x) => x.key?.startsWith("surv:"));
+    expect(surv.map((x) => x.label)).toEqual(["생존자수 lx(1) — 생존자(사망X, 80% 이상 장해X)", "생존자수 lx(2) — 생존자(사망X, 암X)", "생존자수 lx(3) — 생존자(사망X, 80% 이상 장해X, 암X)"]);
+    const main = surv[2].text;
+    expect(main).toContain("r^{(1)}_x : 80% 이상 장해율");
+    expect(main).toContain("r^{(2)}_x : 암발생률");
     // 질병(장해 · 암)은 곱으로, 사망과는 겹치는 부분 절반
-    expect(main).toContain("F_{x+t} = 1 − ( 1 − f^{(1)}_{x+t} )·( 1 − f^{(2)}_{x+t} )");
-    expect(main).toContain("Q′_{x+t} = min( 1, q_{x+t} + F_{x+t} − q_{x+t}·F_{x+t}/2 )");
-    expect(main).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q′_{x+t} )");
+    expect(main).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
+    expect(main).toContain("Q^{(3)}_{x+t} = min( 1, q_{x+t} + R^{(3)}_{x+t} − q_{x+t}·R^{(3)}_{x+t}/2 )");
+    expect(main).toContain("l^{(3)}_{x+t+1} = l^{(3)}_{x+t} × ( 1 − Q^{(3)}_{x+t} )");
+    expect(f.find((x) => x.key === "benefit:b1")!.text).toContain("N′_{x+t} = N^{(3)}_{x+t}");
     // 면책은 보장금액의 배수 S 로 — 첫해만 (1 − 3/12) 배
     expect(f.find((x) => x.key === "benefit:b2")!.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
-    expect(md).toContain("f_x : 80% 이상 장해율 · 암발생률");                     // 가.(4) 납입면제 사유 — 되읽는 표시
-    expect(md).not.toContain("f_{x+t} : 납입을 멈추게 하는 질병의 발생률");    // v6 — 결합은 납입자수 식에만(가.(4) 는 사유와 f_x 줄)
+    // v7 — 납입면제는 따로 적지 않는다: [납입] 생존자의 탈퇴 위험률이 곧 납입을 멈추는 사유다
+    expect(md).toContain("| 탈퇴 위험률 | 사망률 및 80% 이상 장해율 및 암발생률 |\n| 납입(N*) | 주계약 |");
     expect(md).toContain("| 면책·삭감 | 90일 면책 |");
     expect(md).toContain("| 보장금액 | 가입금액의 0.5배 |");
     expect(md).toContain("| 보험기간 | 100세 만기 |");
-    // v6 — 보장 내용 절이 없고, 담보 표는 그 담보의 보험금의 현가 식 바로 위에
-    expect(md).not.toContain("유지자수 집단 2개");
-    expect(md).not.toContain("### 나. 보장 내용");
-    expect(md).toMatch(/\| 탈퇴 위험률 \| 사망률 및 암발생률 \|\n\n\[식\] 보험금의 현가 — 암 진단/);
+    // v7 — 다. 생존자 · 라. 보험금, 보험금 표는 그 보험금 식 바로 위에
+    expect(md).toContain("### 다. 생존자");
+    expect(md).toContain("### 라. 보험금");
+    expect(md).toMatch(/\| 생존자 \| lx\(2\) — 생존자\(사망X, 암X\) \|\n\| 급부 위험률 \| 탈퇴 사유에서 — 암발생률 \|\n\| 계산기수 \| Cx · Mx \|\n\n\[식\] 보험금 — 암 진단/);
   });
 
   it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 162 · 가입금액 1억 기준 월 342,000원)", () => {

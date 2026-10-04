@@ -60,54 +60,51 @@ describe("조건 → 산출식", () => {
   /** 짝(key)으로 식 덩이를 집는다 — 조건 카드·계산(calc)이 쓰는 것과 같은 짝이다 */
   const byKey = (id: string, key: string) => generateFormulas(sample(id as never).spec).find((x) => x.key === key)!;
 
-  it("종신: 사망·80% 장해 한 집단 — 탈퇴율 Q = min(1, q + r − q·r/2), 유지자수(보장 쪽)·납입자수(보험료 쪽)는 1 − Q", () => {
-    const g = byKey("whole", "group:g1");
-    expect(g.section).toBe("유지자수·납입자수");
-    expect(g.path).toBe("benefits[0].exitRateIds|rates[0]|rates[1]");   // 담보의 탈퇴 사유·두 탈퇴 위험률 어느 것을 골라도 이 식이 표시된다(보장금액·면책 칸은 아니다)
+  it("종신: 사망·80% 장해 생존자 lx(1) 하나 — 탈퇴율 Q = min(1, q + r − q·r/2), lx · Dx · Nx 까지 · 보험금과 납입(N*)이 그 lx 를 쓴다", () => {
+    const g = byKey("whole", "surv:s1");
+    expect(g.section).toBe("생존자");
+    expect(g.label).toBe("생존자수 lx(1) — 생존자(사망X, 80% 이상 장해X)");
+    expect(g.path).toBe("benefits[0].survivorId|benefits[0].exitRateIds|rates[0]|rates[1]|basis.waiver|basis.waiverRateIds|basis.interest");
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
-    expect(g.text).toContain("Q_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
-    expect(g.text).toContain("유지자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl_{x+t+1} = l_{x+t} × ( 1 − Q_{x+t} )");
-    // 납입자수는 계약 단위마다 하나 — 보험료 카드(M05)가 맡는다. 담보가 하나면 줄이는 사유가 유지자수와 같다
-    const p = byKey("whole", "pay:p1");
-    expect(p.label).toBe("납입자수 — 납입자(사망X, 80% 이상 장해X)");
-    expect(p.text).toContain("Q′_{x+t} = min( 1, q_{x+t} + f_{x+t} − q_{x+t}·f_{x+t}/2 )");
-    expect(p.text).toContain("l′_{x+t+1} = l′_{x+t} × ( 1 − Q′_{x+t} )");
-    expect(g.label).toBe("유지자수 — 유지자(사망X, 80% 이상 장해X)");
-    // 급부는 담보의 절(보험금의 현가)에 — 사망형은 탈퇴자 전부
+    expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
+    expect(g.text).toContain("생존자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − Q^{(1)}_{x+t} )");
+    expect(g.text).toContain("N^{(1)}_{x+t} = Σ_{u≥t} D^{(1)}_{x+u}");
+    // 보험금은 앞의 생존자 lx 를 가져다 쓴다 — 사망형은 탈퇴자 전부
     const b = byKey("whole", "benefit:b1");
-    expect(b.section).toBe("계산기수 — 보험금");
-    expect(b.text).toContain("C_{x+t} = l_{x+t}·Q_{x+t}·v^{t+½}");
+    expect(b.section).toBe("보험금");
+    expect(b.label).toBe("보험금 — 사망·80% 이상 장해");
+    expect(b.text).toContain("l_{x+t} = l^{(1)}_{x+t}");
+    expect(b.text).toContain("N′_{x+t} = N^{(1)}_{x+t}");                                  // 납입(N*)도 lx(1)
+    expect(b.text).toContain("C_{x+t} = l^{(1)}_{x+t}·Q^{(1)}_{x+t}·v^{t+½}");
     expect(b.text).toContain("M_{x+t} = Σ_{u=t}^{n−1} S_u·C_{x+u}");
     expect(b.text).toContain("PVB = M_x");
   });
   it("사망 아닌 탈퇴 사유가 여럿인 진단형(3대질병)은 급부 발생률 R = 그 사유들의 결합 — 첫 사유 하나만 쓰지 않는다", () => {
     const spec = yamlToSpec(SAMPLES.find((x) => x.id === "support")!.yaml.replace(/formulas:[\s\S]*$/, "")).spec;
     const b = generateFormulas(spec).find((x) => x.key === "benefit:b1")!;
-    // R 은 유지자수 식에서 질병끼리 곱으로 묶은 것 — 사망과는 겹치는 부분 절반
-    const g = generateFormulas(spec).find((x) => x.key === "group:g1")!;
-    expect(g.text).toContain("R_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )·( 1 − r^{(3)}_{x+t} )");
-    expect(g.text).toContain("Q_{x+t} = min( 1, q_{x+t} + R_{x+t} − q_{x+t}·R_{x+t}/2 )");
-    expect(b.text).toContain("C_{x+t} = l_{x+t}·R_{x+t}·v^{t+½}");
-    expect(b.text).not.toContain("R_{x+t} =");
+    // R 은 생존자 식에서 질병끼리 곱으로 묶은 것 — 사망과는 겹치는 부분 절반
+    const g = generateFormulas(spec).find((x) => x.key === "surv:s1")!;
+    expect(g.text).toContain("R^{(1)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )·( 1 − r^{(3)}_{x+t} )");
+    expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + R^{(1)}_{x+t} − q_{x+t}·R^{(1)}_{x+t}/2 )");
+    expect(b.text).toContain("C_{x+t} = l^{(1)}_{x+t}·R^{(1)}_{x+t}·v^{t+½}");
+    expect(b.text).not.toContain("R^{(1)}_{x+t} =");
     expect(eventRate(spec, spec.benefits[0])).toBeUndefined();
     expect(eventCauses(spec, spec.benefits[0]).map((r) => r.id)).toEqual(["rc", "rs", "ra"]);
     // 하나뿐이면 그 위험률 그대로(기본 상품의 암 진단)
     const wc = sample("wholeCancer").spec;
     expect(eventRate(wc, wc.benefits[1])?.id).toBe("rc");
   });
-  it("2대질병: 담보 둘이 저마다 그 질병의 미발생자 집단, 납입자수는 1 − (1 − 뇌출혈)(1 − 급성심근경색증) — 두 집단의 l′ 가 같다", () => {
+  it("2대질병: 보험금 둘이 저마다 그 질병의 미발생 생존자, 납입(N*)은 덧씌운 식의 생존자 — 뇌출혈·급성심근경색증을 곱으로", () => {
     const spec = sample("twoMajor").spec;
     const fs = withFormulas(spec).formulas;
-    const pay = fs.filter((f) => f.key?.startsWith("pay:"));
-    // 납입자수는 하나 — 납입자(사망X, 뇌출혈X, 급성심근경색증X). 자동 식이 이 규칙으로 만든다(고친 식이 아니다)
-    expect(pay.map((f) => [f.label, f.edited])).toEqual([["납입자수 — 납입자(사망X, 뇌출혈X, 급성심근경색증X)", undefined]]);
-    expect(pay[0].text).toContain("F_{x+t} = 1 − ( 1 − f^{(1)}_{x+t} )·( 1 − f^{(2)}_{x+t} )");
-    expect(pay[0].text).toContain("Q′_{x+t} = min( 1, q_{x+t} + F_{x+t} − q_{x+t}·F_{x+t}/2 )");
-    expect(fs.filter((f) => f.key?.startsWith("group:")).map((f) => f.label)).toEqual(["유지자수 — 유지자(사망X, 뇌출혈X)", "유지자수 — 유지자(사망X, 급성심근경색증X)"]);
+    const surv = fs.filter((f) => f.key?.startsWith("surv:"));
+    expect(surv.map((f) => f.label)).toEqual(["생존자수 lx(1) — 생존자(사망X, 뇌출혈X)", "생존자수 lx(2) — 생존자(사망X, 급성심근경색증X)", "생존자수 lx(3) — 생존자(사망X, 뇌출혈X, 급성심근경색증X)"]);
+    expect(surv[2].text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
+    expect(surv[2].text).toContain("Q^{(3)}_{x+t} = min( 1, q_{x+t} + R^{(3)}_{x+t} − q_{x+t}·R^{(3)}_{x+t}/2 )");
   });
-  it("진단형은 급부 = 진단율, 무해지는 해지율 w·CSV, 납입면제는 추가 사유 f", () => {
-    expect(byKey("twoMajor", "benefit:b1").text).toContain("C_{x+t} = l_{x+t}·r_{x+t}·v^{t+½}");
-    expect(byKey("cancer", "group:g1").text).toContain("l_{x+t+1} = l_{x+t} × ( 1 − r_{x+t} − w_{x+t} + r_{x+t}·w_{x+t}/2 )");   // 암 단일탈퇴 + 해지율
+  it("진단형은 급부 = 진단율, 무해지는 해지율 w·CSV", () => {
+    expect(byKey("twoMajor", "benefit:b1").text).toContain("C_{x+t} = l^{(1)}_{x+t}·r^{(1)}_{x+t}·v^{t+½}");
+    expect(byKey("cancer", "surv:s1").text).toContain("l^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − r_{x+t} − w_{x+t} + r_{x+t}·w_{x+t}/2 )");   // 암 단일탈퇴 + 해지율
     // 납입주기는 k (mm 아님) — 연납 환산 납입기수·영업보험료·납입누계
     const all = generateFormulas(sample("whole").spec).map((x) => x.text).join("\n");
     expect(all).not.toMatch(/mm/);
@@ -116,7 +113,8 @@ describe("조건 → 산출식", () => {
     const low = generateFormulas(sample("cancer").spec);
     expect(low[0].text).toContain("w_{x+t}");
     expect(low.some((x) => x.label === "저해지·무해지환급형")).toBe(true);
-    expect(byKey("wholeCancer", "pay:p1").text).toContain("F_{x+t} = 1 − ( 1 − f^{(1)}_{x+t} )·( 1 − f^{(2)}_{x+t} )");
+    // 기본 상품의 [납입] 생존자 = 사망·장해·암 — 질병끼리 곱, 사망과는 겹침 절반
+    expect(byKey("wholeCancer", "surv:s3").text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
     // 준비금·환급금 식도 계산할 수 있는 식이다
     const keys = generateFormulas(sample("whole").spec).map((x) => x.key);
     expect(keys).toEqual(expect.arrayContaining(["reserve:P", "reserve:V", "surrender:alpha", "surrender:deduct", "surrender:W", "surrender:paid", "surrender:ratio", "premium:round"]));

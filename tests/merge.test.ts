@@ -47,7 +47,7 @@ describe("고친 산출방법서 → 조건 (지운 것도 반영)", () => {
 
   it("담보 표에만 적은 위험률은 계열로 더해 잇고 경고한다", () => {
     const { spec } = twoMajor();
-    const { back, spec: out, changes } = roundtrip(spec, (md) => md.replace(/^(\| 탈퇴 위험률 \|.*)$/m, "| 급부 위험률 | 3대질병 발생률 |\n$1"));   // v6 — 급부 위험률 행은 따로 정할 때만 적는다
+    const { back, spec: out, changes } = roundtrip(spec, (md) => md.replace(/^\| 급부 위험률 \|.*$/m, "| 급부 위험률 | 3대질병 발생률 |"));   // v7 — 보험금 표의 급부 위험률 행에 위험률 이름을 적으면 그 위험률로 지급한다
     expect(back.warnings.some((w) => /"3대질병 발생률".*위험률 표에 없어.*더했습니다/.test(w))).toBe(true);
     const added = out.rates.find((r) => r.name === "3대질병 발생률")!;
     expect(added.role).toBe("incidence");
