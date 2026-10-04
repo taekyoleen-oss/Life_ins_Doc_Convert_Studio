@@ -35,6 +35,8 @@ interface CardDef {
   id: string; code: string; title: string; paths: string[]; status: Status; summary: string[]; help: string; message?: string; body: ReactNode; dirty?: boolean;
   /** 이 카드가 고치는 조건(바뀜 표시·오른쪽에서 고른 칸의 카드 펼치기). 없으면 paths. paths 는 열 때 산출방법서에서 비출 자리다 */
   owns?: string[];
+  /** 카드를 열 때 산출방법서에서 비출 중심 자리 — 없으면 paths. 나머지(paths)는 카드 안의 그 칸·식을 고를 때 비친다 */
+  focus?: string[];
   /** 이 카드에 식이 있다 — 머리에 [수식 보이기/숨기기] 단추가 붙는다(기본 숨김) */
   formulas?: boolean;
 }
@@ -243,7 +245,8 @@ function FormulaBox({ f }: { f: FormulaSpec }) {
   const chk = useMemo(() => checkFormula(f), [f]);
   const hard = chk.skipped.filter((s) => s.includes("="));
   return (
-    <div data-path={key} className="formula-card">
+    // 식 상자를 누르면 그 식만 산출방법서에서 비춘다 — 카드를 열 때는 카드의 중심(focus)만 비추고, 세부 식은 이렇게 골라 본다
+    <div data-path={key} className="formula-card" onClick={() => fm.select(key)}>
       <div className="flex items-center gap-2">
         <span className="flex-1 truncate text-[12.5px] font-semibold text-[#334155]">{f.label}</span>
         {f.edited && <span className="chip-changed" title="자동 식을 사용자가 고쳤습니다">고친 식</span>}
@@ -490,7 +493,76 @@ function RatesBody({ rates, used, tableNote, onLibrary, sources, sourceOf, onSou
 
 
 /**
- * M05 보험료 — 집단마다 납입자수 l′ 를 정한다(보험료는 "낼 사람" 쪽이다). 유지자수 l 은 보장별로 쓰므로 보장 카드(B01)에 있다.
+ * L01 유지자수 — 산출방법서 "다. 유지자수·납입자수" 의 [식] 유지자수 덩이와 같다: 탈퇴 사유가 같은 담보들의 집단마다 l 하나.
+ * 여기서 집단의 탈퇴 사유를 고치면 그 집단을 쓰는 담보들이 함께 바뀐다(담보 하나만 옮기는 것은 B01 에서).
+ */
+function MaintainersBody({ groups, allGroups, idxs, rates, spec, formulas, show }: { groups: GroupModel[]; allGroups: GroupModel[]; idxs: number[]; rates: RateItem[]; spec: MethodSpec; formulas: FormulaSpec[]; show: boolean }) {
+  const f = useForm();
+  /** 이 담보만 새 집단으로 — 탈퇴 사유를 그 담보에서 직접 고른다(같은 사유가 되면 그 집단에 다시 묶인다) */
+  const [own, setOwn] = useState<number | null>(null);
+  const exitsOf = (i: number) => ((f.get(["benefits", i, "exitRateIds"]) as unknown[] | undefined) ?? []).map(String);
+  const setExits = (g: GroupModel, id: string, on: boolean) => {
+    const cur = g.exits.map((r) => r.id);
+    const next = rates.map((r) => r.id).filter((x) => (x === id ? on : cur.includes(x)));
+    f.edit(g.benefitIdx.map((i) => ({ path: ["benefits", i, "exitRateIds"] as YamlPath, value: next })));
+  };
+  return (
+    <div className="space-y-3">
+      {!groups.length && <p className="rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800">담보가 없습니다 — [보장] 카드에서 담보를 먼저 더하세요.</p>}
+      {groups.map((g) => (
+        <div key={g.id} data-path={g.benefitIdx.map((i) => `benefits[${i}].exitRateIds`).join("|")} className="sub space-y-1.5">
+          <p className="sub-title">{g.label} <span>{g.benefitIdx.map((i) => spec.benefits[i]?.name).filter(Boolean).join(" · ")} 담보의 보험금 현가와 D·N 에 쓴다</span></p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">탈퇴 사유</span>
+            {rates.map((r) => (
+              <label key={r.id} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
+                <input type="checkbox" className="accent-[var(--primary)]" checked={g.exits.some((x) => x.id === r.id)}
+                  onFocus={() => f.select([`formula:group.${g.id}`, `rate:${r.id}`])} onChange={(e) => setExits(g, r.id, e.target.checked)} />
+                {r.name}
+              </label>
+            ))}
+          </div>
+          <Formulas items={formulas.filter((x) => x.key === `group:${g.id}`)} show={show} />
+        </div>
+      ))}
+      {idxs.length > 0 && (
+        <div className="sub space-y-1.5">
+          <p className="sub-title">담보마다 쓰는 집단 <span>담보는 [보장] 카드에서 이 집단을 가져다 씁니다</span></p>
+          {idxs.map((i) => {
+            const mine = allGroups.find((g) => g.benefitIdx.includes(i)), cur = exitsOf(i);
+            return (
+              <div key={i} data-path={`benefits[${i}].exitRateIds`} className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <b className="min-w-[7rem]">{spec.benefits[i]?.name ?? `담보 ${i + 1}`}</b>
+                  <select className="inp" value={own === i ? "own" : mine?.id ?? ""} aria-label={`${spec.benefits[i]?.name} 집단`} onFocus={() => f.select([`benefits[${i}].exitRateIds`])}
+                    onChange={(e) => { if (e.target.value === "own") { setOwn(i); return; } setOwn(null); const g = allGroups.find((y) => y.id === e.target.value); if (g) f.set(["benefits", i, "exitRateIds"], g.exits.map((r) => r.id)); }}>
+                    {allGroups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                    <option value="own">＋ 이 담보만 새 집단 — 탈퇴 사유 직접 고르기</option>
+                  </select>
+                </div>
+                {own === i && (
+                  <div className="flex flex-wrap items-center gap-2 pl-2">
+                    {rates.map((r) => (
+                      <label key={r.id} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
+                        <input type="checkbox" className="accent-[var(--primary)]" checked={cur.includes(r.id)} onFocus={() => f.select([`benefits[${i}].exitRateIds`, `rate:${r.id}`])}
+                          onChange={(e) => f.set(["benefits", i, "exitRateIds"], rates.map((x) => x.id).filter((x) => (x === r.id ? e.target.checked : cur.includes(x))))} />
+                        {r.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button type="button" className="pane-tool" title="기본 위험률 모음에서 위험률을 더합니다(값 표와 함께) — 더한 뒤 탈퇴 사유로 고릅니다" onClick={() => f.library?.()}>＋ 위험률</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * M05 납입 — 집단마다 납입자수 l′ 를 정한다(보험료는 "낼 사람" 쪽이다). 유지자수 l 은 보장별로 쓰므로 보장 카드(B01)에 있다.
  * 집단은 따로 적는 항목이 아니라 "탈퇴 사유가 같은 담보들"이다: 여기서 탈퇴 사유를 고치면 그 집단을 쓰는 담보들이 함께 바뀌고,
  * 담보(B01)에서 집단을 바꾸면 그 담보만 옮겨 간다.
  */
@@ -537,10 +609,10 @@ function GroupsBody({ payers, rates, spec, formulas, show }: { payers: PayerMode
   );
 }
 
-/** B01 보장 — 담보를 한 카드에서 더하고 고친다. 담보마다 유지자수 l(그 집단) → 지급자수 → C·M·PVB 가 한 덩이다 */
-function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formulas, show, onGroup, sumAssured }: {
+/** B01 보장 — 담보를 한 카드에서 더하고 고친다. 담보마다 조건 → 보험금의 현가(C·M·PVB). 유지자수 l 식은 L01, 납입자수는 M05 */
+function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formulas, show, onGroup, onKeep, sumAssured }: {
   bens: Obj[]; idxs: number[]; rates: RateItem[]; groups: GroupModel[]; spec: MethodSpec; addBen: (role: string) => void;
-  models: BenefitModel[]; formulas: FormulaSpec[]; show: boolean; onGroup: (id: string) => void; sumAssured: number;
+  models: BenefitModel[]; formulas: FormulaSpec[]; show: boolean; onGroup: (id: string) => void; onKeep: (id: string) => void; sumAssured: number;
 }) {
   const f = useForm();
   const [open, setOpen] = useState(0);
@@ -572,7 +644,7 @@ function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formula
               <button type="button" className="card-icon" onClick={() => copy(i)} title="이 담보를 복사해 새 담보로">복사</button>
               <Remove title="담보 삭제" onClick={() => { if (window.confirm(`담보 "${str(x.name)}" 를 지울까요?`)) f.edit([{ path: ["benefits", i] }]); }} />
             </>}>
-            <BenefitBody i={i} rates={rates} groups={groups} spec={spec} sumAssured={sumAssured} />
+            <BenefitBody i={i} rates={rates} groups={groups} spec={spec} sumAssured={sumAssured} onKeep={onKeep} />
             {(() => {
               const mo = models[i];
               if (!mo) return null;
@@ -580,11 +652,10 @@ function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formula
                 <>
                   <div className="lx-from">
                     <p>
-                      유지자수 <b>l</b> = <b>{mo.group.label}</b>{mo.group.benefitIdx.length > 1 && <> (담보 {mo.group.benefitIdx.length}개가 함께 씀)</>} · 납입자수 l′ = {mo.payer.label}
-                      <button type="button" className="pane-tool ml-1" onClick={() => onGroup(mo.payer.id)}>보험료 카드에서 보기</button>
+                      납입자수 l′ = {mo.payer.label}
+                      <button type="button" className="pane-tool ml-1" onClick={() => onGroup(mo.payer.id)}>납입 카드에서 보기</button>
                     </p>
                   </div>
-                  <Formulas items={formulas.filter((y) => y.key === `group:${mo.group.id}`)} show={show} />
                   {show && <div className="ml-2 font-mono text-[11.5px] leading-5 text-[#475569]" dangerouslySetInnerHTML={{ __html: `${subSup(mo.payout)} <span class="text-muted-foreground">— 지급자수 (표에서만 보인다)</span>` }} />}
                   <Formulas items={formulas.filter((y) => y.key === `benefit:${mo.b.id}`)} show={show} />
                 </>
@@ -601,19 +672,17 @@ function BenefitsBody({ bens, idxs, rates, groups, spec, addBen, models, formula
   );
 }
 
-function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates: RateItem[]; groups: GroupModel[]; spec: MethodSpec; sumAssured: number }) {
+function BenefitBody({ i, rates, groups, spec, sumAssured, onKeep }: { i: number; rates: RateItem[]; groups: GroupModel[]; spec: MethodSpec; sumAssured: number; onKeep: (id: string) => void }) {
   const f = useForm();
   const base: YamlPath = ["benefits", i];
   const at = (k: string | number, ...rest: (string | number)[]): YamlPath => [...base, k, ...rest];
   const role = str(f.get(at("role"))) || "other";
-  const exits = (f.get(at("exitRateIds")) as unknown[] | undefined)?.map(String) ?? [];
   const amount = num(f.get(at("amount"))), mult = num(f.get(at("multiple"))), wait = num(f.get(at("waitDays"))) ?? 0;
   const points = list(f.get(at("points")));
   const end = num(f.get(at("endAge"))) ?? 80;
   const mine = groups.find((g) => g.benefitIdx.includes(i));
   const s = spec.benefits[i];
   const ev = s ? eventRate(spec, s) : undefined;
-  const toggleExit = (id: string, on: boolean) => f.set(at("exitRateIds"), rates.map((r) => r.id).filter((x) => (x === id ? on : exits.includes(x))));
   return (
     <div className="space-y-3">
       <Grid>
@@ -637,23 +706,15 @@ function BenefitBody({ i, rates, groups, spec, sumAssured }: { i: number; rates:
           : <label className="fld"><span className="fld-label text-muted-foreground">그 기간 지급</span><select className="inp fld-box" disabled value=""><option value="">—</option></select><span className="fld-hint">면책·삭감 기간이 없습니다</span></label>}
       </div>
       <div data-path={`benefits[${i}].exitRateIds`}>
-        <p className="fld-label">위험률 — 탈퇴 사유 (유지자수 집단)</p>
+        <p className="fld-label">유지자수 집단 <span className="font-normal text-muted-foreground">— L01 유지자수 카드에서 정한 집단을 고릅니다(탈퇴 사유는 그 카드에서)</span></p>
         <p className="fld-hint mb-1">급부 위험률 = {role === "death" ? "탈퇴 사유 전부" : s?.rateId ? `${ev?.name ?? s.rateId} (탈퇴 사유와 따로 정한 급부 위험률)` : `${(ev?.name ?? (s ? eventCauses(spec, s).map((r) => r.name).join(" · ") : "")) || "없음"} (사망이 아닌 탈퇴 사유)`}</p>
-        <select className="inp mb-1.5" value={mine?.id ?? ""} onFocus={() => f.select(`benefits[${i}].exitRateIds`)}
-          onChange={(e) => { const g = groups.find((y) => y.id === e.target.value); if (g) f.set(at("exitRateIds"), g.exits.map((r) => r.id)); }}>
-          {!mine && <option value="">—</option>}
-          {groups.map((g) => <option key={g.id} value={g.id}>{g.label}{g.benefitIdx.length > 1 ? ` (담보 ${g.benefitIdx.length}개)` : ""}</option>)}
-        </select>
-        <div className="flex flex-wrap gap-2">
-          {rates.map((r) => (
-            <label key={r.id} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs">
-              <input type="checkbox" className="accent-[var(--primary)]" checked={exits.includes(r.id)} onFocus={() => f.select([`benefits[${i}].exitRateIds`, `rate:${r.id}`])} onChange={(e) => toggleExit(r.id, e.target.checked)} />
-              {r.name}
-            </label>
-          ))}
-          {/* 새 위험률 — 조건(M04)에 더하고 이 담보의 탈퇴 사유로 고른다. 위험률 표에는 빈 열이 생기고 산출방법서 가.(2) 에 행이 는다 */}
-          <button type="button" className="pane-tool" title="기본 위험률 모음에서 위험률을 더합니다(값 표와 함께) — 더한 뒤 여기서 체크해 이 담보의 탈퇴 사유로 고릅니다"
-            onClick={() => f.library?.()}>＋ 위험률</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="inp" value={mine?.id ?? ""} onFocus={() => f.select([`benefits[${i}].exitRateIds`, ...(mine ? [`formula:group.${mine.id}`] : [])])} aria-label="유지자수 집단"
+            onChange={(e) => { const g = groups.find((y) => y.id === e.target.value); if (g) f.set(at("exitRateIds"), g.exits.map((r) => r.id)); }}>
+            {!mine && <option value="">—</option>}
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.label}{g.benefitIdx.length > 1 ? ` (담보 ${g.benefitIdx.length}개)` : ""}</option>)}
+          </select>
+          {mine && <button type="button" className="pane-tool" onClick={() => onKeep(mine.id)}>유지자수 카드에서 고치기</button>}
         </div>
         {role === "recurring" && (
           <div className="mt-2"><Sel p={at("rateId")} label="급부 위험률 (일당형 — 연간 기대 입원일수)" options={rates.map((r): [string, string] => [r.id, `${r.name} (${RATE_ROLE_LABEL[r.role]})`])} /></div>
@@ -962,8 +1023,10 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   // 준비금·환급금 시산은 한 해 한 줄의 표를 세워야 하므로 M08 을 열었을 때만
   const sheets = useMemo(() => (open.includes("M08") ? calcSheets(spec, calcOn) : null), [spec, calcOn, open]);
   const sumAssured = calcOn.sumAssured ?? SUM_ASSURED_DEFAULT;
-  /** B01 에서 "보험료 카드에서 보기" — M05 의 그 집단을 펼쳐 비춘다 */
+  /** B01 에서 "납입 카드에서 보기" — M05 의 그 집단을 펼쳐 비춘다 */
   const onGroupCard = (pid: string) => { openCard("M05"); onSelect([`formula:pay.${pid}`]); };
+  /** B01 에서 "유지자수 카드에서 보기" — L01 의 그 집단을 펼쳐 비춘다 */
+  const onKeepCard = (gid: string) => { openCard("L01"); onSelect([`formula:group.${gid}`]); };
   const byKey = (re: RegExp) => full.formulas.filter((f) => f.key && re.test(f.key));
   /** 조건의 formulas 중 자동 식을 덮은 것(카드에서 고친 식)이 아닌 것 — M09 가 다룬다 */
   const autoKeys = new Set(full.formulas.filter((f) => f.key).map((f) => `${f.section}|${f.label}`));
@@ -993,7 +1056,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     return { id, name: str(r.name) || `위험률 ${i + 1}`, role };
   });
   const bens = list(raw.benefits);
-  // ── 계약 단위(주계약·특약) — 담보의 unit 이름에서 나온다. 탭을 고르면 보장·보험료 카드가 그 단위의 담보만 보인다
+  // ── 계약 단위(주계약·특약) — 담보의 unit 이름에서 나온다. 탭을 고르면 보장·납입 카드가 그 단위의 담보만 보인다
   const units = useMemo(() => unitNames(spec), [spec]);
   const [unitSel, setUnit] = useState<string | null>(null);
   // 다른 상품(샘플·파일)을 열면 고른 탭을 비운다 — 앞 상품에서 고른 주계약 탭이 특약만 있는 상품에 남지 않게
@@ -1055,7 +1118,14 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     { id: "M06", code: "M06", title: "예정사업비율", paths: ["expenses"], status: status(errM06, nExp > 0), message: errM06,
       summary: [`${nExp}줄`, sp.expenses.some((e) => /^(α_S|α_P|β_S|β_G)$/.test(e.symbol)) ? "산출방법서형" : ""],
       help: "산출방법서형은 α_S·α_P·β_S·β_G·β′·γ 를 씁니다. 보장기간이 20년보다 짧으면 α_P 는 n/20 배로 줄입니다. 이 값들이 다음 카드의 영업보험료 식에 그대로 들어갑니다.", body: <ExpenseBody count={nExp} /> },
-    { id: "M05", code: "M05", title: "보험료 — 납입자수 (l′) · 납입기수 (N*)", paths: ["basis.waiver", "basis.waiverRateIds", "formula:pay", "formula:pv.D′", "formula:pv.NStar"], formulas: true,
+    { id: "L01", code: "L01", title: "유지자수 (l) — 탈퇴 사유가 같은 담보의 집단마다", paths: unitGroupIds.length ? unitGroupIds.map((id) => `formula:group.${id}`) : ["formula:group"], formulas: true,
+      status: unitGroupIds.length ? "done" : "editing",
+      summary: [...groups.filter((g) => unitGroupIds.includes(g.id)).map((g) => g.label), editChip(edited(/^group:/))],
+      help: "산출방법서 다. 의 유지자수 식입니다. 탈퇴 사유가 같은 담보는 한 집단으로 같은 l 을 씁니다 — 여기서 탈퇴 사유를 고치면 그 집단의 담보가 함께 바뀝니다. 질병끼리는 곱, 사망과는 겹치는 부분 절반으로 결합합니다.",
+      body: <MaintainersBody groups={groups.filter((g) => unitGroupIds.includes(g.id))} allGroups={groups} idxs={unitIdxs} rates={rates} spec={sp} formulas={full.formulas} show={formulasOn.includes("L01")} /> },
+    { id: "M05", code: "M05", title: "납입 — 납입자수 (l′) · 납입기수 (N*)", paths: ["basis.waiver", "basis.waiverRateIds", "formula:pay", "formula:pv.D′", "formula:pv.NStar"], formulas: true,
+      // 열면 납입자수(그 계약 단위의 l′ 식)만 — 납입면제(가.(4))·D′·N* 는 카드 안에서 그 칸·식을 고를 때
+      focus: unitPayers.length ? unitPayers.map((p) => `formula:pay.${p.id}`) : ["formula:pay"],
       status: waiverOff ? "error" : unitPayers.length ? "done" : "editing",
       message: waiverOff ? "추가 납입면제 사유를 켰지만 고른 위험률이 없습니다. 아래에서 고르세요." : undefined,
       summary: [...unitPayers.map((p) => p.label), b.waiver === true ? `납입면제: ${waiverRates.map((r) => r.name).join(" · ") || "없음"}` : "납입면제 없음",
@@ -1067,13 +1137,13 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
           <Formulas items={byKey(/^pv:(D′|NStar)$/)} show={formulasOn.includes("M05")} />
         </div>
         <CalcPanel calc={calc} ids={unitIds} kind="pay" onSheet={onPremiumSheet} /></> },
-    { id: "B01", code: "B01", title: "보장 — 담보마다 유지자수 (l) · 보험금의 현가 (C · M · PVB)", paths: [...unitIds.map((id) => `formula:benefit.${id}`), ...unitGroupIds.map((id) => `formula:group.${id}`), "formula:pv.D"], owns: ["benefits"], formulas: true,
+    { id: "B01", code: "B01", title: "보장 — 담보마다 보험금의 현가 (C · M · PVB)", paths: [...unitIds.map((id) => `formula:benefit.${id}`), "formula:pv.D"], owns: ["benefits"], formulas: true,
       status: status(benErr, unitBens.length > 0 && unitBens.every((x) => x.multiple !== undefined || x.amount !== undefined)), message: benErr,
       summary: [`담보 ${unitBens.length}개`, ...unitBens.slice(0, 2).map((x) => `${x.name} ${x.multiple !== undefined ? `${x.multiple}배` : krw(x.amount)}`),
-        unitBens.some((x) => x.waitDays) ? "면책·삭감 있음" : "", editChip(edited(/^(group|benefit|pv:D$)/))],
+        unitBens.some((x) => x.waitDays) ? "면책·삭감 있음" : "", editChip(edited(/^(benefit|pv:D$)/))],
       help: "담보 하나가 한 묶음입니다 — 조건(급부 유형·보험기간·보장금액 배수·면책/삭감·집단)과 그 담보의 유지자수 l(집단의 식), 보험금 현가 식(지급자수 d → C → M → PVB)이 같은 자리에 있습니다. 보장금액은 가입금액 × 배수이고 식은 1원당이라 보험료 맨 뒤에서 곱합니다. 급부 위험률은 탈퇴 사유에서 정해집니다(사망형은 전부, 진단형은 사망이 아닌 사유). 담보를 복사해 비슷한 보장을 빨리 더할 수 있습니다. 보험금 증액·감액(연령 구간 배수)은 뒤에 설계할 예정이라 여기서 다루지 않습니다.",
       body: <><BenefitsBody bens={bens} idxs={unitIdxs} rates={rates} groups={groups} spec={sp} addBen={(role) => addBen(role)} sumAssured={sumAssured}
-          models={benefitModels(sp)} formulas={full.formulas} show={formulasOn.includes("B01")} onGroup={onGroupCard} />
+          models={benefitModels(sp)} formulas={full.formulas} show={formulasOn.includes("B01")} onGroup={onGroupCard} onKeep={onKeepCard} />
         <div className="border-t border-border pt-2">
           <p className="fld-label mb-1">유지자수의 현가·누계 — 담보마다 같은 식</p>
           <Formulas items={byKey(/^pv:(D|H)$/)} show={formulasOn.includes("B01")} />
@@ -1155,7 +1225,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const toggle = (c: CardDef) => {
     const was = open.includes(c.id);
     if (was) setOpen(() => []);
-    else { openCard(c.id); onSelect(c.paths); }
+    else { openCard(c.id); onSelect(c.focus ?? c.paths); }
   };
   function addBen(role: string, toUnit = unit) {
     const id = uniqueId("b", bens.map((x) => str(x.id))), rateId = suggestRate(rates, role);
@@ -1223,7 +1293,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
           <button type="button" className="btn" onClick={onPremiumSheet}>＝ 보험료 계산</button>
           <span className="fld-hint w-full">보험료를 계산해 보는 계약 한 점입니다 — 산출방법서의 정보가 아니라서 조건 파일에 저장하지 않습니다. 납입방법별 보험료는 가입금액 × 배수의 담보 보험료 합{units.length > 1 ? " (주계약 + 특약)" : ""}입니다.</span>
         </div>
-        {/* 계약 단위 탭 — 주계약과 특약. 보장·보험료 카드가 그 단위의 담보만 보이고, 엑셀은 단위마다 한 장 */}
+        {/* 계약 단위 탭 — 주계약과 특약. 보장·납입 카드가 그 단위의 담보만 보이고, 엑셀은 단위마다 한 장 */}
         <div className="unit-tabs" role="tablist" aria-label="계약 단위">
           {units.map((u) => (
             <span key={u} className={`unit-tab ${u === unit ? "on" : ""}`}>

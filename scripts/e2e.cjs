@@ -49,7 +49,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
 
   // 0-1) 카드 흐름 — 보험료(M05: l·l′·현가) → 보장(B01: 담보마다 C·M·PVB) → 사업비 → 보험료의 계산(M07)
   const codes = await p.$$eval(".form-body [data-card]", (els) => els.map((e) => e.dataset.card));
-  ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 보험료(납입자수) → 보장 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,M05,B01,M07,M08,M09", codes.join(","));
+  ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 유지자수 → 납입(납입자수) → 보장 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,L01,M05,B01,M07,M08,M09", codes.join(","));
   const trial = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("맨 위 [산출 조건] — 계약 한 점(가입금액 포함)과 그 보험료, 조건에 저장하지 않는다고 알린다",
     trial.includes("산출 조건") && trial.includes("342,000") && trial.includes("조건 파일에 저장하지 않습니다") && (await p.locator(".trial-bar select").count()) === 5, trial.slice(0, 80));
@@ -64,9 +64,18 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(500);
   const g5 = await p.textContent(".card[data-card=M05]");
   const hl5 = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 30)));
-  ok("M05 보험료: 납입자수는 하나 — 납입자(사망X, 80% 이상 장해X, 암X) · 납입자수 쪽 식(l′ · D′ · N′ · N*)만 · 열면 그 식이 강조된다",
+  ok("M05 납입: 납입자수는 하나 — 납입자(사망X, 80% 이상 장해X, 암X) · 열면 납입자수 식만 강조(납입면제·N* 는 카드 안에서 고를 때)",
     g5.includes("납입자(사망X, 80% 이상 장해X, 암X)") && !g5.includes("유지자(") && !g5.includes("낼 사람")
-    && hl5.some((t) => t.includes("납입자수 —")) && hl5.some((t) => t.includes("연납 환산 납입기수")) && !hl5.some((t) => t.startsWith("유지자수 —")), `${hl5.join(" / ")}`);
+    && hl5.some((t) => t.includes("납입자수 —")) && !hl5.some((t) => t.includes("연납 환산 납입기수")) && !hl5.some((t) => t.includes("납입면제 사유는")) && !hl5.some((t) => t.startsWith("유지자수 —")), `${hl5.join(" / ")}`);
+  // 추가 납입면제 사유를 끄고 켜도 납입자수 식의 강조가 남는다(납입면제 칸이 늘 그 식에 이어져 있다)
+  const waiverBox = ".card[data-card=M05] [data-path='basis.waiver'] input[type=checkbox]";
+  if (await p.locator(waiverBox).count()) {
+    await p.click(waiverBox); await p.waitForTimeout(700);
+    const off = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 30)));
+    await p.click(waiverBox); await p.waitForTimeout(700);
+    const on = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.slice(0, 30)));
+    ok("납입면제를 끄고 켜도 납입자수 식이 강조된 채로 남는다", off.some((t) => t.includes("납입자수 —")) && on.some((t) => t.includes("납입자수 —")), `끔: ${off.join(" / ").slice(0, 120)} · 켬: ${on.join(" / ").slice(0, 120)}`);
+  } else ok("납입면제 칸(basis.waiver)을 M05 에서 찾는다", false);
   const box5 = await p.$eval(".card[data-card=M05]", (e) => { const r = e.getBoundingClientRect(), f = e.closest(".form-body").getBoundingClientRect(); return Math.abs((r.top + r.bottom) / 2 - (f.top + f.bottom) / 2); });
   ok("카드를 열면 그 카드가 조건 창의 한가운데로 온다", box5 < 160, `가운데에서 ${Math.round(box5)}px`);
   await p.click(".card[data-card=M07] .card-head");
@@ -87,21 +96,38 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(400);
 
   // 0-1b) 카드의 식은 기본이 숨김 — 값부터 보게 한다. 뒤의 식 확인을 위해 켠다
-  ok("카드의 식은 기본이 숨김 — 식이 있는 카드(M05·B01·M07·M08)에만 머리에 [수식 보이기], 없는 카드(M01·M04·M06)에는 없다",
+  ok("카드의 식은 기본이 숨김 — 식이 있는 카드(L01·M05·B01·M07·M08)에만 머리에 [수식 보이기], 없는 카드(M01·M04·M06)에는 없다",
     (await p.locator(".card[data-card=M05] .formula-card").count()) === 0
     && (await p.locator(".card[data-card=M07] .card-fx").textContent()).includes("수식 보이기")
-    && (await p.locator(".card .card-fx").count()) === 4 && (await p.locator(".card[data-card=M04] .card-fx").count()) === 0);
+    && (await p.locator(".card .card-fx").count()) === 5 && (await p.locator(".card[data-card=M04] .card-fx").count()) === 0);
   await p.click(".card[data-card=M07] .card-fx");
   await p.waitForTimeout(400);
   ok("[수식 보이기] → 그 카드의 식만 보인다 (P · 기준연납 · G · 반올림)", (await p.locator(".card[data-card=M07] .formula-card").count()) === 4
     && (await p.locator(".card[data-card=M07] .card-fx").textContent()).includes("수식 숨기기") && (await p.locator(".card[data-card=M05] .card-fx").textContent()).includes("수식 보이기"));
 
-  // 0-2) 보장 카드 — 담보 하나가 조건 + 보험금 현가 식 한 묶음, 유지자수는 보험료 카드에서 가져온다
+  // 0-1c) 유지자수 카드 — 산출방법서 다. 의 [식] 유지자수 덩이와 같다(보장 카드는 가져다 쓴다)
+  await p.click(".card[data-card=L01] .card-head");
+  await p.waitForTimeout(600);
+  const hlL = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
+  ok("L01 유지자수 — 집단 둘(사망X·80% 장해X / 사망X·암X), 열면 유지자수 식만 강조(납입자수·보험금 식은 아니다)",
+    (await p.textContent(".card[data-card=L01]")).includes("유지자(사망X, 암X)") && hlL.filter((t) => t.includes("유지자수 — 유지자(")).length === 2
+    && !hlL.some((t) => /납입자수 — |보험금의 현가 — /.test(t)), hlL.join(" / ").slice(0, 300));
+  await p.focus(".card[data-card=L01] .sub input[type=checkbox]");
+  await p.waitForTimeout(400);
+  const hlR = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
+  ok("탈퇴 사유 칸 → 예정위험률 표의 그 행 + 그 집단의 유지자수 식",
+    hlR.some((t) => t.startsWith("사망률q")) && hlR.some((t) => t.includes("유지자수 — 유지자(")), hlR.join(" / ").slice(0, 300));
+  await p.locator(".card[data-card=L01] .pane-tool", { hasText: "＋ 위험률" }).click();
+  await p.waitForTimeout(500);
+  ok("L01 [＋ 위험률] → 기본 위험률 모음 창이 열린다(위험률 더하기의 기본)", (await p.locator(".modal.lib-modal").count()) === 1);
+  await p.click(".modal.lib-modal button:has-text('닫기')");
+
+  // 0-2) 보장 카드 — 담보 하나가 조건 + 보험금 현가 식 한 묶음, 유지자수는 납입 카드에서 가져온다
   await p.click(".card[data-card=B01] .card-head");
   await p.waitForTimeout(600);
   const hlB = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
-  ok("B01 을 열면 담보 표·유지자수·보험금의 현가 식만 비친다 (납입자수·순보험료 식은 아니다)",
-    hlB.some((t) => t.startsWith("보장금액")) && hlB.some((t) => t.includes("보험금의 현가 — 암 진단")) && hlB.some((t) => t.includes("유지자수 — 유지자("))
+  ok("B01 을 열면 담보 표·보험금의 현가 식만 비친다 (유지자수는 L01 · 납입자수는 M05 · 순보험료 식은 아니다)",
+    hlB.some((t) => t.startsWith("보장금액")) && hlB.some((t) => t.includes("보험금의 현가 — 암 진단")) && !hlB.some((t) => t.includes("유지자수 — 유지자("))
     && !hlB.some((t) => t.includes("납입자수 — ")) && !hlB.some((t) => t.includes("순보험료")), hlB.join(" / ").slice(0, 300));
   await p.click(".card[data-card=B01] .card-fx");                              // 이 카드의 식을 켠다
   await p.waitForTimeout(400);
@@ -113,19 +139,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("보장금액 칸 → 담보 표의 보장금액 행과 그 담보의 보험금의 현가 식만 비친다",
     hlM.filter((t) => t.startsWith("보장금액가입금액")).length === 1 && !hlM.some((t) => t.startsWith("급부 유형")) && hlM.some((t) => t.includes("보험금의 현가 —"))
     && !hlM.some((t) => /유지자수 — |납입자수 — /.test(t)), hlM.join(" / ").slice(0, 300));
-  // 위험률을 고르면 이 담보의 탈퇴 위험률 행과 가.(2) 예정위험률의 그 행
-  await p.focus(".card[data-card=B01] .sub-open [data-path$='.exitRateIds'] input[type=checkbox]");
-  await p.waitForTimeout(400);
-  const hlR = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
-  ok("위험률 칸 → 예정위험률 표의 그 행 + 담보 표의 탈퇴 위험률 행이 비친다",
-    hlR.some((t) => t.startsWith("사망률q")) && hlR.some((t) => t.startsWith("탈퇴 위험률")), hlR.join(" / ").slice(0, 300));
-  // [＋ 위험률] — 더하기는 기본 위험률 모음이 기본(값 표와 함께)
-  await p.locator(".card[data-card=B01] .sub-open .pane-tool", { hasText: "＋ 위험률" }).click();
-  await p.waitForTimeout(500);
-  ok("B01 [＋ 위험률] → 기본 위험률 모음 창이 열린다(위험률 더하기의 기본)", (await p.locator(".modal.lib-modal").count()) === 1);
-  await p.click(".modal.lib-modal button:has-text('닫기')");
-  ok("B01: 담보마다 유지자수 l 은 그 집단의 것이고, 납입자수는 보험료 카드에서 본다",
-    lxFrom.includes("유지자(사망X, 80% 이상 장해X)") && lxFrom.includes("보험료 카드에서 보기"), lxFrom.slice(0, 80));
+  ok("B01: 담보는 L01 에서 정한 유지자수 집단을 고르기만 한다(탈퇴 사유 체크 없음) · 납입자수는 납입 카드에서 본다",
+    (await p.locator(".card[data-card=B01] .sub-open [data-path$='.exitRateIds'] input[type=checkbox]").count()) === 0
+    && (await p.locator(".card[data-card=B01] .sub-open select[aria-label='유지자수 집단'] option:checked").textContent()).includes("유지자(사망X, 80% 이상 장해X)")
+    && lxFrom.includes("납입 카드에서 보기"), lxFrom.slice(0, 80));
   ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위·급부 위험률 칸도 없다(탭·탈퇴 사유에서 정해진다) · 증액·감액 구간도 없다",
     (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0
     && (await p.locator(".card[data-card=B01] [data-path$='.rateId']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0);
@@ -143,9 +160,9 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     return Math.abs((a.top + a.height / 2) - (c.top + c.height / 2)) < 6;
   }).filter((x) => x !== null));
   ok("입력 칸은 이름과 칸이 한 줄 (자리가 모자랄 때만 두 줄 · 보장금액·면책·삭감 줄은 세 칸 나란히, 이름은 위)", fldRows.length >= 3 && fldRows.every(Boolean), `${fldRows.filter(Boolean).length}/${fldRows.length}`);
-  await p.click(".card[data-card=B01] .lx-from button");
+  await p.click(".card[data-card=B01] .lx-from button:has-text('납입 카드에서 보기')");
   await p.waitForTimeout(600);
-  ok("[보험료 카드에서 보기] → M05 가 펼쳐지고 납입자수 식(하나)이 강조된다",
+  ok("[납입 카드에서 보기] → M05 가 펼쳐지고 납입자수 식(하나)이 강조된다",
     (await p.locator(".card.card-open").getAttribute("data-card")) === "M05"
     && (await p.$$eval(".doc-body .doc-hl", (e) => e.map((x) => x.textContent))).some((t) => t.includes("납입자수 — 납입자(사망X")));
 
