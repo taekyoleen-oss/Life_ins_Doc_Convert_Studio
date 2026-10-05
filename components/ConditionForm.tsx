@@ -718,8 +718,10 @@ function BenefitBody({ i, rates, survs, mine, spec, onSurv, onBenSurvivor }: { i
  * 보험금(B01)의 Cx 에 이 배수·면책·삭감을 S_t 로 곱해 보험금의 현가(PVB)를 낸다. 행을 더하면 보험금이 하나 늘고(B01 에서 대상자수를 고른다)
  * 면책(지급 0)과 삭감(계약일부터, 지급률)을 함께 둘 수 있다.
  */
-function CoverBody({ idxs, spec, models, show, addBen, sumAssured }: { idxs: number[]; spec: MethodSpec; models: BenefitModel[]; show: boolean; addBen: () => void; sumAssured: number }) {
+function CoverBody({ idxs, spec, models, show, addBen, sumAssured, onBenefits }: { idxs: number[]; spec: MethodSpec; models: BenefitModel[]; show: boolean; addBen: () => void; sumAssured: number;
+  /** B01 보험금 카드를 펼친다 — 더한 보장의 대상자수·급부 위험률을 거기서 확인한다 */ onBenefits: () => void }) {
   const f = useForm();
+  const [added, setAdded] = useState(false);
   const set = (i: number, c: { wait?: number; reduce?: number; ratio?: number }) => {
     const v = coverFields(c);
     f.edit((["waitDays", "waitPayRatio", "reduceDays", "reduceRatio"] as const).map((k) => ({ path: ["benefits", i, k] as YamlPath,
@@ -738,7 +740,9 @@ function CoverBody({ idxs, spec, models, show, addBen, sumAssured }: { idxs: num
             const row = ["multiple", "amount", "waitDays", "waitPayRatio", "reduceDays", "reduceRatio"].map((k) => `benefits[${i}].${k}`).concat("formula:cover");
             return (
               <tr key={i} data-path={row.join("|")} onFocus={() => f.select(row)}>
-                <td className="txt">{b.name}{b.multiple !== undefined ? <small> · {krw(b.multiple * sumAssured)}</small> : null}</td>
+                {/* 구분 = 보험금 이름 — 여기서 고쳐도 B01 보험금의 이름이 함께 바뀐다(같은 칸) */}
+                <td className="txt"><F p={["benefits", i, "name"]} label="구분 (보험금 이름 — B01 과 같은 칸)" bare />
+                  {b.multiple !== undefined ? <small className="text-muted-foreground"> {krw(b.multiple * sumAssured)}</small> : null}</td>
                 <td>{b.multiple === undefined && b.amount !== undefined
                   ? <span title="가입금액과 따로 정한 금액(일당 등) — 배수를 고르면 가입금액 × 배수로 바뀝니다">{amountLabel(b)}</span>
                   : <Sel p={["benefits", i, "multiple"]} label="보장금액 배수" options={MULTIPLES} bare onPick={(v) => [{ path: ["benefits", i, "multiple"], value: v === "" ? undefined : Number(v) }, { path: ["benefits", i, "amount"], value: undefined }]} />}</td>
@@ -754,7 +758,16 @@ function CoverBody({ idxs, spec, models, show, addBen, sumAssured }: { idxs: num
           })}
         </tbody>
       </table>
-      <div className="flex flex-wrap gap-2"><button type="button" className="btn" onClick={addBen} title="보장(보험금) 하나를 더합니다 — 보험금 카드에서 대상자수·급부 위험률을 고릅니다">＋ 보장</button></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn" onClick={() => { addBen(); setAdded(true); }} title="보장(보험금) 하나를 더합니다 — 구분(이름)은 여기서, 대상자수·급부 위험률은 B01 보험금에서 확인합니다">＋ 보장</button>
+        <span className="fld-hint">구분(이름)은 이 표에서 고칠 수 있습니다 — 보험금 카드(B01)의 이름과 같은 칸입니다.</span>
+      </div>
+      {added && (
+        <p className="cover-added rounded px-2 py-1.5 text-xs">
+          보장을 더했습니다. 새 보장의 <b>대상자수(유지자 lx) · 급부 유형 · 급부 위험률</b>은 앞의 B01 보험금 카드에서 확인하세요.
+          <button type="button" className="pane-tool ml-1" onClick={onBenefits}>보험금 카드에서 보기</button>
+        </p>
+      )}
       {show && (
         <div className="formula-card" data-path="formula:cover">
           {pvbLines(withFormulas(spec), idxs.map((i) => models[i]).filter(Boolean)).map((l, k) => (
@@ -1195,7 +1208,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       status: unitBens.length ? "done" : "editing",
       summary: [...unitBens.slice(0, 3).map((x) => `${x.name} ${x.multiple !== undefined ? `${x.multiple}배` : amountLabel(x)}${x.waitDays ? ` · ${waitLabel(x)}` : ""}`), unitBens.length > 3 ? `외 ${unitBens.length - 3}` : ""],
       help: "산출방법서 마. 보장입니다. 보장마다 한 행 — 보장금액 배수(보장금액 = 가입금액 × 배수), 면책(그 기간 지급 0), 삭감기간(계약일부터)과 그 동안의 지급률을 한꺼번에 정합니다. 이 값이 보장금액의 배수 S_t 가 되어 보험금(B01)의 Cx 와 곱해 보험금의 현가 PVB 를 냅니다. [＋ 보장] 으로 보장을 더하면 보험금 카드에서 대상자수를 고릅니다.",
-      body: <CoverBody idxs={unitIdxs} spec={sp} models={benefitModels(sp)} show={formulasOn.includes("B02")} addBen={() => addBen("incidence")} sumAssured={sumAssured} /> },
+      body: <CoverBody idxs={unitIdxs} spec={sp} models={benefitModels(sp)} show={formulasOn.includes("B02")} addBen={() => addBen("incidence")} sumAssured={sumAssured} onBenefits={() => openCard("B01")} /> },
     { id: "M07", code: "M07", title: "보험료의 계산 (P · G · 10만원당)", paths: ["formula:pv.NStar", "formula:premium"], formulas: true, status: calc.errors.length ? "error" : "done",
       message: calc.errors.length ? `식으로 계산할 수 없습니다 — ${calc.errors[0]}` : undefined,
       summary: ["P · 기준연납 · G · 반올림", unitCalc.length ? `10만원당 ${won0(unitCalc.reduce((s, x) => s + x.per100k, 0))}원` : "", editChip(edited(/^premium:/))],

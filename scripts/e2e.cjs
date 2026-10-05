@@ -176,6 +176,22 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.selectOption(".card[data-card=B02] tbody tr >> nth=1 >> [aria-label='삭감기간']", "0");
   await p.waitForTimeout(900);
   ok("삭감을 없애면 처음 보험료로", (await p.textContent(".trial-bar")).replace(/\s+/g, " ") === prem0);
+  // ＋ 보장 → 새 행의 구분(이름)을 보장 표에서 바로 고친다 · 대상자수·급부 위험률은 B01 에서 확인하라는 안내
+  await p.click(".card[data-card=B02] button:has-text('＋ 보장')");
+  await p.waitForTimeout(700);
+  await p.fill(".card[data-card=B02] tbody tr >> nth=2 >> td >> nth=0 >> input", "암 수술");
+  await p.waitForTimeout(800);
+  const addMsg = (await p.textContent(".card[data-card=B02] .cover-added").catch(() => "")).replace(/\s+/g, " ");
+  ok("＋ 보장 → 구분(이름)을 보장 표에서 고친다 — 문서 보장 표·보험금 머리에 함께 · B01 에서 확인하라는 안내",
+    (await p.locator(".doc-body tr", { hasText: "암 수술" }).count()) >= 1 && (await p.locator(".doc-body p", { hasText: "(3) 암 수술" }).count()) === 1 && addMsg.includes("B01 보험금"), addMsg);
+  await p.click(".card[data-card=B02] .cover-added button:has-text('보험금 카드에서 보기')");
+  await p.waitForTimeout(700);
+  ok("[보험금 카드에서 보기] → B01 이 펼쳐진다", (await p.locator(".card.card-open").getAttribute("data-card")) === "B01");
+  for (let k = 0; k < 4 && (await p.locator(".doc-body p", { hasText: /^\(3\) (암 수술|담보)/ }).count()) > 0; k++) { await p.locator(".pane-tool", { hasText: "↶ 되돌리기" }).click(); await p.waitForTimeout(600); }
+  await p.click(".card[data-card=B02] .card-head");                         // 다음 단계가 B01 을 여는 데서 시작하게(B02 를 펼친 처음 상태로)
+  await p.waitForTimeout(500);
+  const back3 = await p.$$eval(".doc-body p", (e) => e.map((x) => x.textContent).filter((t) => /^\(3\) /.test(t)));
+  ok("되돌려 보장 둘로", !back3.some((t) => /^\(3\) (암 수술|담보)/.test(t)) && (await p.textContent(".trial-bar")).replace(/\s+/g, " ") === prem0, `${back3.join(" / ")} · ${(await p.textContent(".trial-bar")).replace(/\s+/g, " ").slice(0, 120)} · 처음 ${prem0.slice(0, 120)}`);
 
   // 0-3) 식을 고치면 산출방법서와 시산이 함께 바뀐다 → 되돌리기
   await p.click(".card[data-card=B01] .card-head");
