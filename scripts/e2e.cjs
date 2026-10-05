@@ -187,8 +187,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click(".card[data-card=B01] .fold-head >> nth=1");                   // 둘째 담보(암 진단)
   await p.waitForTimeout(500);
   const box2 = p.locator(".card[data-card=B01] .sub-open .formula-card").last();
-  ok("B01: 보험금마다 식 한 덩이(앞의 lx 를 가져와 S → C → M → PVB) · 면책이 마. 보장의 S_t 에 나타난다",
-    (await p.locator(".card[data-card=B01] .sub-open .formula-card").count()) === 1 && /3\s*\/\s*12/.test(docWas) && /PVB/.test(docWas));
+  ok("B01: 보험금마다 식 한 덩이 · 마. 보장의 PVB = 1·M_x + 0.5·( M_{x+0.25} − M_{x+n} ) — 90일 면책이 M 의 시작에 나타난다",
+    (await p.locator(".card[data-card=B01] .sub-open .formula-card").count()) === 1 && /x\+0\.25/.test(docWas) && /PVB/.test(docWas), docWas);
   await box2.locator("button:has-text('식 고치기')").click();
   const ta2 = box2.locator("textarea");
   await ta2.fill((await ta2.inputValue()).replace("if( t = 0, 1 − 3/12, 1 )", "1"));

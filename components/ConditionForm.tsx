@@ -5,7 +5,7 @@ import { isMap, isScalar, parseDocument } from "yaml";
 import { pathKey, pct, type YamlEdit, type YamlPath } from "@/lib/conditions/yaml";
 import { matchBlocks, splitPaths, under } from "@/lib/conditions/link";
 import { parseRate, parseTimes } from "@/lib/methoddoc/parse";
-import { amountLabel, benefitModels, daysLabel, eventCauses, eventRate, survivorModels, survivorsOf, waitLabel, withFormulas, type BenefitModel, type SurvivorModel } from "@/lib/methoddoc/formulas";
+import { amountLabel, benefitModels, daysLabel, eventCauses, eventRate, pvbLines, survivorModels, survivorsOf, waitLabel, withFormulas, type BenefitModel, type SurvivorModel } from "@/lib/methoddoc/formulas";
 import { calcSheets, checkFormula, survivorTables, computeByPayMethod, computeSpec, PAY_METHODS, SUM_ASSURED_DEFAULT, type CalcContract, type CalcResult, type CalcSheets } from "@/lib/methoddoc/calc";
 import { subSup } from "@/lib/methoddoc/render";
 import { coverFields, coverTerms, endAgeLabel, MAIN_UNIT, RATE_ROLE_LABEL, unitNames, WHOLE_LIFE_AGE, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
@@ -757,8 +757,7 @@ function CoverBody({ idxs, spec, models, show, addBen, sumAssured }: { idxs: num
       <div className="flex flex-wrap gap-2"><button type="button" className="btn" onClick={addBen} title="보장(보험금) 하나를 더합니다 — 보험금 카드에서 대상자수·급부 위험률을 고릅니다">＋ 보장</button></div>
       {show && (
         <div className="formula-card" data-path="formula:cover">
-          {[...idxs.flatMap((i) => { const m = models[i]; const sl = m?.lines.find((l) => l.startsWith("S_t =")); return m && sl ? [m.b.name, sl] : []; }),
-            "보험금의 현가 — 보장마다", "PVB = Σ_{u=0}^{n−1} S_u·C_{x+u}"].map((l, k) => (
+          {pvbLines(withFormulas(spec), idxs.map((i) => models[i]).filter(Boolean)).map((l, k) => (
             <div key={k} className={l.includes("=") ? "font-mono text-[11.5px]" : "text-[11px] text-muted-foreground"} dangerouslySetInnerHTML={{ __html: subSup(l) }} />
           ))}
         </div>

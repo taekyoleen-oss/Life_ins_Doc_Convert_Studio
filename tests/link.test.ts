@@ -37,7 +37,7 @@ describe("조건 줄 → 산출방법서 블록", () => {
   it("보장 안의 배수 줄 → 마. 보장 표의 그 행과 보험금의 현가(PVB) 식만 (유지자 표·보험금 표는 아니다)", () => {
     const got = hl(lineOf(/multiple: 1/));
     expect(got.some((t) => /^사망 \| 1 \| 없음/.test(t))).toBe(true);           // 보장마다 한 행 — 구분 · 배수 · 면책 · 삭감
-    expect(got.some((t) => /PVB = Σ/.test(t))).toBe(true);
+    expect(got.some((t) => /PVB = 1·M_x/.test(t))).toBe(true);                     // 종신 · 면책 없음 — 배수 × M_x
     expect(got.some((t) => /^(대상자수|대상 위험률|계산기수) \|/.test(t))).toBe(false);
   });
   it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 유지자 표", () => {
