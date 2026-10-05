@@ -68,7 +68,7 @@ describe("Word 산출방법서 (v2) — 수식 · 글자 크기 · 줄 간격", 
   const files = async () => unzip(docToDocx(renderMethodDoc(withFormulas(spec0)), title(spec0)));
   it("식은 Word 수식(OMML) — 첨자가 진짜 첨자이고, 글(w:t)에는 '_' 표기가 남지 않는다", async () => {
     const xml = new TextDecoder().decode((await files()).get("word/document.xml")!);
-    expect(xml).toMatch(/<m:oMathPara>.*?<m:sSub><m:e><m:r>(?:(?!<\/m:r>).)*<m:t xml:space="preserve">l<\/m:t><\/m:r><\/m:e><m:sub>/);
+    expect(xml).toMatch(/<m:oMathPara>.*?<m:sSub><m:e><m:r>(?:(?!<\/m:r>).)*<m:t xml:space="preserve">D<\/m:t><\/m:r><\/m:e><m:sub>/);
     const texts = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).filter((t) => /[A-Za-zα-ω′][_^]/.test(t));
     expect(texts).toEqual([]);
     expect(xml).not.toContain("현가율 v = 1/(1+i)");          // 현가율 값 행은 싣지 않는다(기호의 정의에만)

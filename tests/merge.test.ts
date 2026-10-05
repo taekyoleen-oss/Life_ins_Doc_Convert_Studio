@@ -21,11 +21,11 @@ const roundtrip = (spec: ReturnType<typeof yamlToSpec>["spec"], edit: (md: strin
 const twoMajor = () => yamlToSpec(SAMPLES.find((x) => x.id === "twoMajor")!.yaml);
 
 describe("고친 산출방법서 → 조건 (지운 것도 반영)", () => {
-  it("담보 표의 면책을 '없음' 으로, 연령 구간 주석을 지우면 조건에서도 빠진다", () => {
+  it("보장 표의 면책을 '없음' 으로, 연령 구간 주석을 지우면 조건에서도 빠진다", () => {
     const { spec } = twoMajor();
     spec.benefits[0].waitDays = 90;
     spec.benefits[0].steps = [{ fromAge: 40, toAge: 59, multiple: 1 }, { fromAge: 60, toAge: 80, multiple: 0.5 }];
-    const { spec: out, changes } = roundtrip(spec, (md) => md.replace("| 면책·삭감 | 90일 면책 |", "| 면책·삭감 | 없음 |").replace(/^> ※ .*연령 구간 배수.*$/m, ""));
+    const { spec: out, changes } = roundtrip(spec, (md) => md.replace(/^(\| 뇌출혈 진단 \|.*?\| )90일( \|)/m, "$1없음$2").replace(/^> ※ .*연령 구간 배수.*$/m, ""));
     expect(changes).toEqual(["benefits: 2개 → 2개 갱신"]);
     expect(out.benefits[0].waitDays).toBeUndefined();
     expect(out.benefits[0].steps).toBeUndefined();
@@ -40,14 +40,14 @@ describe("고친 산출방법서 → 조건 (지운 것도 반영)", () => {
     const { spec: out, changes } = roundtrip(spec, (md) => md.replace(/^\| 안 쓰는 발생률 \|.*$\n/m, ""));
     expect(changes).toEqual(['rates: "안 쓰는 발생률" 삭제']);
     expect(out.rates.map((r) => r.id)).toEqual(["q", "rs", "ra"]);
-    // 담보가 쓰는 행을 지워도(문서 실수) 담보가 가리키므로 남는다
+    // 유지자가 쓰는 행을 지우면(문서 실수) 유지자 표의 기호를 위험률로 되짚을 수 없다 — 알린다
     const kept = roundtrip(spec, (md) => md.replace(/^\| 뇌출혈 발생률 \|.*$\n/m, ""));
-    expect(kept.spec.rates.some((r) => r.id === "rs")).toBe(true);
+    expect(kept.back.warnings.some((w) => /에 맞는 위험률이 가\.\(2\) 예정위험률 표에 없습니다|이름\(.*\)과 대상 위험률의 기호가 가리키는 위험률.*맞지 않습니다/.test(w))).toBe(true);
   });
 
-  it("담보 표에만 적은 위험률은 계열로 더해 잇고 경고한다", () => {
+  it("보험금 표의 발생률 자리에만 적은 위험률은 계열로 더해 잇고 경고한다", () => {
     const { spec } = twoMajor();
-    const { back, spec: out, changes } = roundtrip(spec, (md) => md.replace(/^\| 급부 위험률 \|.*$/m, "| 급부 위험률 | 3대질병 발생률 |"));   // v7 — 보험금 표의 급부 위험률 행에 위험률 이름을 적으면 그 위험률로 지급한다
+    const { back, spec: out, changes } = roundtrip(spec, (md) => md.replace(/^(\| 계산기수 \| d\^\{\(1\)\}_\{x\+t\} = l\^\{\(1\)\}_\{x\+t\} × ).*? \|$/m, "$13대질병 발생률 |"));   // v8 — 지급자수 d = 대상자수 × (기호 대신) 위험률 이름
     expect(back.warnings.some((w) => /"3대질병 발생률".*위험률 표에 없어.*더했습니다/.test(w))).toBe(true);
     const added = out.rates.find((r) => r.name === "3대질병 발생률")!;
     expect(added.role).toBe("incidence");

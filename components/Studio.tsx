@@ -595,7 +595,7 @@ export default function Studio() {
   };
 
   /**
-   * Word(또는 어떤 산출방법서든)를 고쳐 올리면 바뀐 값만 지금 조건에 넣는다 — [열기] 처럼 조건을 통째로 바꾸지 않는다.
+   * Word(또는 어떤 산출방법서든)를 고쳐 올리면 바뀐 값만 지금 조건에 넣는다 — [불러오기] 처럼 조건을 통째로 바꾸지 않는다.
    * 표준 산출방법서면 식·주석·절까지, 아니면 표·본문 규칙으로 읽은 값만.
    */
   const applyFile = async (file: File) => {
@@ -624,7 +624,7 @@ export default function Studio() {
     }
   };
 
-  /** 그림에서 옮겨 적은 글 → 조건. [열기] 와 같이 조건을 새로 만든다 */
+  /** 그림에서 옮겨 적은 글 → 조건. [불러오기] 와 같이 조건을 새로 만든다 */
   const onVisionDone = (doc: ExtractedDoc, pages: string[], usd: number) => {
     const name = vision!.file.name;
     const { yaml: y, original: o } = fromDoc(name, doc);
@@ -665,14 +665,14 @@ export default function Studio() {
           ))}
         </div>
         <button className="btn-primary" onClick={() => setCalcOpen(true)} title="산출방법서의 식으로 이 앱이 보험료를 계산합니다 — 한 해 한 줄의 표로 과정을 봅니다">＝ 보험료 계산</button>
-        <button className="btn-primary" onClick={() => fileInput.current?.click()}>열기</button>
+        <button className="btn-primary" onClick={() => fileInput.current?.click()} title="산출방법서(Word·PDF·한글·Markdown·LaTeX) · 조건 YAML · MethodSpec JSON · 위험률 표를 불러옵니다">불러오기</button>
         <input ref={fileInput} aria-label="열 파일" type="file" accept={`${ACCEPT},.csv,.tsv,.xlsx`} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
         <details className="menu">
           <summary className="btn">패키지 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">조건 · 산출방법서 · 위험률 표를 한 파일로 ({PACKAGE_EXT})</p>
             <button onClick={savePackage}>패키지로 저장<small>{packageName()} — 조건 YAML · 산출방법서 Word/Markdown · MethodSpec JSON{sheet?.map.some((m) => m.to === "rate") ? " · 위험률 표 CSV" : " (위험률 표 없음)"}</small></button>
-            <button onClick={() => packageInput.current?.click()}>패키지 열기…<small>{PACKAGE_EXT} — 든 것을 그대로 되살립니다 ([열기]나 끌어다 놓기도 됩니다)</small></button>
+            <button onClick={() => packageInput.current?.click()}>패키지 열기…<small>{PACKAGE_EXT} — 든 것을 그대로 되살립니다 ([불러오기]나 끌어다 놓기도 됩니다)</small></button>
             <p className="menu-head">최근 작업 {recent.length ? `(${recent.length})` : "— 아직 없음"}</p>
             {recent.map((r) => <button key={r.id} onClick={() => openRecent(r)}>{r.name}<small>{r.product || "(이름 없음)"} · {when(r.at)}{r.sheet ? ` · 위험률 표 ${r.sheet.sheet.head.length - 1}열` : ""}</small></button>)}
             {recent.length > 0 && <button onClick={() => { setRecent([]); writeJson(`${KEY}:recent`, null); }}><small>최근 작업 목록 지우기</small></button>}
@@ -693,17 +693,21 @@ export default function Studio() {
         <details className="menu">
           <summary className="btn">내보내기 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
-            <p className="menu-head">조건 (다른 앱에서 읽기)</p>
-            <button onClick={() => exporters.yaml(yaml, s)}>조건 파일 .yaml</button>
-            <button onClick={exportJson}>자유설계보험으로 보내기 — MethodSpec .json<small>저장한 파일을 자유설계보험 [산출방법서 변환기] 화면에 올리고 [상품 만들기에 넣기] 하면 그쪽에서 보험료를 계산합니다 · 위험률 표 {nTables}개 포함{noTable.length ? ` · 표 없는 위험률 ${noTable.length}개` : ""}</small></button>
             <p className="menu-head">산출방법서</p>
             <button onClick={() => exporters.docx(specT)}>Word .docx<small>표준 산출방법서 — 한글에서도 열림 · 작성 안내 포함</small></button>
             <button onClick={() => exporters.docx(specT, false)}>Word .docx (작성 안내 없이)<small>출력·제출용</small></button>
-            <button onClick={() => mergeInput.current?.click()}>고친 Word 올려 조건에 반영<small>바뀐 값·식·주석만 들어갑니다 — 상품별 견본은 [Word] 탭</small></button>
-            <button onClick={() => exporters.tex(sections, title, s)}>LaTeX .tex<small>xelatex 로 조판 (kotex)</small></button>
-            <button onClick={() => exporters.md(sections, title, s)}>Markdown .md</button>
-            <button onClick={() => exporters.html(sections, title, s)}>HTML .html<small>수식 포함 단독 파일</small></button>
-            <button onClick={print}>인쇄 · PDF 저장</button>
+            <p className="menu-head">조건</p>
+            <button onClick={() => exporters.yaml(yaml, s)}>조건 파일 .yaml</button>
+            {/* 추가기능(개발중) — 사용자에게 아직 공개하지 않는다. 공유 화면에서는 누를 수 없고, 개발자 주소(?all)에서만 켜진다 */}
+            <p className="menu-head">추가기능 (개발중){allSamples ? " — 개발자 화면에서만 켜짐" : ""}</p>
+            <fieldset disabled={!allSamples} className="menu-dev" title={allSamples ? undefined : "개발 중인 기능입니다 — 아직 쓸 수 없습니다"}>
+              <button onClick={exportJson}>자유설계보험으로 보내기 — MethodSpec .json<small>저장한 파일을 자유설계보험 [산출방법서 변환기] 화면에 올리고 [상품 만들기에 넣기] 하면 그쪽에서 보험료를 계산합니다 · 위험률 표 {nTables}개 포함{noTable.length ? ` · 표 없는 위험률 ${noTable.length}개` : ""}</small></button>
+              <button onClick={() => mergeInput.current?.click()}>고친 Word 올려 조건에 반영<small>바뀐 값·식·주석만 들어갑니다 — 상품별 견본은 [Word] 탭</small></button>
+              <button onClick={() => exporters.tex(sections, title, s)}>LaTeX .tex<small>xelatex 로 조판 (kotex)</small></button>
+              <button onClick={() => exporters.md(sections, title, s)}>Markdown .md</button>
+              <button onClick={() => exporters.html(sections, title, s)}>HTML .html<small>수식 포함 단독 파일</small></button>
+              <button onClick={print}>인쇄 · PDF 저장</button>
+            </fieldset>
           </div>
         </details>
         <button className="btn" onClick={() => setGuide((v) => !v)} aria-pressed={guide} title="공유 테스트 안내 — 무엇을 해 보면 되는지 · 저장 · 의견 보내기">테스트 안내</button>
@@ -725,7 +729,7 @@ export default function Studio() {
             </div>
             <div>
               <h2>저장과 공유</h2>
-              <p>작업은 <b>이 브라우저에만</b> 자동 저장됩니다. 다른 사람에게 보여 주려면 <b>[패키지 ▾ → 패키지로 저장]</b>한 <code>.lifepkg</code> 파일을 보내고, 받은 사람은 [열기]로 엽니다.</p>
+              <p>작업은 <b>이 브라우저에만</b> 자동 저장됩니다. 다른 사람에게 보여 주려면 <b>[패키지 ▾ → 패키지로 저장]</b>한 <code>.lifepkg</code> 파일을 보내고, 받은 사람은 [불러오기]로 엽니다.</p>
               <p>위험률은 모두 가상의 값(경험생명표(가상))입니다. PC 화면(가로 1280px 이상)에서 써 주세요.</p>
             </div>
             <div>
@@ -766,7 +770,7 @@ export default function Studio() {
                   {layout.left === "form"
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
-                        calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)}
+                        calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)} onShowDoc={(paths) => { setTab("doc"); showPane("doc"); onFormSelect([...paths]); }}
                         rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} onCombineRate={onCombineRate} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
@@ -929,7 +933,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <ol>
           <li><b>조건 입력</b> 왼쪽 [입력] 탭의 카드(M00 문서 정보 · M01 상품 기본정보 · M03 예정이율·적용해지율 · M04 위험률 · M06 예정사업비율 · M05 납입(납입자수) · B01 보장(담보마다 유지자수·보험금 현가) · M07 보험료의 계산 · M08 준비금·환급금)에 칸을 채우면 오른쪽 산출방법서가 바로 바뀝니다. 카드를 열면 그 카드가 창 가운데로 오고, 식이 있는 카드는 머리의 [수식 보이기]로 식을 켭니다(기본 숨김). 담보의 보장금액은 <b>가입금액 × 배수</b>(1배·0.5배 …), 면책·삭감은 기간(30일~2년)과 그 기간의 지급 비율(면책 0% · 50% 삭감)로 적습니다. 급부 위험률은 따로 고르지 않고 탈퇴 사유에서 정해집니다. [YAML] 탭에서 같은 조건을 파일로 봅니다 — 둘은 늘 같습니다.</li>
           <li><b>산출 조건 · 계약 단위</b> 맨 위 줄의 계약 한 점(성별·가입나이·납입기간·납입방법·가입금액)으로 산출합니다 — 납입방법(월납·3개월·6개월·연납)마다 보험료가 함께 보이고, 조건에는 저장하지 않습니다. 그 아래 탭이 계약 단위(주계약·특약)입니다 — [＋ 특약]으로 특약을 더하면 그 이름의 담보가 생기고, 보장·납입 카드가 그 단위의 담보만 보이며, 엑셀도 단위마다 한 장이 됩니다.</li>
-          <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [열기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
+          <li><b>산출방법서 → 조건</b> PDF·DOCX·HWP·HWPX·TEX·MD 를 [불러오기] 하거나 창에 끌어다 놓으면 조건으로 옮깁니다. 표준 산출방법서는 식·주석까지, 다른 양식은 표·본문 규칙으로 읽을 수 있는 값을 읽습니다. [원문] 탭에서 근거 줄을 확인할 수 있습니다.</li>
           <li><b>위험률 표 ↔ 조건 ↔ 계산</b> 첫 화면부터 조건과 이어진 견본 표(가상의 값)가 들어 있습니다 — 칸을 누르면 값을, 머리를 두 번 누르면 열 이름을 고치고, 열마다 [잇기]에서 조건의 위험률·성별·유형을 고릅니다(유형은 M04 에 바로 반영). 아래 창에 Excel 표를 붙여넣거나 CSV·XLSX 를 올리면 첫 행을 열 이름으로 읽어 같은 이름의 위험률(M04)에 잇고, 조건에 없는 이름의 열은 새 위험률로 M04 에 더합니다(유형 확인). 거꾸로 M04 에서 위험률을 더하면 표에 그 이름의 빈 열이 생기고, 산출방법서에서 위험률을 더해 올려도 같습니다. 이은 값 표는 산출방법서 별첨과 MethodSpec JSON 에 실려 자유설계보험이 계약 성별의 표로 계산합니다 — 값 표가 없는 위험률은 상태줄에 &quot;표 없음&quot;으로 알리고 그쪽에서 0 이 됩니다. 순서: ① 샘플·산출방법서 열기 → ② 위험률 표 올리기 → ③ [내보내기 → MethodSpec .json] → 자유설계보험 /method 에서 열기.</li>
           <li><b>수식·기호 견본</b> 조건 창의 [＋ 수식 더하기]는 견본 식을 조건(M09)에 더하고, LaTeX·Markdown 탭의 [수식·기호 견본]은 커서 자리에 식·기호·표·절 제목을 넣습니다.</li>
           <li><b>＝ 보험료 계산</b> 머리의 단추를 누르면 담보마다 한 해 한 줄의 표가 열립니다 — 왼쪽에 계약·기초율(가입나이·가입금액·보장기간·납입기간·이율·배수·사업비), 표에 위험률 → 현가율 → 유지자수·납입자수·지급자수 → 현가·누계 → 보험금 → <b>책임준비금 V · 해약공제 · 해지환급금 W · 환급률</b>. 이 앱이 산출방법서의 식을 그대로 읽어 계산한 값이고, <b>열 제목이나 값을 누르면 그 값을 만든 식과 그 해에 쓰인 값</b>이 옆에 나옵니다. 1원당 영업보험료는 소수 여섯째 자리까지 만든 뒤 10만원당(원 단위 반올림) → 담보 보험료(× 가입금액 × 배수 ÷ 10만) 순서입니다.</li>
@@ -940,12 +944,12 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
           <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>
           <li><b>그림으로 읽기</b> 스캔 PDF·PNG·JPG 를 열면 쪽을 골라 본인의 Anthropic API 키로 보냅니다. AI 는 쪽을 글로 옮겨 적기만 하고 값은 앱의 규칙이 읽습니다. 글자 있는 PDF 도 [원문] 탭에서 [그림으로 다시 읽기] 할 수 있습니다.</li>
-          <li><b>Word로 고치기</b> [Word] 탭에서 표준 산출방법서(.docx — 상품별 견본 포함)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다(지운 행·칸도 빠집니다). [열기]로 올리면 조건 전체를 새로 만듭니다.</li>
+          <li><b>Word로 고치기</b> [Word] 탭에서 표준 산출방법서(.docx — 상품별 견본 포함)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다(지운 행·칸도 빠집니다). [불러오기]로 올리면 조건 전체를 새로 만듭니다.</li>
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
           <li><b>대응 위치</b> 왼쪽 칸·줄을 고르면 오른쪽에서 그 조건이 만든 곳(표의 행·수식·원문 근거·위험률 표의 열)이 노랗게, 오른쪽을 누르면 왼쪽 칸이 표시됩니다.</li>
           <li><b>화면 조절</b> 창 사이 막대를 끌어 크기를 바꾸고(두 번 누르면 처음 비율), 창마다 [⤢ 전체]·[– 숨기기], 위 [보기]에서 다시 켭니다.</li>
-          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서(Word·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lifepkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[열기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
-          <li><b>다른 앱과 연동</b> [내보내기 → MethodSpec .json] 은 자유설계보험(flexible_insurance) 등이 읽는 중립 형식입니다(위험률 표 포함). 그 JSON 을 여기서 [열기] 해도 됩니다.</li>
+          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서(Word·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lifepkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[불러오기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
+          <li><b>다른 앱과 연동</b> [내보내기 → MethodSpec .json] 은 자유설계보험(flexible_insurance) 등이 읽는 중립 형식입니다(위험률 표 포함). 그 JSON 을 여기서 [불러오기] 해도 됩니다.</li>
         </ol>
         <p className="text-xs text-muted-foreground">조건 표기: 이율 <code>2.5%</code> · 사업비 <code>1.5/1000</code> · 배수 <code>1배</code> · 위험률 유형 death / incidence / recurring / waiver / lapse / other.</p>
         <button className="btn-primary mt-3" onClick={onClose}>닫기</button>

@@ -19,7 +19,8 @@ describe("조건 파일(YAML)", () => {
     expect(spec.basis.interest).toBe(0.025);
     expect(spec.basis.standardInterest).toBe(0.0325);
     expect(spec.expenses.map((e) => e.rate ?? e.times)).toEqual([0.01, 1, 0.0015, 0.045, 0.001, 0.025]);
-    expect(spec.benefits[0].exitRateIds).toEqual(["q", "r80"]);
+    expect(spec.benefits[0].exitRateIds).toEqual(["q"]);                                        // 종신: 보장은 사망만(대상자수 lx(2))
+    expect(spec.survivors!.map((x) => [x.exitRateIds, x.payFor])).toEqual([[["q", "r80"], undefined], [["q"], ["주계약"]]]);
     expect(sample("cancer").spec.basis.lowRatio).toBe(0);
     // 샘플은 일곱 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약, 위험률 근거는 모두 가상
     expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan"]);
@@ -60,22 +61,26 @@ describe("조건 → 산출식", () => {
   /** 짝(key)으로 식 덩이를 집는다 — 조건 카드·계산(calc)이 쓰는 것과 같은 짝이다 */
   const byKey = (id: string, key: string) => generateFormulas(sample(id as never).spec).find((x) => x.key === key)!;
 
-  it("종신: 사망·80% 장해 생존자 lx(1) 하나 — 탈퇴율 Q = min(1, q + r − q·r/2), lx · Dx · Nx 까지 · 보험금과 납입(N*)이 그 lx 를 쓴다", () => {
+  it("종신: 유지자 둘 — lx(1) 사망·80% 장해(Q = min(1, q + r − q·r/2)) · lx(2) 사망(q 그대로) · 사망 보험금과 납입(N*)이 lx(2) 를 쓴다", () => {
     const g = byKey("whole", "surv:s1");
-    expect(g.section).toBe("생존자");
-    expect(g.label).toBe("생존자수 lx(1) — 생존자(사망X, 80% 이상 장해X)");
-    expect(g.path).toBe("benefits[0].survivorId|benefits[0].exitRateIds|rates[0]|rates[1]|basis.waiver|basis.waiverRateIds|basis.interest");
+    expect(g.section).toBe("유지자");
+    expect(g.label).toBe("유지자수 lx(1) — 사망, 80% 이상 장해 아닌 유지자");
+    expect(g.path).toBe("survivors[0]|rates[0]|rates[1]|basis.interest");
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
     expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
-    expect(g.text).toContain("생존자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − Q^{(1)}_{x+t} )");
+    expect(g.text).toContain("유지자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − Q^{(1)}_{x+t} )");
     expect(g.text).toContain("N^{(1)}_{x+t} = Σ_{u≥t} D^{(1)}_{x+u}");
-    // 보험금은 앞의 생존자 lx 를 가져다 쓴다 — 사망형은 탈퇴자 전부
+    // 위험률이 하나뿐인 유지자는 결합 Q 없이 그 위험률 그대로(메모: 수식이 아니면 그 위험률)
+    const g2 = byKey("whole", "surv:s2");
+    expect(g2.text).toContain("l^{(2)}_{x+t+1} = l^{(2)}_{x+t} × ( 1 − q_{x+t} )");
+    expect(g2.text).not.toContain("Q^{(2)}");
+    // 보험금은 앞의 유지자 lx 를 대상자수로 가져다 쓴다 — 사망 보장은 대상자수 × 사망률
     const b = byKey("whole", "benefit:b1");
     expect(b.section).toBe("보험금");
-    expect(b.label).toBe("보험금 — 사망·80% 이상 장해");
-    expect(b.text).toContain("l_{x+t} = l^{(1)}_{x+t}");
-    expect(b.text).toContain("N′_{x+t} = N^{(1)}_{x+t}");                                  // 납입(N*)도 lx(1)
-    expect(b.text).toContain("C_{x+t} = l^{(1)}_{x+t}·Q^{(1)}_{x+t}·v^{t+½}");
+    expect(b.label).toBe("보험금 — 사망");
+    expect(b.text).toContain("l_{x+t} = l^{(2)}_{x+t}");
+    expect(b.text).toContain("N′_{x+t} = N^{(2)}_{x+t}");                                  // 납입(N*)도 lx(2)
+    expect(b.text).toContain("C_{x+t} = l^{(2)}_{x+t}·q_{x+t}·v^{t+½}");
     expect(b.text).toContain("M_{x+t} = Σ_{u=t}^{n−1} S_u·C_{x+u}");
     expect(b.text).toContain("PVB = M_x");
   });
@@ -94,11 +99,11 @@ describe("조건 → 산출식", () => {
     const wc = sample("wholeCancer").spec;
     expect(eventRate(wc, wc.benefits[1])?.id).toBe("rc");
   });
-  it("2대질병: 보험금 둘이 저마다 그 질병의 미발생 생존자, 납입(N*)은 덧씌운 식의 생존자 — 뇌출혈·급성심근경색증을 곱으로", () => {
+  it("2대질병: 보험금 둘이 저마다 그 질병의 미발생 유지자, 납입(N*)은 뇌출혈·급성심근경색증을 곱으로 묶은 유지자", () => {
     const spec = sample("twoMajor").spec;
     const fs = withFormulas(spec).formulas;
     const surv = fs.filter((f) => f.key?.startsWith("surv:"));
-    expect(surv.map((f) => f.label)).toEqual(["생존자수 lx(1) — 생존자(사망X, 뇌출혈X)", "생존자수 lx(2) — 생존자(사망X, 급성심근경색증X)", "생존자수 lx(3) — 생존자(사망X, 뇌출혈X, 급성심근경색증X)"]);
+    expect(surv.map((f) => f.label)).toEqual(["유지자수 lx(1) — 사망, 뇌출혈 아닌 유지자", "유지자수 lx(2) — 사망, 급성심근경색증 아닌 유지자", "유지자수 lx(3) — 사망, 뇌출혈, 급성심근경색증 아닌 유지자"]);
     expect(surv[2].text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
     expect(surv[2].text).toContain("Q^{(3)}_{x+t} = min( 1, q_{x+t} + R^{(3)}_{x+t} − q_{x+t}·R^{(3)}_{x+t}/2 )");
   });
@@ -157,7 +162,7 @@ describe("LaTeX", () => {
     const spec = yamlToSpec(src).spec;
     const tex = docToLatex(docOf(spec), spec.meta.productName)
       .replace("적용이율 i & 2.500\\%", "적용이율 i & 3.000\\%")
-      .replace("가입금액의 1배", "가입금액의 0.5배");
+      .replace(/사망 & 1 &/, "사망 & 0.5 &");                       // v8 — 마. 보장 표의 배수 칸
     const back = parseMethodDoc(latexToDoc(tex));
     const { spec: merged, changes } = mergeSpec(spec, back.spec, back.evidence);
     expect(merged.basis.interest).toBeCloseTo(0.03, 12);
@@ -165,7 +170,7 @@ describe("LaTeX", () => {
     expect(changes.join("\n")).toMatch(/basis\.interest: 2\.5% → 3%/);
     const next = patchYaml(src, merged);
     expect(next).toContain("interest: 3%");
-    expect(next).toContain("# 납입만 면제되는 추가 사유가 없으면");   // 고치지 않은 줄의 사용자 주석 유지
+    expect(next).toContain("# 납입만 면제되는 추가 사유");   // 고치지 않은 줄의 사용자 주석 유지
     expect(yamlToSpec(next).spec).toEqual(merged);
   });
 });

@@ -149,8 +149,8 @@ textarea.inp { font-family: inherit; resize: vertical; }
 .unit-tab.on > button[role=tab] { color: var(--primary); font-weight: 700; }
 .unit-tabs > .btn { margin-bottom: 2px; }
 /* 카드 머리의 [수식 보이기/숨기기] — 식이 있는 카드만 */
-.card-fx { border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
-.card-fx:hover { background: var(--accent); color: var(--primary); }
+.card-fx, .card-doc { border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.card-fx:hover, .card-doc:hover { background: var(--accent); color: var(--primary); }
 .card-fx.on { background: var(--accent); border-color: var(--primary); color: var(--primary); font-weight: 600; }
 /* 담보 안 — 유지자수를 어느 집단에서 가져오는지 */
 .lx-from { border-left: 3px solid #cfe3f1; background: #f6fbff; border-radius: 0 8px 8px 0; padding: 6px 10px; font-size: 12px; color: #475569; }
@@ -451,3 +451,13 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 .proc-ids .chip { cursor: pointer; }
 /* 결과 표의 글자 칸 머리글은 왼쪽(내용과 같은 줄) — 수 칸만 오른쪽 */
 .calc-table th.txt { text-align: left; }
+
+/* 내보내기 — 추가기능(개발중): 공유 화면에서는 누를 수 없다 */
+.menu-dev { border: 0; margin: 0; padding: 0; min-width: 0; }
+.menu-dev:disabled button { opacity: .45; cursor: not-allowed; }
+
+/* B02 보장 — 산출방법서 마. 보장 표와 같은 칸 */
+.cover-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cover-table th, .cover-table td { border: 1px solid var(--border); padding: 3px 5px; text-align: left; vertical-align: middle; }
+.cover-table th { background: var(--muted); font-weight: 600; font-size: 11.5px; }
+.cover-table .inp { width: 100%; padding: 2px 4px; font-size: 12px; }

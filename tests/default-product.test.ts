@@ -39,10 +39,10 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(r80.tables!.F!.values[40]).toBeCloseTo(0.000167, 12);
   });
 
-  it("산출식: 생존자 셋 — lx(1) 사망·장해 · lx(2) 사망·암 (보험금마다) · lx(3) 사망·장해·암 [납입] · 암 진단은 첫해 (1 − 3/12)", () => {
+  it("산출식: 유지자 셋 — lx(1) 사망·장해 · lx(2) 사망·암 (보험금마다) · lx(3) 사망·장해·암 [납입] · 암 진단은 첫해 (1 − 3/12)", () => {
     const f = withFormulas(spec).formulas;
     const surv = f.filter((x) => x.key?.startsWith("surv:"));
-    expect(surv.map((x) => x.label)).toEqual(["생존자수 lx(1) — 생존자(사망X, 80% 이상 장해X)", "생존자수 lx(2) — 생존자(사망X, 암X)", "생존자수 lx(3) — 생존자(사망X, 80% 이상 장해X, 암X)"]);
+    expect(surv.map((x) => x.label)).toEqual(["유지자수 lx(1) — 사망, 80% 이상 장해 아닌 유지자", "유지자수 lx(2) — 사망, 암 아닌 유지자", "유지자수 lx(3) — 사망, 80% 이상 장해, 암 아닌 유지자"]);
     const main = surv[2].text;
     expect(main).toContain("r^{(1)}_x : 80% 이상 장해율");
     expect(main).toContain("r^{(2)}_x : 암발생률");
@@ -54,15 +54,18 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     // 면책은 보장금액의 배수 S 로 — 첫해만 (1 − 3/12) 배
     expect(f.find((x) => x.key === "benefit:b2")!.text).toContain("S_t = 1 × if( t = 0, 1 − 3/12, 1 )");
     const md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
-    // v7 — 납입면제는 따로 적지 않는다: [납입] 생존자의 탈퇴 위험률이 곧 납입을 멈추는 사유다
-    expect(md).toContain("| 탈퇴 위험률 | 사망률 및 80% 이상 장해율 및 암발생률 |\n| 납입(N*) | 주계약 |");
-    expect(md).toContain("| 면책·삭감 | 90일 면책 |");
-    expect(md).toContain("| 보장금액 | 가입금액의 0.5배 |");
-    expect(md).toContain("| 보험기간 | 100세 만기 |");
-    // v7 — 다. 생존자 · 라. 보험금, 보험금 표는 그 보험금 식 바로 위에
-    expect(md).toContain("### 다. 생존자");
+    // v8 — 납입면제는 따로 적지 않는다: [납입] 유지자(D′ · N′)의 대상 위험률이 곧 납입을 멈추는 사유다
+    expect(md).toContain("(3) l^{(3)}_x — 사망, 80% 이상 장해, 암 아닌 유지자");
+    expect(md).toContain("| 현가누계 | D′_{x+t} = l^{(3)}_{x+t}·v^t · N′_{x+t} = Σ_{u≥t} D′_{x+u} |");
+    // v8 — 다. 유지자 · 라. 보험금(대상자수 · 지급자수 · C · M) · 마. 보장(배수 · 면책 · 삭감) · 바. 순보험료 — 식 위주
+    expect(md).toContain("### 다. 유지자");
     expect(md).toContain("### 라. 보험금");
-    expect(md).toMatch(/\| 생존자 \| lx\(2\) — 생존자\(사망X, 암X\) \|\n\| 급부 위험률 \| 탈퇴 사유에서 — 암발생률 \|\n\| 계산기수 \| Cx · Mx \|\n\n\[식\] 보험금 — 암 진단/);
+    expect(md).toContain("### 마. 보장");
+    expect(md).toContain("### 바. 순보험료 및 영업보험료");
+    expect(md).toContain("(2) 암 진단\n\n| 구분 | 식 |\n|---|---|\n| 대상자수 | l^{(2)}_{x+t} |\n| 계산기수 | d^{(2)}_{x+t} = l^{(2)}_{x+t} × r^{(2)}_{x+t} |");
+    expect(md).toContain("| 암 진단 | 100세 만기 | 0.5 | 90일 | — | — |");
+    expect(md).not.toContain("[식] 보험금 —");                 // 유지자·보험금의 자세한 식은 보험료 계산이 맡는다
+    expect(md).not.toContain("1원당 보험료의 반올림");
   });
 
   it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 162 · 가입금액 1억 기준 월 342,000원)", () => {

@@ -56,9 +56,9 @@ describe("입력 화면 → 조건 파일 (editYaml)", () => {
     expect(yamlToSpec(next).spec.product?.terms).toHaveLength(3);
   });
   it("목록 값을 바꿔도 한 줄 표기와 줄 끝 주석을 이어받는다", () => {
-    const next = editYaml(src, [{ path: ["benefits", 0, "exitRateIds"], value: ["q"] }]);
-    expect(lineWith(next, /exitRateIds/)).toMatch(/exitRateIds: \[ ?q ?\] # 유지자수·납입자수/);
-    expect(yamlToSpec(next).spec.benefits[0].exitRateIds).toEqual(["q"]);
+    const next = editYaml(src, [{ path: ["survivors", 0, "exitRateIds"], value: ["q"] }]);
+    expect(lineWith(next, /exitRateIds: \[ ?q ?\] #/)).toMatch(/exitRateIds: \[ ?q ?\] # 대상 위험률/);
+    expect(yamlToSpec(next).spec.survivors![0].exitRateIds).toEqual(["q"]);
   });
   it("값 없음(undefined)은 지우고, 비어 있는 윗 항목은 새로 채운다", () => {
     expect(editYaml(src, [{ path: ["meta", "kind"] }])).not.toMatch(/kind:/);

@@ -42,14 +42,14 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("첫 화면: 기본 상품 종신보험(암진단 포함) — 입력 카드와 위험률 표 한 세트(사망률·장해율·암발생률 모두 남·여)",
     (await p.textContent(".doc-body h1")).includes("종신보험(암진단 포함)") && (await p.locator(".form-body .card").count()) >= 9
     && heads0.join(",") === "연령,사망률(남),사망률(여),80% 이상 장해율(남),80% 이상 장해율(여),암발생률(남),암발생률(여)", heads0.join(","));
-  ok("첫 화면: 암 진단 담보(90일 면책·사망보험금의 50%) · [납입] 생존자 = 사망·80% 장해·암", (await p.locator(".doc-body tr", { hasText: "면책" }).allTextContents()).some((t) => t.includes("90일"))
-    && (await p.locator(".doc-body tr", { hasText: "납입(N*)" }).allTextContents()).some((t) => t.includes("주계약")));
+  ok("첫 화면: 보장 표에 암 진단(0.5배 · 90일 면책) · [납입] 유지자(D′) = 사망·80% 장해·암", (await p.locator(".doc-body tr", { hasText: "암 진단" }).allTextContents()).some((t) => t.includes("90일") && t.includes("0.5"))
+    && (await p.locator(".doc-body tr", { hasText: "현가누계" }).allTextContents()).some((t) => t.includes("D′")));
   ok("첫 화면: 산출방법서에 별첨 위험률 표 · 상태줄 '표 없음' 없음", (await p.locator(".doc-body h2", { hasText: "별첨" }).count()) === 1 && !(await p.textContent("footer")).includes("표 없음"));
   await p.screenshot({ path: `${OUT}/s1_first.png` });
 
-  // 0-1) 카드 흐름 — 생존자(S01: lx·Dx·Nx) → 보험금(B01: 보험금마다 Cx·Mx·PVB) → 보험료의 계산(M07)
+  // 0-1) 카드 흐름 — 유지자(S01: lx·Dx·Nx) → 보험금(B01: 대상자수·d·Cx·Mx) → 보장(B02: 배수·면책·삭감 → PVB) → 보험료의 계산(M07)
   const codes = await p.$$eval(".form-body [data-card]", (els) => els.map((e) => e.dataset.card));
-  ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 생존자 → 보험금 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,S01,B01,M07,M08,M09", codes.join(","));
+  ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 유지자 → 보험금 → 보장 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,S01,B01,B02,M07,M08,M09", codes.join(","));
   const trial = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("맨 위 [산출 조건] — 계약 한 점(가입금액 포함)과 그 보험료, 조건에 저장하지 않는다고 알린다",
     trial.includes("산출 조건") && trial.includes("342,000") && trial.includes("조건 파일에 저장하지 않습니다") && (await p.locator(".trial-bar select").count()) === 5, trial.slice(0, 80));
@@ -60,19 +60,24 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("계약 단위 탭 — 주계약 하나와 [＋ 특약]", (await p.locator(".unit-tabs .unit-tab").count()) === 1 && (await p.textContent(".unit-tabs")).includes("주계약") && (await p.locator(".unit-tabs button:has-text('＋ 특약')").count()) === 1);
   ok("머리의 [보기]는 묶음 제목으로 따로 보인다(단추와 다른 모양)", (await p.locator("header .seg-label").count()) === 1
     && (await p.$eval("header .seg-label", (e) => getComputedStyle(e).backgroundColor)) !== (await p.$eval("header .seg > button", (e) => getComputedStyle(e).backgroundColor)));
-  // 생존자 카드 — 산출방법서 다. 생존자와 같다: lx(k) 마다 탈퇴 위험률 → lx · Dx · Nx, 보험료 납입기수(N*)에 쓰는 생존자에 [납입]
+  // 유지자 카드 — 산출방법서 다. 유지자와 같다: lx(k) 마다 대상 위험률 → lx · Dx · Nx, 보험료 납입기수(N*)에 쓰는 유지자에 [납입](문서의 D′)
   await p.click(".card[data-card=S01] .card-head");
   await p.waitForTimeout(700);
   const hlS = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 50)));
-  ok("S01 생존자 — lx(1)·lx(2)·lx(3) 셋, 열면 생존자 식만 강조(보험금·순보험료 식은 아니다)",
-    (await p.locator(".card[data-card=S01] .sub").count()) === 3 && hlS.filter((t) => t.includes("생존자수 lx(")).length === 3
-    && !hlS.some((t) => t.includes("보험금 — ")) && !hlS.some((t) => t.includes("순보험료")), hlS.join(" / ").slice(0, 300));
+  ok("S01 유지자 — lx(1)·lx(2)·lx(3) 셋, 열면 유지자 표만 강조(보험금 표·순보험료 식은 아니다)",
+    (await p.locator(".card[data-card=S01] .sub").count()) === 3 && hlS.filter((t) => /^\(\d\) l\(\d\)x — .*아닌 유지자/.test(t)).length === 3
+    && !hlS.some((t) => t.startsWith("대상자수")) && !hlS.some((t) => t.includes("순보험료")), hlS.join(" / ").slice(0, 300));
   const payOn = await p.$$eval(".card[data-card=S01] .sub", (els) => els.map((e) => e.querySelector("label[title^='[납입]'] input").checked));
-  ok("[납입] 은 계약 단위마다 하나 — lx(3) 생존자(사망X, 80% 이상 장해X, 암X)", JSON.stringify(payOn) === "[false,false,true]"
+  ok("[납입] 은 계약 단위마다 하나 — lx(3) 사망, 80% 이상 장해, 암 아닌 유지자", JSON.stringify(payOn) === "[false,false,true]"
     && (await p.textContent(".card[data-card=S01] .sub >> nth=2")).includes("주계약"), JSON.stringify(payOn));
   const box5 = await p.$eval(".card[data-card=S01]", (e) => { const r = e.getBoundingClientRect(), f = e.closest(".form-body").getBoundingClientRect(); return Math.abs((r.top + r.bottom) / 2 - (f.top + f.bottom) / 2); });
   ok("카드를 열면 그 카드가 조건 창의 한가운데로 온다", box5 < 160, `가운데에서 ${Math.round(box5)}px`);
-  ok("생존자 산출 결과(lx · Dx · Nx)는 접혀 있다", (await p.locator(".card[data-card=S01] details.calc-fold").count()) === 3 && (await p.locator(".card[data-card=S01] details.calc-fold[open]").count()) === 0);
+  await p.$eval(".doc-body", (e) => { let x = e; while (x && x.scrollHeight <= x.clientHeight) x = x.parentElement; if (x) x.scrollTop = 0; });
+  await p.waitForTimeout(300);
+  await p.click(".card[data-card=S01] .card-doc");
+  await p.waitForTimeout(900);
+  const back = await p.$eval(".doc-body .doc-hl", (e) => { const r = e.getBoundingClientRect(); return r.top > 0 && r.top < window.innerHeight; }).catch(() => false);
+  ok("카드 머리 [산출방법서] → 산출방법서를 옮겨 본 뒤에도 그 카드의 자리(유지자 표)로 돌아간다", back && (await p.locator(".card .card-doc").count()) >= 10);  ok("유지자 산출 결과(lx · Dx · Nx)는 접혀 있다", (await p.locator(".card[data-card=S01] details.calc-fold").count()) === 3 && (await p.locator(".card[data-card=S01] details.calc-fold[open]").count()) === 0);
   await p.click(".card[data-card=S01] details.calc-fold >> nth=0 >> summary");
   await p.waitForTimeout(300);
   const survRows = await p.$$eval(".card[data-card=S01] details.calc-fold[open] tbody tr", (rs) => rs.map((r) => [...r.cells].map((c) => c.textContent.trim())));
@@ -80,7 +85,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.focus(".card[data-card=S01] .sub >> nth=0 >> label.rounded input");
   await p.waitForTimeout(400);
   const hlR = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
-  ok("탈퇴 위험률 칸 → 예정위험률 표의 그 행 + 그 생존자 식", hlR.some((t) => t.startsWith("사망률q")) && hlR.some((t) => t.includes("생존자수 lx(1)")), hlR.join(" / ").slice(0, 300));
+  ok("대상 위험률 칸 → 예정위험률 표의 그 행 + 그 유지자 표", hlR.some((t) => t.startsWith("사망률q")) && hlR.some((t) => t.startsWith("(1) l(1)x")), hlR.join(" / ").slice(0, 300));
   await p.locator(".card[data-card=S01] .pane-tool", { hasText: "＋ 위험률" }).first().click();
   await p.waitForTimeout(500);
   ok("S01 [＋ 위험률] → 기본 위험률 모음 창이 열린다(위험률 더하기의 기본)", (await p.locator(".modal.lib-modal").count()) === 1);
@@ -93,54 +98,48 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     calc0[0].includes("0.002606") && calc0[0].includes("261") && calc0[1].includes("0.001624") && calc0[1].includes("162") && calc0[2].includes("342,000 원"), JSON.stringify(calc0));
 
   // 0-1b) 카드의 식은 기본이 숨김 — 값부터 보게 한다. 뒤의 식 확인을 위해 켠다
-  ok("카드의 식은 기본이 숨김 — 식이 있는 카드(S01·B01·M07·M08)에만 머리에 [수식 보이기], 없는 카드(M01·M04·M06)에는 없다",
+  ok("카드의 식은 기본이 숨김 — 식이 있는 카드(S01·B01·B02·M07·M08)에만 머리에 [수식 보이기], 없는 카드(M01·M04·M06)에는 없다",
     (await p.locator(".card[data-card=S01] .formula-card").count()) === 0
     && (await p.locator(".card[data-card=M07] .card-fx").textContent()).includes("수식 보이기")
-    && (await p.locator(".card .card-fx").count()) === 4 && (await p.locator(".card[data-card=M04] .card-fx").count()) === 0);
+    && (await p.locator(".card .card-fx").count()) === 5 && (await p.locator(".card[data-card=M04] .card-fx").count()) === 0);
   await p.click(".card[data-card=M07] .card-fx");
   await p.waitForTimeout(400);
   ok("[수식 보이기] → 그 카드의 식만 보인다 (N* · P · 기준연납 · G · 반올림)", (await p.locator(".card[data-card=M07] .formula-card").count()) === 5
     && (await p.locator(".card[data-card=M07] .card-fx").textContent()).includes("수식 숨기기") && (await p.locator(".card[data-card=S01] .card-fx").textContent()).includes("수식 보이기"));
 
-  // 0-2) 보험금 카드 — 보험금 하나가 조건 + 생존자 lx(콤보) + 급부 위험률(콤보) → Cx · Mx · PVB
+  // 0-2) 보험금 카드 — 보험금마다 대상자수(유지자 lx 콤보) + 급부 위험률(콤보) → d · Cx · Mx
   await p.click(".card[data-card=B01] .card-head");
   await p.waitForTimeout(700);
   const hlB = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
-  ok("B01 을 열면 보험금 표·보험금 식만 비친다 (생존자 식·순보험료 식은 아니다)",
-    hlB.some((t) => t.startsWith("보장금액")) && hlB.some((t) => t.includes("보험금 — 암 진단")) && !hlB.some((t) => t.includes("생존자수 lx("))
-    && !hlB.some((t) => t.includes("순보험료")), hlB.join(" / ").slice(0, 300));
+  ok("B01 을 열면 라. 보험금의 표만 비친다 (유지자 표·보장 표·순보험료 식은 아니다)",
+    hlB.some((t) => t.startsWith("(2) 암 진단")) && hlB.some((t) => t.startsWith("대상자수")) && !hlB.some((t) => t.includes("아닌 유지자"))
+    && !hlB.some((t) => t.startsWith("암 진단100")) && !hlB.some((t) => t.includes("순보험료")), hlB.join(" / ").slice(0, 300));
   await p.click(".card[data-card=B01] .card-fx");                              // 이 카드의 식을 켠다
   await p.waitForTimeout(400);
   const lxFrom = (await p.textContent(".card[data-card=B01] .lx-from")).replace(/\s+/g, " ");
-  // 담보 칸 하나를 고르면 그 행과 그 칸에 기대는 식만 — 보장금액은 표의 보장금액 행 + 보험금 식
-  await p.focus(".card[data-card=B01] .sub-open [data-path$='.multiple'] select");
-  await p.waitForTimeout(400);
-  const hlM = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
-  ok("보장금액 칸 → 보험금 표의 보장금액 행과 그 보험금 식만 비친다",
-    hlM.filter((t) => t.startsWith("보장금액가입금액")).length === 1 && !hlM.some((t) => t.startsWith("급부 유형")) && hlM.some((t) => t.includes("보험금 —"))
-    && !hlM.some((t) => t.includes("생존자수 lx(")), hlM.join(" / ").slice(0, 300));
-  const survOpts = await p.$$eval(".card[data-card=B01] .sub-open select[aria-label='생존자'] option", (o) => o.map((x) => x.textContent));
-  ok("B01: 보험금은 앞의 생존자 lx 를 콤보로 고른다(탈퇴 사유 체크 없음) — lx(1)·lx(2)·lx(3), 첫 보험금은 lx(1)",
+  const survOpts = await p.$$eval(".card[data-card=B01] .sub-open select[aria-label='대상자수'] option", (o) => o.map((x) => x.textContent));
+  ok("B01: 대상자수는 앞의 유지자 lx 를 콤보로 고른다(탈퇴 사유 체크 없음) — lx(1)·lx(2)·lx(3), 첫 보험금은 lx(1)",
     (await p.locator(".card[data-card=B01] .sub-open [data-path$='.exitRateIds'] input[type=checkbox]").count()) === 0 && survOpts.length === 3
-    && (await p.locator(".card[data-card=B01] .sub-open select[aria-label='생존자'] option:checked").textContent()).startsWith("lx(1) 생존자(사망X, 80% 이상 장해X)")
-    && lxFrom.includes("생존자 카드에서 보기"), `${survOpts.join(" / ")} · ${lxFrom.slice(0, 80)}`);
-  ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위 칸도 없다(탭에서) · 증액·감액 구간도 없다",
-    (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0);
+    && (await p.locator(".card[data-card=B01] .sub-open select[aria-label='대상자수'] option:checked").textContent()).startsWith("lx(1) 사망, 80% 이상 장해 아닌 유지자")
+    && lxFrom.includes("유지자 카드에서 보기"), `${survOpts.join(" / ")} · ${lxFrom.slice(0, 80)}`);
+  ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위 칸도 없다(탭에서) · 증액·감액 구간도 없다 · 배수·면책은 B02 로",
+    (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0
+    && (await p.locator(".card[data-card=B01] [data-path$='.multiple']").count()) === 0);
   // 급부 위험률은 위험률 표의 열을 고르는 콤보 — 비우면 사망형은 탈퇴 사유 전부의 결합 Q
   const rateOpts = await p.$$eval(".card[data-card=B01] .sub-open [data-path$='.rateId'] select option", (o) => o.map((x) => x.textContent));
   const b1 = (await p.textContent(".card[data-card=B01] .sub-open")).replace(/\s+/g, " ");
   ok("B01 급부 위험률 콤보: 기본 = 결합 Q (사망률 ⊕ 80% 이상 장해율) + 위험률 표의 열 · [결합 위험률을 위험률 표에 넣기]",
     rateOpts[0].includes("결합 Q (사망률 ⊕ 80% 이상 장해율)") && rateOpts.some((t) => t.startsWith("암발생률")) && b1.includes("결합 위험률을 위험률 표에 넣기"), rateOpts.join(" / ").slice(0, 160));
   const benRes = (await p.textContent(".card[data-card=B01] .calc-panel .calc-table")).replace(/\s+/g, " ");
-  ok("B01 산출 결과: 생존자 · 급부 위험률 열(결합 Q — 사망률 ⊕ 80% 이상 장해율)", benRes.includes("급부 위험률") && benRes.includes("결합 Q — 사망률 ⊕ 80% 이상 장해율"), benRes.slice(0, 160));
+  ok("B01 산출 결과: 대상자수 · 급부 위험률 열(결합 Q — 사망률 ⊕ 80% 이상 장해율)", benRes.includes("급부 위험률") && benRes.includes("결합 Q — 사망률 ⊕ 80% 이상 장해율"), benRes.slice(0, 160));
   ok("보험금 산출 결과(Cx · Mx)는 접혀 있다", (await p.locator(".card[data-card=B01] .sub-open details.calc-fold").count()) === 1 && (await p.locator(".card[data-card=B01] details.calc-fold[open]").count()) === 0);
   await p.click(".card[data-card=B01] .sub-open details.calc-fold summary");
   await p.waitForTimeout(300);
   const cmHead = await p.$$eval(".card[data-card=B01] details.calc-fold[open] thead th", (e) => e.map((x) => x.textContent.trim()));
   const cmRows = await p.locator(".card[data-card=B01] details.calc-fold[open] tbody tr").count();
   ok("펼치면 연령마다 Cx · Mx (종신 — 72줄)", cmHead.join("|") === "t|연령|Cx|Mx" && cmRows === 72, `${cmHead.join("|")} · ${cmRows}줄`);
-  ok("보험금 칸: 급부 유형 옆 보험기간, 그 아래 보장금액(배수)·면책·삭감 기간·그 기간 지급, 생존자 · 급부 위험률",
-    ["급부 유형", "보험기간", "보장금액", "면책·삭감 기간", "그 기간 지급", "생존자 (lx)", "급부 위험률"].every((t) => b1.includes(t)) && (await p.inputValue(".card[data-card=B01] .sub-open [data-path$='.multiple'] select")) === "1"
+  ok("보험금 칸: 이름 · 급부 유형 · 보험기간(M01 에서) · 대상자수 · 급부 위험률",
+    ["급부 유형", "보험기간", "대상자수 (유지자 lx)", "급부 위험률"].every((t) => b1.includes(t))
     && (await p.locator(".card[data-card=B01] .sub-open [data-path$='.endAge'] input").count()) === 0
     && (await p.textContent(".card[data-card=B01] .sub-open [data-path$='.endAge'] .ben-term")).includes("종신"), b1.slice(0, 120));
   ok("보험기간은 보험금에서 고치지 않는다 — 맨 위 산출 조건에 보이고(종신은 고정), M01 가입 조건에서 정한다",
@@ -151,25 +150,45 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     const a = lab.getBoundingClientRect(), c = box.getBoundingClientRect();
     return Math.abs((a.top + a.height / 2) - (c.top + c.height / 2)) < 6;
   }).filter((x) => x !== null));
-  ok("입력 칸은 이름과 칸이 한 줄 (자리가 모자랄 때만 두 줄 · 보장금액·면책·삭감 줄은 세 칸 나란히, 이름은 위)", fldRows.length >= 2 && fldRows.every(Boolean), `${fldRows.filter(Boolean).length}/${fldRows.length}`);
-  await p.click(".card[data-card=B01] .lx-from button:has-text('생존자 카드에서 보기')");
+  ok("입력 칸은 이름과 칸이 한 줄 (자리가 모자랄 때만 두 줄)", fldRows.length >= 2 && fldRows.every(Boolean), `${fldRows.filter(Boolean).length}/${fldRows.length}`);
+  await p.click(".card[data-card=B01] .lx-from button:has-text('유지자 카드에서 보기')");
   await p.waitForTimeout(600);
-  ok("[생존자 카드에서 보기] → S01 이 펼쳐지고 [납입] 생존자 lx(3) 식이 강조된다",
+  ok("[유지자 카드에서 보기] → S01 이 펼쳐지고 [납입] 유지자 lx(3) 표가 강조된다",
     (await p.locator(".card.card-open").getAttribute("data-card")) === "S01"
-    && (await p.$$eval(".doc-body .doc-hl", (e) => e.map((x) => x.textContent))).some((t) => t.includes("생존자수 lx(3)")));
+    && (await p.$$eval(".doc-body .doc-hl", (e) => e.map((x) => x.textContent))).some((t) => t.startsWith("(3) l(3)x")));
+
+  // 0-2b) 보장 카드 — 산출방법서 마. 보장 표: 보장마다 배수 · 면책 · 삭감기간 · 삭감 시 지급률
+  await p.click(".card[data-card=B02] .card-head");
+  await p.waitForTimeout(700);
+  const covHead = await p.$$eval(".card[data-card=B02] .cover-table thead th", (e) => e.map((x) => x.textContent.trim()));
+  const hlC = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
+  ok("B02 보장: 표 칸 = 산출방법서 마. 보장(구분 · 보장금액 배수 · 면책 · 삭감기간 · 삭감 시 지급률), 보장 둘 · 열면 보장 표와 PVB 식이 비친다",
+    covHead.join("|") === "구분|보장금액 배수|면책|삭감기간|삭감 시 지급률" && (await p.locator(".card[data-card=B02] .cover-table tbody tr").count()) === 2
+    && hlC.some((t) => t.startsWith("암 진단")) && (await p.$$eval(".doc-body .doc-hl", (els) => els.some((e) => e.textContent.includes("PVB")))), hlC.join(" / ").slice(0, 200));
+  ok("암 진단 행 — 0.5배 · 90일 면책 · 삭감 없음", (await p.inputValue(".card[data-card=B02] tbody tr >> nth=1 >> [aria-label='면책']")) === "90"
+    && (await p.inputValue(".card[data-card=B02] tbody tr >> nth=1 >> [aria-label='삭감기간']")) === "0" && (await p.locator(".card[data-card=B02] tbody tr >> nth=1 >> [aria-label='삭감 시 지급률']").isDisabled()));
+  const prem0 = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
+  await p.selectOption(".card[data-card=B02] tbody tr >> nth=1 >> [aria-label='삭감기간']", "730");     // 면책 90일 + 2년 50% 삭감을 함께
+  await p.waitForTimeout(900);
+  const covRow = await p.locator(".doc-body tr", { hasText: "암 진단" }).filter({ hasText: "2년" }).first().textContent().catch(() => "");
+  const prem1 = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
+  ok("면책과 삭감을 함께 — 문서 보장 표에 '90일 · 2년 · 50%' · 보험료가 내려간다", /90일2년50%/.test(covRow.replace(/\s+/g, "")) && prem1 !== prem0, `${covRow} · ${prem1.slice(0, 60)}`);
+  await p.selectOption(".card[data-card=B02] tbody tr >> nth=1 >> [aria-label='삭감기간']", "0");
+  await p.waitForTimeout(900);
+  ok("삭감을 없애면 처음 보험료로", (await p.textContent(".trial-bar")).replace(/\s+/g, " ") === prem0);
 
   // 0-3) 식을 고치면 산출방법서와 시산이 함께 바뀐다 → 되돌리기
   await p.click(".card[data-card=B01] .card-head");
   await p.waitForTimeout(600);
-  const docCancer = () => p.locator(".doc-body .formula", { hasText: "S_t" }).nth(1).textContent();
+  const docCancer = () => p.locator(".doc-body .formula", { hasText: "PVB" }).first().textContent();   // 마. 보장의 S_t · PVB
   const pvb2 = async () => (await p.textContent(".card[data-card=B01] .calc-panel .calc-table")).replace(/\s+/g, " ");
   const was = await pvb2();
   const docWas = await docCancer();                                            // 암 진단의 식 덩이 — 면책이 보장금액 배수 S 로 들어 있다
   await p.click(".card[data-card=B01] .fold-head >> nth=1");                   // 둘째 담보(암 진단)
   await p.waitForTimeout(500);
   const box2 = p.locator(".card[data-card=B01] .sub-open .formula-card").last();
-  ok("B01: 보험금마다 식 한 덩이(앞의 lx 를 가져와 S → C → M → PVB) · 면책이 식에 나타난다",
-    (await p.locator(".card[data-card=B01] .sub-open .formula-card").count()) === 1 && /3\s*\/\s*12/.test(docWas) && /M_/.test(docWas));
+  ok("B01: 보험금마다 식 한 덩이(앞의 lx 를 가져와 S → C → M → PVB) · 면책이 마. 보장의 S_t 에 나타난다",
+    (await p.locator(".card[data-card=B01] .sub-open .formula-card").count()) === 1 && /3\s*\/\s*12/.test(docWas) && /PVB/.test(docWas));
   await box2.locator("button:has-text('식 고치기')").click();
   const ta2 = box2.locator("textarea");
   await ta2.fill((await ta2.inputValue()).replace("if( t = 0, 1 − 3/12, 1 )", "1"));
@@ -200,8 +219,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(400);
   ok("M08 의 식: P_β · V · 해약공제 신계약비 · 해약공제 · W · 납입누계 · 환급률", (await p.locator(".card[data-card=M08] .formula-card").count()) === 7);
   const outline = await p.$$eval("#print-area h2, #print-area h3", (e) => e.map((x) => x.textContent));
-  ok("산출방법서가 v7 장 구성 — 1. 보험료(가. 기초율 · 나. 기호 · 다. 생존자 · 라. 보험금 · 마. 순보험료) · 2. 책임준비금 · 3. 해지환급금",
-    outline.join(" | ") === "개요 | 1. 보험료의 계산에 관한 사항 | 가. 예정기초율 | 나. 기호의 정의 | 다. 생존자 | 라. 보험금 | 마. 순보험료 및 영업보험료 | 2. 책임준비금의 계산에 관한 사항 | 3. 해지환급금의 계산에 관한 사항 | 4. 별첨 — 위험률 표",
+  ok("산출방법서가 v8 장 구성 — 1. 보험료(가. 기초율 · 나. 기호 · 다. 유지자 · 라. 보험금 · 마. 보장 · 바. 순보험료) · 2. 책임준비금 · 3. 해지환급금",
+    outline.join(" | ") === "개요 | 1. 보험료의 계산에 관한 사항 | 가. 예정기초율 | 나. 기호의 정의 | 다. 유지자 | 라. 보험금 | 마. 보장 | 바. 순보험료 및 영업보험료 | 2. 책임준비금의 계산에 관한 사항 | 3. 해지환급금의 계산에 관한 사항 | 4. 별첨 — 위험률 표",
     outline.join(" | "));
   await p.screenshot({ path: `${OUT}/s1b_cards.png` });
 
@@ -209,9 +228,9 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click("header button:has-text('보험료 계산')");
   await p.waitForSelector(".calc-modal .calc-grid");
   const cHead = await p.$$eval(".calc-modal thead tr:nth-child(2) th", (e) => e.map((x) => x.textContent.trim()));
-  ok("보험료 계산 표: 위험률 → 현가율 둘 → 생존자 lx(k)·Dx·Nx → 이 담보의 l·지급자수 → 현가·누계 → 보장금액 배수·급부 현가",
+  ok("보험료 계산 표: 위험률 → 현가율 둘 → 유지자 lx(k)·Dx·Nx → 이 담보의 l·지급자수 → 현가·누계 → 보장금액 배수·급부 현가",
     /사망률/.test(cHead[3]) && cHead.filter((t) => t.includes("현가율")).length === 2
-    && cHead.some((t) => t.includes("생존자수 lx(1)")) && cHead.some((t) => t.includes("생존자수 lx(3)")) && cHead.some((t) => t.includes("[납입]"))
+    && cHead.some((t) => t.includes("유지자수 lx(1)")) && cHead.some((t) => t.includes("유지자수 lx(3)")) && cHead.some((t) => t.includes("[납입]"))
     && cHead.some((t) => t.includes("지급자수")) && cHead.some((t) => t.includes("현가의 누계")) && cHead.some((t) => t.includes("책임준비금")) && cHead.some((t) => t.includes("환급률")), `${cHead.length}열 ${cHead.slice(0, 12).join("|")}`);
   const inputs = (await p.textContent(".calc-modal .calc-left")).replace(/\s+/g, " ");
   ok("왼쪽에 계약·기초율 — 가입나이·가입금액·보장기간·납입기간·납입주기·이율·현가율·배수·보장금액·사업비",
@@ -222,10 +241,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     nRow === 72 && /N\*/.test(sums) && sums.includes("261") && sums.includes("261,000 원"), `${nRow}줄 · ${sums.slice(0, 80)}`);
   ok("보험료 합계 — 이 앱이 독자적으로 낸 값", (await p.textContent(".calc-total")).replace(/\s+/g, " ").includes("342,000 원"));
   ok("표 옆 보험료: G₁(6자리) · 10만원당 · P_β · 표준기초율·해약공제 신계약비까지", /G₁/.test(sums) && /P_?β/.test(sums) && /α/.test(sums) && sums.includes("준비금 산출용"), sums.slice(0, 160));
-  await p.click(".calc-modal th.calc-col:has-text('생존자수 lx(1)') >> nth=0");
+  await p.click(".calc-modal th.calc-col:has-text('유지자수 lx(1)') >> nth=0");
   await p.waitForTimeout(300);
   ok("열 제목을 누르면 그 열을 만든 식이 팝업으로", (await p.textContent(".calc-pop")).includes("l^{(1)}_{x+t+1} = l^{(1)}_{x+t}"), (await p.textContent(".calc-pop")).slice(0, 120));
-  await p.click(".calc-modal tbody tr:nth-child(2) td:nth-child(10)");         // 2줄 · 생존자수 lx(1) (위험률 열: 사망·장해·암 → 현가율 둘 → Q⁽¹⁾ → l⁽¹⁾)
+  await p.click(".calc-modal tbody tr:nth-child(2) td:nth-child(10)");         // 2줄 · 유지자수 lx(1) (위험률 열: 사망·장해·암 → 현가율 둘 → Q⁽¹⁾ → l⁽¹⁾)
   await p.waitForTimeout(300);
   const cell = (await p.textContent(".calc-pop")).replace(/\s+/g, " ");
   ok("값을 누르면 그 해에 쓰인 값까지 — l⁽¹⁾(41) = l⁽¹⁾(40) × (1 − Q⁽¹⁾(40))", cell.includes("1년 뒤 (41세)") && cell.includes("100,000"), cell.slice(0, 120));
@@ -238,7 +257,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForSelector(".py-modal .py-cell");
   const pyTitles = await p.$$eval(".py-modal .py-title", (e) => e.map((x) => x.textContent));
   const pyCode = await p.textContent(".py-modal .py-cell:nth-child(3) .py-code").catch(() => "");
-  ok("Python 일괄 산출: 계약·기초율 → 위험률 표 → 담보마다 조건/생존자/현가/보험료/준비금 → 합계 13셀, 식이 주석으로",
+  ok("Python 일괄 산출: 계약·기초율 → 위험률 표 → 담보마다 조건/유지자/현가/보험료/준비금 → 합계 13셀, 식이 주석으로",
     pyTitles.length === 13 && pyTitles[0] === "계약·기초율" && pyTitles[12] === "합계" && pyTitles.some((t) => t.includes("책임준비금·해지환급금")) && pyCode.includes("# 담보 하나를 독립된"), pyTitles.join(" | ").slice(0, 120));
   ok("Python 창에 [▶ 전부 실행] · [.py 내려받기]", (await p.locator(".py-modal button:has-text('전부 실행')").count()) === 1 && (await p.locator(".py-modal button:has-text('.py 내려받기')").count()) === 1);
   await p.click(".py-modal button:has-text('닫기')");
@@ -355,7 +374,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     await p.keyboard.press("Escape");
   };
   await replaceAll("적용이율 i & 2.500", "적용이율 i & 3.500");
-  await replaceAll("가입금액의 1배", "가입금액의 0.7배");
+  await replaceAll("사망 & 1 &", "사망 & 0.7 &");                         // v8 — 마. 보장 표의 배수 칸
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5a_latex_edited.png` });
   log.push("apply enabled: " + await p.locator("button.btn-primary:has-text('조건에 반영')").isEnabled());
@@ -365,7 +384,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const y2 = await p.$$eval(".cm-editor", (eds) => [...eds[0].querySelectorAll(".cm-line")].map((e) => e.textContent).join("\n"));
   ok("LaTeX 수정 → 조건 반영: 이율 3.5%", /interest: 3\.5%/.test(y2), toast);
   ok("LaTeX 수정 → 조건 반영: 배수 0.7배", /multiple: 0\.7/.test(y2));
-  ok("조건 파일 주석 유지", y2.includes("# 납입만 면제되는 추가 사유가 없으면"));
+  ok("조건 파일 주석 유지", y2.includes("# 납입만 면제되는 추가 사유"));
   await p.click("button.tab:has-text('산출방법서')");
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5_latex_applied.png` });
@@ -407,9 +426,9 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("카드를 열면 산출방법서의 그 항목이 강조된다", b01Hl.length >= 2, b01Hl.join(" / "));
   await p.click(".card[data-card=B01] button:has-text('＋ 진단형')");
   await p.waitForTimeout(700);
-  ok("＋ 진단형 → 보험금 카드에 하나 늘고 산출방법서 보험금 표·보험금 식도 늘어난다",
+  ok("＋ 진단형 → 보험금 카드에 하나 늘고 산출방법서 보험금 표·보장 표의 행도 늘어난다",
     (await p.locator(".card[data-card=B01] .sub").count()) >= 2 && (await p.locator(".doc-body tr", { hasText: "담보 2" }).count()) >= 1
-    && (await p.locator(".doc-body .doc-label", { hasText: "보험금 — 담보 2" }).count()) === 1);
+    && (await p.locator(".doc-body p", { hasText: "(2) 담보 2" }).count()) === 1);
   await p.click(".card[data-card=B01] .sub-open button[title^='이 담보를 복사']");
   await p.waitForTimeout(700);
   ok("담보 복사 → '담보 2 (복사)' 가 조건·산출방법서에 함께",
@@ -542,7 +561,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const heads2 = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent));
   ok("다른 샘플 세트로 바뀜(2대질병 + 그 위험률 표 — 뇌출혈·급성심근경색증 열)", (await p.textContent(".doc-body h1")).includes("2대질병") && heads2.some((h) => h.includes("뇌출혈")) && heads2.some((h) => h.includes("급성심근경색증")), heads2.join(","));
   const twoDoc = await p.textContent(".doc-body");
-  ok("2대질병: 담보 둘(뇌출혈 진단 · 급성심근경색증 진단) · 납입자수 F = 1 − (1 − r)(1 − f)", twoDoc.includes("뇌출혈 진단") && twoDoc.includes("급성심근경색증 진단") && twoDoc.includes("따로 생긴다고 보고 곱으로 결합한다") && twoDoc.includes("사망과는 겹치는 부분을 절반으로"));
+  ok("2대질병: 보험금 둘(뇌출혈 진단 · 급성심근경색증 진단) · [납입] 유지자는 질병끼리 곱(질병 발생률 R) · 사망과 결합 Q", twoDoc.includes("뇌출혈 진단") && twoDoc.includes("급성심근경색증 진단")
+    && twoDoc.includes("사망, 뇌출혈, 급성심근경색증 아닌 유지자") && twoDoc.includes("질병 발생률") && /Q.*min/.test(twoDoc));
   const srcCells = await p.$$eval(".doc-body table", (ts) => ts.filter((t) => [...t.querySelectorAll("th")].some((h) => h.textContent.includes("근거"))).flatMap((t) => [...t.querySelectorAll("tbody tr")].map((r) => r.children[3]?.textContent ?? "")));
   ok("산출방법서의 위험률 근거는 모두 경험생명표(가상)", srcCells.length >= 3 && srcCells.every((c) => c.startsWith("경험생명표(가상)")), srcCells.join(" / "));
   await p.click("summary:has-text('샘플')");
@@ -727,7 +747,14 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await q.setViewportSize({ width: 1500, height: 900 });
   ok("넓은 화면 — 알림 없음", !(await q.locator(".narrow-warn").isVisible()));
   const h1 = await q.textContent(".doc-body h1");
-  ok("공유 화면: 첫 화면은 종신보험(사망·80% 이상 장해) — 월 253,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("253,000"), h1);
+  ok("공유 화면: 첫 화면은 종신보험(사망 보장 · 유지자 둘) — 월 249,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("249,000"), h1);
+  await q.click("summary:has-text('내보내기')");
+  const expItems = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => [x.firstChild.textContent.trim(), x.disabled || !!x.closest("fieldset:disabled")]));
+  ok("공유 화면: 내보내기 = Word .docx · Word (작성 안내 없이) · 조건 .yaml 이 먼저, 나머지는 추가기능(개발중)으로 비활성",
+    JSON.stringify(expItems.slice(0, 3).map((x) => x[0])) === JSON.stringify(["Word .docx", "Word .docx (작성 안내 없이)", "조건 파일 .yaml"]) && expItems.slice(0, 3).every((x) => !x[1])
+    && expItems.length === 9 && expItems.slice(3).every((x) => x[1]) && (await q.textContent("details[open] .menu-list")).includes("추가기능 (개발중)"), JSON.stringify(expItems));
+  ok("[열기] 는 [불러오기]", (await q.locator("header > button.btn-primary", { hasText: /^불러오기$/ }).count()) === 1 && (await q.locator("header button", { hasText: /^열기$/ }).count()) === 0);
+  await q.keyboard.press("Escape");
   await q.click("summary:has-text('샘플')");
   const shared = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => x.textContent));
   const sets = shared.filter((t) => t.startsWith("종신보험") || t.startsWith("암보험") || t.startsWith("암진단") || t.startsWith("2대") || t.startsWith("입원") || t.startsWith("수술") || t.startsWith("보험료납입"));
@@ -742,10 +769,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await q.click(".card[data-card=B01] .card-head");                     // 보장 카드를 펼쳐야 담보 덩이가 그려진다
   await q.waitForTimeout(600);
   const docC = await q.textContent(".doc-body");
-  const payRow = (await q.locator(".doc-body tr", { hasText: "납입(N*)" }).allTextContents()).find((t) => t.includes("암입원특약")) ?? "";
-  ok("암보험: 암입원특약 탭 — 보험금 하나(암 입원) · 생존자(암X) 하나가 세 단위의 [납입] · 90일 면책", (await q.locator(".card[data-card=B01] .sub").count()) === 1
-    && docC.includes("생존자(암X)") && /주계약.*암입원특약.*암수술특약/.test(payRow) && (await q.locator(".doc-body tr", { hasText: "90일 면책" }).count()) === 3,
-    `보험금 ${await q.locator(".card[data-card=B01] .sub").count()} · 납입 ${payRow} · 90일 면책 행 ${await q.locator(".doc-body tr", { hasText: "90일 면책" }).count()}`);
+  const payRow = (await q.locator(".doc-body tr", { hasText: "납입:" }).allTextContents()).find((t) => t.includes("암입원특약")) ?? "";
+  const wait90 = await q.locator(".doc-body tr", { hasText: "90일" }).count();
+  ok("암보험: 암입원특약 탭 — 보험금 하나(암 입원) · 암 아닌 유지자 하나가 세 단위의 [납입](D′) · 보장 셋 모두 90일 면책", (await q.locator(".card[data-card=B01] .sub").count()) === 1
+    && docC.includes("암 아닌 유지자") && /주계약.*암입원특약.*암수술특약/.test(payRow) && wait90 === 3,
+    `보험금 ${await q.locator(".card[data-card=B01] .sub").count()} · 납입 ${payRow} · 90일 행 ${wait90}`);
   await q.screenshot({ path: `${OUT}/s14_shared_cancer.png` });
   await q.close();
 

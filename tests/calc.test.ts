@@ -97,7 +97,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(col("D′").values).toEqual(col("D^{(3)}").values);                                  // 납입(N*)은 [납입] 생존자
     expect(col("d").values[3]).toBeCloseTo(col("l").values[3] * col("Q^{(1)}").values[3], 9);
     expect(col("l^{(1)}").formula).toContain("l^{(1)}_{x+t+1} = l^{(1)}_{x+t}");
-    expect(col("l^{(1)}").label).toBe("생존자수 lx(1)");
+    expect(col("l^{(1)}").label).toBe("유지자수 lx(1)");
     expect(col("q").formula).toContain("위험률 표에서 온 값");
     // 줄마다 "이 값들로 나왔다" — l 은 앞자리 l 과 그 자리 Q 로
     expect(col("l^{(1)}").parts(1).map((p) => p.ref)).toEqual(["l^{(1)}(40)", "Q^{(1)}(40)"]);

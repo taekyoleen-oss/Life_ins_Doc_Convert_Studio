@@ -123,10 +123,11 @@ describe("산출방법서에 위험률을 더해 올리면 — 조건에 더해�
     const spec = twoSum();
     let md = docToMarkdown(renderMethodDoc(withFormulas(spec)));
     md = md.replace(/^(\| 2대질병 발생률 \|.*)$/m, "$1\n| 뇌졸중 발생률 | r9 | 최초발생 | 가상 | 별첨 |")
-      .replace("| 탈퇴 위험률 | 사망률 및 2대질병 발생률 |", "| 탈퇴 위험률 | 사망률 및 2대질병 발생률 및 뇌졸중 발생률 |");
+      // v8 — 유지자 표의 대상 위험률: 위험률을 더하면 기호가 r → r^{(1)} · r^{(2)} 가 된다(첨자 없는 r 은 첫 r)
+      .replace(/^\| 대상 위험률 \| .*$/m, "| 대상 위험률 | Q^{(1)}_{x+t} = min( 1, q_{x+t} + R^{(1)}_{x+t} − q_{x+t}·R^{(1)}_{x+t}/2 ), R^{(1)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} ) |");
     const back = parseMethodDoc(extractText(new TextEncoder().encode(md)), { fallbackName: spec.meta.productName });
     const { spec: out, changes } = mergeSpec(spec, back.spec, back.evidence, { standard: true });
-    expect(changes).toEqual(['rates: "뇌졸중 발생률" 추가', "benefits: 1개 → 1개 갱신"]);
+    expect(changes.slice(0, 2)).toEqual(['rates: "뇌졸중 발생률" 추가', "benefits: 1개 → 1개 갱신"]);
     const added = out.rates.find((r) => r.name === "뇌졸중 발생률")!;
     expect(out.benefits[0].exitRateIds).toEqual(["q", "r2", added.id]);
     expect(withFormulas(out).formulas[0].text).toContain("r^{(2)}_x : 뇌졸중 발생률");

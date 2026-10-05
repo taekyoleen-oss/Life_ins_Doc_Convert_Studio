@@ -71,6 +71,7 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
     benefits: spec.benefits.map((x) => clean({
       id: x.id, name: x.name, unit: x.unit, role: x.role, trigger: x.trigger, multiple: x.multiple, amount: x.amount, endAge: x.endAge,
       waitDays: x.waitDays, waitPayRatio: x.waitPayRatio !== undefined ? pct(x.waitPayRatio) : undefined,
+      reduceDays: x.reduceDays, reduceRatio: x.reduceRatio !== undefined ? pct(x.reduceRatio) : undefined,
       survivorId: x.survivorId, rateId: x.rateId, exitRateIds: x.exitRateIds, steps: x.steps, points: x.points,
     })),
     units: spec.units.length > 1 ? spec.units : undefined,
@@ -193,8 +194,9 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
     const ben: BenefitSpec = { id: str(x.id) ?? `b${i + 1}`, name: str(x.name) ?? `담보 ${i + 1}`, role: role === "waiver" || role === "lapse" ? "other" : role };
     if (str(x.unit)) ben.unit = str(x.unit);
     if (str(x.trigger)) ben.trigger = str(x.trigger);
-    for (const k of ["multiple", "amount", "endAge", "waitDays"] as const) { const v = num(x[k]); if (v !== undefined) ben[k] = v; }
+    for (const k of ["multiple", "amount", "endAge", "waitDays", "reduceDays"] as const) { const v = num(x[k]); if (v !== undefined) ben[k] = v; }
     { const v = rateOf(x.waitPayRatio); if (v !== undefined) ben.waitPayRatio = v; }
+    { const v = rateOf(x.reduceRatio); if (v !== undefined) ben.reduceRatio = v; }
     if (str(x.rateId)) ben.rateId = str(x.rateId);
     const ids = arr(x.exitRateIds).map(str).filter((s): s is string => !!s);
     if (ids.length) ben.exitRateIds = ids;
@@ -355,7 +357,7 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
       if (!ben.unit && prev?.unit) ben.unit = prev.unit;
       return JSON.parse(JSON.stringify(ben)) as BenefitSpec;     // undefined 칸을 지워 비교·저장이 깔끔하게
     });
-    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.multiple, b.amount, b.endAge, b.waitDays, b.waitPayRatio, b.trigger, b.survivorId, b.rateId, b.exitRateIds, b.steps, b.points]));
+    const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.multiple, b.amount, b.endAge, b.waitDays, b.waitPayRatio, b.reduceDays, b.reduceRatio, b.trigger, b.survivorId, b.rateId, b.exitRateIds, b.steps, b.points]));
     if (view(out.benefits) !== view(next)) { changes.push(`benefits: ${out.benefits.length}개 → ${next.length}개 갱신`); out.benefits = next; }
   }
   if (took.has("survivors")) {

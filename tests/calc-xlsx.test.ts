@@ -54,14 +54,14 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(colsOf(sheet1, 2).map(([, t]) => t).slice(0, 8)).toEqual(["t (경과)", "연령 x+t", "사망률", "80% 이상 장해율", "암발생률", "v^t 현가율", "v^{t+½} 현가율", "Q^{(1)} 결합 탈퇴율 lx(1)"]);
   });
 
-  it("표 — 위험률(공통 열)만 값이고 현가율·생존자 lx·기수·준비금·환급금은 모두 수식, 담보 둘이 한 장에", () => {
+  it("표 — 위험률(공통 열)만 값이고 현가율·유지자 lx·기수·준비금·환급금은 모두 수식, 담보 둘이 한 장에", () => {
     expect(cell(sheet1, "D2")?.s).toBe("t (경과)");
     expect(cell(sheet1, "D3")).toEqual({ v: 0 });
     expect(cell(sheet1, "E3")).toEqual({ f: "x_age+D3" });
     expect(cell(sheet1, "F4")).toEqual({ v: 0.00094 });                     // 사망률 41세 — 값
     expect(cell(sheet1, "I3")).toEqual({ f: "v_disc^(D3)" });
     expect(cell(sheet1, "J3")).toEqual({ f: "v_disc^(D3+0.5)" });
-    expect(cell(sheet1, "K1")?.s).toContain("담보 1: 사망·80% 이상 장해 (생존자 lx(1)");
+    expect(cell(sheet1, "K1")?.s).toContain("담보 1: 사망·80% 이상 장해 (대상자수 lx(1)");
     const Q1 = colOf("Q^{(1)} "), l1 = colOf("l^{(1)} "), D1 = colOf("D^{(1)} "), N1 = colOf("N^{(1)} ");
     const l = colOf("l "), d = colOf("d "), D = colOf("D "), N = colOf("N "), M = colOf("M "), V = colOf("V "), V100k = colOf("V^{10만}"), W = colOf("W "), R = colOf("환급률");
     expect(cell(sheet1, `${Q1}3`)?.f).toBe("MIN(1,((F3+G3)-((F3*G3)/2)))");    // Q⁽¹⁾ = min(1, q + r − q·r/2)
@@ -69,12 +69,12 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, `${l1}4`)).toEqual({ f: `(${l1}3*(1-${Q1}3))` });  // l⁽¹⁾_{x+t+1} = l⁽¹⁾_{x+t} × (1 − Q⁽¹⁾_{x+t})
     expect(cell(sheet1, `${D1}3`)).toEqual({ f: `(${l1}3*I3)` });          // D⁽¹⁾ = l⁽¹⁾·v^t
     expect(cell(sheet1, `${N1}3`)?.f).toBe(`SUM(${D1}3:${D1}74)`);         // N⁽¹⁾ = Σ_{u≥t} D⁽¹⁾ (n = 71 → 3~74행)
-    // [납입] 생존자 lx(3) — 질병(장해 G · 암 H)을 곱으로 묶은 R⁽³⁾, 사망(F 열)과는 겹치는 부분 절반인 Q⁽³⁾
+    // [납입] 유지자 lx(3) — 질병(장해 G · 암 H)을 곱으로 묶은 R⁽³⁾, 사망(F 열)과는 겹치는 부분 절반인 Q⁽³⁾
     const R3 = colOf("R^{(3)} "), Q3 = colOf("Q^{(3)} "), l3 = colOf("l^{(3)} ");
     expect(cell(sheet1, `${R3}3`)?.f).toBe("(1-((1-G3)*(1-H3)))");
     expect(cell(sheet1, `${Q3}3`)?.f).toBe(`MIN(1,((F3+${R3}3)-((F3*${R3}3)/2)))`);
     expect(cell(sheet1, `${l3}4`)).toEqual({ f: `(${l3}3*(1-${Q3}3))` });
-    // 보험금은 앞의 생존자 lx 를 가져다 쓴다 — 이 담보의 l · D · N 은 lx(1) 의 칸
+    // 보험금은 앞의 유지자 lx 를 가져다 쓴다 — 이 담보의 l · D · N 은 lx(1) 의 칸
     expect(cell(sheet1, `${l}3`)).toEqual({ f: `${l1}3` });
     expect(cell(sheet1, `${D}3`)).toEqual({ f: `${D1}3` });
     expect(cell(sheet1, `${N}3`)).toEqual({ f: `${N1}3` });

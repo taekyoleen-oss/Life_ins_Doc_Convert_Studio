@@ -22,7 +22,7 @@ describe("조건 줄 → 산출방법서 블록", () => {
     const got = hl(lineOf(/^\s+interest:/));
     expect(got.some((t) => /^적용이율 i \| 2\.500%/.test(t))).toBe(true);
     expect(got.some((t) => /0\.97/.test(t))).toBe(false);
-    expect(got.some((t) => /D\^\{\(1\)\}_\{x\+t\}/.test(t))).toBe(true);     // 생존자의 현가 Dx
+    expect(got.some((t) => /D\^\{\(1\)\}_\{x\+t\}/.test(t))).toBe(true);     // 유지자 표의 현가누계 Dx
     expect(got.some((t) => /표준이율/.test(t))).toBe(false);
   });
   it("β_G 사업비 줄 → 사업비 표의 β_G 행만", () => {
@@ -34,17 +34,16 @@ describe("조건 줄 → 산출방법서 블록", () => {
     expect(got.filter((t) => /^계약|^수금/.test(t))).toHaveLength(6);
     expect(got.some((t) => /^G = \[/.test(t))).toBe(true);
   });
-  it("담보 안의 금액 줄 → 담보 표의 보장금액 행과 그 담보의 보험금의 현가 식만 (유지자수·납입자수 식은 아니다)", () => {
+  it("보장 안의 배수 줄 → 마. 보장 표의 그 행과 보험금의 현가(PVB) 식만 (유지자 표·보험금 표는 아니다)", () => {
     const got = hl(lineOf(/multiple: 1/));
-    expect(got.some((t) => /^보장금액 \| 가입금액의 1배/.test(t))).toBe(true);    // 담보마다 세로 표 — 보장금액은 가입금액의 배수
-    expect(got.some((t) => /^급부 유형 \|/.test(t))).toBe(false);                  // 표의 다른 행은 비추지 않는다
-    expect(got.some((t) => /PVB = M_x/.test(t))).toBe(true);
-    expect(got.some((t) => /l_\{x\+t\+1\} = l_\{x\+t\}|l′_\{x\+t\+1\}/.test(t))).toBe(false);
+    expect(got.some((t) => /^사망 \| 1 \| 없음/.test(t))).toBe(true);           // 보장마다 한 행 — 구분 · 배수 · 면책 · 삭감
+    expect(got.some((t) => /PVB = Σ/.test(t))).toBe(true);
+    expect(got.some((t) => /^(대상자수|대상 위험률|계산기수) \|/.test(t))).toBe(false);
   });
-  it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 담보식", () => {
+  it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 유지자 표", () => {
     const got = hl(lineOf(/id: r80/));
     expect(got.some((t) => /^80% 이상 장해율 \| r80 \| 최초발생/.test(t))).toBe(true);
-    expect(got.some((t) => /r_x : 80% 이상 장해율/.test(t))).toBe(true);
+    expect(got.some((t) => /Q\^\{\(1\)\}_\{x\+t\} = min\( 1, q_\{x\+t\} \+ r_\{x\+t\}/.test(t))).toBe(true);
   });
 });
 
