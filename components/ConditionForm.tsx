@@ -5,7 +5,7 @@ import { isMap, isScalar, parseDocument } from "yaml";
 import { pathKey, pct, type YamlEdit, type YamlPath } from "@/lib/conditions/yaml";
 import { matchBlocks, splitPaths, under } from "@/lib/conditions/link";
 import { parseRate, parseTimes } from "@/lib/methoddoc/parse";
-import { amountLabel, benefitModels, comboModels, combosOf, daysLabel, eventCauses, eventRate, pvbLines, survivorModels, survivorsOf, waitLabel, withFormulas, type BenefitModel, type ComboModel, type SurvivorModel } from "@/lib/methoddoc/formulas";
+import { amountLabel, benefitModels, comboModels, combosOf, daysLabel, eventCauses, pvbLines, survivorModels, survivorsOf, waitLabel, withFormulas, type BenefitModel, type ComboModel, type SurvivorModel } from "@/lib/methoddoc/formulas";
 import { calcSheets, checkFormula, survivorTables, computeByPayMethod, computeSpec, PAY_METHODS, SUM_ASSURED_DEFAULT, type CalcContract, type CalcResult, type CalcSheets } from "@/lib/methoddoc/calc";
 import { subSup } from "@/lib/methoddoc/render";
 import { coverFields, coverTerms, endAgeLabel, MAIN_UNIT, RATE_ROLE_LABEL, unitNames, WHOLE_LIFE_AGE, type ComboSpec, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
@@ -53,8 +53,6 @@ interface Ctx {
   resetFormula(f: FormulaSpec): void;
   /** 기본 위험률 모음 창 — 위험률 더하기의 기본 */
   library?: () => void;
-  /** 담보의 결합 위험률(가공)을 위험률 표·조건에 넣고 그 담보에 잇는다 */
-  combine?: (benefitIdx: number) => void;
 }
 const FormCtx = createContext<Ctx | null>(null);
 const useForm = () => useContext(FormCtx)!;
@@ -73,9 +71,9 @@ export const krw = (won?: number) => {
   return `${eok ? `${eok}억` : ""}${man ? `${eok ? " " : ""}${man.toLocaleString("ko-KR")}만` : ""} 원`;
 };
 const BEN_ROLES: [string, string, string][] = [
-  ["incidence", "진단형 (최초발생)", "발생 시 정액 지급 후 그 담보 소멸 — 2대질병·3대질병·암 등. 급부 위험률 = 탈퇴 사유 가운데 사망이 아닌 것"],
+  ["incidence", "진단형 (최초발생)", "발생 시 정액 지급 후 그 담보 소멸 — 2대질병·3대질병·암 등. 대상 위험률 = 탈퇴 사유 가운데 사망이 아닌 것"],
   ["death", "사망형", "사망 시 지급(종신·정기). 탈퇴 사유 전부에 같은 보험금"],
-  ["recurring", "일당형 (반복지급)", "입원 1일당 지급. 급부 위험률 자리에 연간 기대 입원일수"],
+  ["recurring", "일당형 (반복지급)", "입원 1일당 지급. 대상 위험률 자리에 연간 기대 입원일수"],
   ["other", "기타·생존형", "생존 시 지급(축하금·만기환급금) 등 — 지급 시점을 적는다"],
 ];
 /** 보장금액 배수(가입금액 대비) · 면책·삭감 기간(일) · 면책·삭감 기간 중 지급 비율 — 실무 산출방법서의 흔한 값 */
@@ -514,7 +512,7 @@ interface ComboOps {
 
 /**
  * C01 위험률 합성 — 산출방법서 "나. 기호의 정의" 아래 위험률 합성 표와 같다: 합성마다 기호(Q^{(j)} · R^{(j)}) · 이름 · 묶는 위험률.
- * 질병끼리는 곱, 사망과는 겹치는 부분 절반. 유지자의 대상 위험률 · 보험금의 급부 위험률이 이 합성을 콤보로 가져다 쓴다.
+ * 질병끼리는 곱, 사망과는 겹치는 부분 절반. 유지자의 대상 위험률 · 보험금의 대상 위험률이 이 합성을 콤보로 가져다 쓴다.
  * 위험률을 바꾸면 그 합성을 쓰는 유지자도 함께 바뀐다.
  */
 function CombosBody({ combos, rates, users, ops }: { combos: ComboModel[]; rates: RateItem[]; users: (c: ComboModel) => string[]; ops: ComboOps }) {
@@ -542,7 +540,7 @@ function CombosBody({ combos, rates, users, ops }: { combos: ComboModel[]; rates
               ))}
             </div>
             <div className="ml-1 font-mono text-[11.5px] leading-5 text-[#475569]">{c.rows.map((r) => <div key={r.sym} dangerouslySetInnerHTML={{ __html: subSup(r.line) }} />)}</div>
-            <p className="fld-hint">{ids.length < 2 ? "위험률을 둘 이상 고르세요" : who.length ? `${who.join(" · ")} 이(가) 쓴다` : "쓰는 곳 없음 — 유지자의 대상 위험률이나 보험금의 급부 위험률에서 고르세요"}</p>
+            <p className="fld-hint">{ids.length < 2 ? "위험률을 둘 이상 고르세요" : who.length ? `${who.join(" · ")} 이(가) 쓴다` : "쓰는 곳 없음 — 유지자의 대상 위험률이나 보험금의 대상 위험률에서 고르세요"}</p>
           </div>
         );
       })}
@@ -621,7 +619,7 @@ function SurvivorsBody({ survs, names, unit, rates, combos, spec, formulas, show
   );
 }
 
-/** B01 보험금 — 보험금마다 대상자수(유지자 lx 콤보) + 급부 위험률(콤보) → 지급자수 d · Cx · Mx. 배수·면책·삭감은 B02 보장 */
+/** B01 보험금 — 보험금마다 대상자수(유지자 lx 콤보) + 대상 위험률(M04 위험률 · C01 합성 콤보) → 지급자수 d · Cx · Mx. 배수·면책·삭감은 B02 보장 */
 function BenefitsBody({ bens, idxs, rates, combos, keepCombos, survs, spec, addBen, models, formulas, show, onSurv, onBenSurvivor, sheets, sumAssured }: {
   bens: Obj[]; idxs: number[]; rates: RateItem[]; combos: ComboModel[]; keepCombos: () => YamlEdit[]; survs: SurvivorModel[]; spec: MethodSpec; addBen: (role: string) => void;
   models: BenefitModel[]; formulas: FormulaSpec[]; show: boolean; onSurv: (id: string) => void; onBenSurvivor: (i: number, sid: string) => void;
@@ -657,7 +655,7 @@ function BenefitsBody({ bens, idxs, rates, combos, keepCombos, survs, spec, addB
               <button type="button" className="card-icon" onClick={() => copy(i)} title="이 담보를 복사해 새 담보로">복사</button>
               <Remove title="담보 삭제" onClick={() => { if (window.confirm(`담보 "${str(x.name)}" 를 지울까요?`)) f.edit([{ path: ["benefits", i] }]); }} />
             </>}>
-            <BenefitBody i={i} rates={rates} combos={combos} keepCombos={keepCombos} survs={survs} mine={g} spec={spec} onSurv={onSurv} onBenSurvivor={onBenSurvivor} />
+            <BenefitBody i={i} rates={rates} combos={combos} keepCombos={keepCombos} survs={survs} mine={g} spec={spec} onBenSurvivor={onBenSurvivor} />
             {(() => {
               const mo = models[i];
               if (!mo) return null;
@@ -702,7 +700,7 @@ function BenefitsBody({ bens, idxs, rates, combos, keepCombos, survs, spec, addB
   );
 }
 
-function BenefitBody({ i, rates, combos, keepCombos, survs, mine, spec, onSurv, onBenSurvivor }: { i: number; rates: RateItem[]; combos: ComboModel[]; keepCombos: () => YamlEdit[]; survs: SurvivorModel[]; mine?: SurvivorModel; spec: MethodSpec; onSurv: (id: string) => void; onBenSurvivor: (i: number, sid: string) => void }) {
+function BenefitBody({ i, rates, combos, keepCombos, survs, mine, spec, onBenSurvivor }: { i: number; rates: RateItem[]; combos: ComboModel[]; keepCombos: () => YamlEdit[]; survs: SurvivorModel[]; mine?: SurvivorModel; spec: MethodSpec; onBenSurvivor: (i: number, sid: string) => void }) {
   const f = useForm();
   const base: YamlPath = ["benefits", i];
   const at = (k: string | number, ...rest: (string | number)[]): YamlPath => [...base, k, ...rest];
@@ -710,8 +708,10 @@ function BenefitBody({ i, rates, combos, keepCombos, survs, mine, spec, onSurv, 
   const points = list(f.get(at("points")));
   const end = num(f.get(at("endAge"))) ?? 80;
   const s = spec.benefits[i];
-  const ev = s ? eventRate(spec, s) : undefined;
-  const models0 = s ? benefitModels(spec)[i] : undefined;
+  // 대상 위험률 — 따로 고른 것(rateId)이 없으면 저절로 쓰이는 것: 사망형은 대상자수 유지자의 대상 위험률, 그 밖은 그 탈퇴 사유(질병)
+  const auto = s ? benefitModels({ ...spec, benefits: spec.benefits.map((x, j) => (j === i ? { ...x, rateId: undefined } : x)) })[i] : undefined;
+  const autoId = auto?.event?.rate.id ?? auto?.combo?.combo.id ?? (role === "death" ? auto?.survivor.combo?.combo.id ?? (auto?.survivor.exits.length === 1 ? auto.survivor.exits[0].id : "") : "") ?? "";
+  const pick = s?.rateId ?? autoId, pickCombo = combos.some((c) => c.id === pick);
   return (
     <div className="space-y-3">
       <Grid>
@@ -724,32 +724,25 @@ function BenefitBody({ i, rates, combos, keepCombos, survs, mine, spec, onSurv, 
           <span className="ben-term" title="M01 상품 기본정보의 가입 조건(보험기간)에서 바꿉니다">{endAgeLabel(end)} <small>· M01 가입 조건</small></span>
         </p>
       </Grid>
-      {/* 대상자수 · 급부 위험률 — 앞의 유지자 카드에서 산출한 lx 와 위험률 표의 열을 고른다. 보장금액 배수·면책·삭감은 B02 보장 */}
+      {/* 대상자수 · 대상 위험률 — 앞 카드에서 정한 것만 고른다: 유지자(S01)의 lx · 위험률(M04) · 위험률 합성(C01). 보장금액 배수·면책·삭감은 B02 보장 */}
       <div className="ben-grid">
         <label data-path={`benefits[${i}].survivorId`} className="fld">
-          <span className="fld-label">대상자수 (유지자 lx)</span>
+          <span className="fld-label">대상자수</span>
           <select className="inp fld-box" value={mine?.id ?? ""} aria-label="대상자수" onFocus={() => f.select([`benefits[${i}].survivorId`, ...(mine ? [`formula:surv.${mine.id}`] : [])])}
             onChange={(e) => onBenSurvivor(i, e.target.value)}>
             {!mine && <option value="">—</option>}
             {survs.map((x) => <option key={x.id} value={x.id}>lx({x.k}) {x.label}</option>)}
           </select>
-          {mine && <span className="fld-hint">탈퇴: {mine.exits.map((r) => r.name).join(" · ") || "없음"} <button type="button" className="pane-tool" onClick={() => onSurv(mine.id)}>유지자 카드에서 보기</button></span>}
         </label>
-        <span data-path={`benefits[${i}].rateId`} className="min-w-0">
-          {/* 급부 위험률 — M04 위험률 또는 C01 위험률 합성. 비우면 대상자수 유지자의 대상 위험률(사망형) · 탈퇴 사유의 질병(진단형) */}
-          <Sel p={at("rateId")} label="급부 위험률" onPick={(v) => [...(String(v).length && combos.some((c) => c.id === v) ? keepCombos() : []), { path: at("rateId"), value: v === "" ? undefined : v }]}
-            options={[["", role === "death"
-            ? `대상 위험률 그대로 — ${mine?.combo ? `${comboName(mine.combo.combo)}` : mine?.exits[0]?.name ?? "없음"}`
-            : `탈퇴 사유에서 — ${(ev?.name ?? (!s?.rateId && models0?.combo ? comboName(models0.combo.combo) : s ? eventCauses(spec, s).map((r) => r.name).join(" · ") : "")) || "없음"}`] as [string, string],
-            ...rates.filter((r) => r.role !== "lapse").map((r): [string, string] => [r.id, `${r.name} (${RATE_ROLE_LABEL[r.role]})`]),
-            ...combos.map((c): [string, string] => [c.id, `${comboName(c)} (위험률 합성)`])]}
-            hint={role === "recurring" ? "일당형 — 연간 기대 입원일수" : "M04 위험률 또는 C01 위험률 합성 — 탈퇴 사유와 다른 위험률로 지급할 때(예: 암수술률) 고릅니다"} />
-        </span>
-        <span className="min-w-0">
-          {((role === "death" && (mine?.exits.length ?? 0) > 1 && !s?.rateId) || (role !== "death" && !s?.rateId && s && eventCauses(spec, s).length > 1)) && (
-            <button type="button" className="pane-tool mt-5" title="결합한 위험률(가공)을 연령마다 계산해 위험률 표에 열로 넣고, 조건(M04)에 위험률로 더해 이 담보에 잇습니다" onClick={() => f.combine?.(i)}>결합 위험률을 위험률 표에 넣기</button>
-          )}
-        </span>
+        <label data-path={`benefits[${i}].rateId`} className="fld">
+          <span className="fld-label">대상 위험률</span>
+          <select className="inp fld-box" value={pick} aria-label="대상 위험률" onFocus={() => f.select([`benefits[${i}].rateId`, ...(pickCombo ? [`combo:${pick}`] : pick ? [`rate:${pick}`] : [])])}
+            onChange={(e) => { const v = e.target.value; f.edit([...(combos.some((c) => c.id === v) ? keepCombos() : []), { path: at("rateId"), value: !v || v === autoId ? undefined : v }]); }}>
+            {!pick && <option value="">—</option>}
+            <optgroup label="위험률 (M04)">{rates.filter((r) => r.role !== "lapse").map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</optgroup>
+            {combos.length > 0 && <optgroup label="위험률 합성 (C01)">{combos.map((c) => <option key={c.id} value={c.id}>{comboName(c)}</option>)}</optgroup>}
+          </select>
+        </label>
       </div>
       {role === "other" && (
         <div data-path={`benefits[${i}].points`} className="border-t border-border pt-2">
@@ -774,7 +767,7 @@ function BenefitBody({ i, rates, combos, keepCombos, survs, mine, spec, onSurv, 
  * 면책(지급 0)과 삭감(계약일부터, 지급률)을 함께 둘 수 있다.
  */
 function CoverBody({ idxs, spec, models, show, addBen, sumAssured, onBenefits }: { idxs: number[]; spec: MethodSpec; models: BenefitModel[]; show: boolean; addBen: () => void; sumAssured: number;
-  /** B01 보험금 카드를 펼친다 — 더한 보장의 대상자수·급부 위험률을 거기서 확인한다 */ onBenefits: () => void }) {
+  /** B01 보험금 카드를 펼친다 — 더한 보장의 대상자수·대상 위험률을 거기서 확인한다 */ onBenefits: () => void }) {
   const f = useForm();
   const [added, setAdded] = useState(false);
   const set = (i: number, c: { wait?: number; reduce?: number; ratio?: number }) => {
@@ -819,7 +812,7 @@ function CoverBody({ idxs, spec, models, show, addBen, sumAssured, onBenefits }:
       </div>
       {added && (
         <p className="cover-added rounded px-2 py-1.5 text-xs">
-          보장을 더했습니다. 새 보장의 <b>대상자수(유지자 lx) · 급부 유형 · 급부 위험률</b>은 앞의 B01 보험금 카드에서 확인하세요.
+          보장을 더했습니다. 새 보장의 <b>대상자수(유지자 lx) · 급부 유형 · 대상 위험률</b>은 앞의 B01 보험금 카드에서 확인하세요.
           <button type="button" className="pane-tool ml-1" onClick={onBenefits}>보험금 카드에서 보기</button>
         </p>
       )}
@@ -1026,7 +1019,7 @@ function CalcPanel({ calc, ids, kind, onSheet, benefitRate }: { calc: CalcResult
       {calc.missingRates.length > 0 && <p className="mt-1 text-[11.5px] text-amber-700">값 표가 없어 0 으로 둔 위험률: {calc.missingRates.join(", ")} — [위험률 표] 에서 열을 이으세요</p>}
       {kind === "benefit" && (
         <table className="calc-table mt-1.5">
-          <thead><tr><th>담보</th><th className="txt">대상자수</th><th className="txt">급부 위험률</th><th>보험기간 n</th><th>보험금 현가 PVB</th></tr></thead>
+          <thead><tr><th>담보</th><th className="txt">대상자수</th><th className="txt">대상 위험률</th><th>보험기간 n</th><th>보험금 현가 PVB</th></tr></thead>
           <tbody>
             {rows.map((b) => (
               <tr key={b.id}><td>{b.name}{b.error && <span className="fld-err"> — {b.error}</span>}</td><td>{b.group}</td><td>{benefitRate?.(b.id) ?? "—"}</td><td className="num">{b.n}년</td><td className="num">{won0(b.pvb)}</td></tr>
@@ -1090,13 +1083,11 @@ interface Props {
   /** 스프레드시트에서 위험률 불러오기 · 위험률 가공 창 */
   onRateImport: () => void;
   onRateProcess: () => void;
-  /** 담보의 결합 위험률(사망형 Q · 여러 질병 R)을 위험률 표에 넣고 잇는다 */
-  onCombineRate: (benefitIdx: number) => void;
   /** 카드 머리 [산출방법서] — 산출방법서 탭을 열고 그 경로를 비춰 그 자리로 옮긴다 */
   onShowDoc: (paths: string[]) => void;
 }
 
-export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml, calc: calcOn, setCalc: setCalcOn, formulasOn, toggleFormulas, onPremiumSheet, rateSources, rateSourceOf, onRateSource, onRateImport, onRateProcess, onCombineRate, onShowDoc }: Props) {
+export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml, calc: calcOn, setCalc: setCalcOn, formulasOn, toggleFormulas, onPremiumSheet, rateSources, rateSourceOf, onRateSource, onRateImport, onRateProcess, onShowDoc }: Props) {
   const { doc, syntax, raw } = useMemo(() => {
     const doc = parseDocument(yaml);
     const syntax = doc.errors[0] ?? (doc.contents !== null && !isMap(doc.contents)
@@ -1140,7 +1131,6 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     },
     resetFormula: (f) => { const i = formulaAt(f); if (i >= 0) onEdit([{ path: ["formulas", i] }]); },
     library: onLibrary,
-    combine: onCombineRate,
   };
 
   const m = (raw.meta ?? {}) as Obj;
@@ -1219,7 +1209,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     },
     remove: (id) => {
       const c = combos.find((x) => x.id === id), who = c ? comboUsers(c) : [];
-      if (who.length) { window.alert(`이 위험률 합성을 쓰는 곳이 있어 지울 수 없습니다 — ${who.join(", ")}. 유지자의 대상 위험률·보험금의 급부 위험률을 바꾼 뒤 지우세요.`); return; }
+      if (who.length) { window.alert(`이 위험률 합성을 쓰는 곳이 있어 지울 수 없습니다 — ${who.join(", ")}. 유지자의 대상 위험률·보험금의 대상 위험률을 바꾼 뒤 지우세요.`); return; }
       onEdit([comboYaml(comboRows().filter((x) => x.id !== id))]);
     },
   };
@@ -1277,7 +1267,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     { id: "C01", code: "C01", title: "위험률 합성 — Q · R", paths: combos.length ? combos.map((c) => `combo:${c.id}`) : ["combos"], owns: ["combos"],
       status: !combos.length ? "optional" : combos.every((c) => c.rates.length > 1) ? "done" : "editing",
       summary: [...combos.slice(0, 3).map(comboName), combos.length > 3 ? `외 ${combos.length - 3}` : "", combos.length ? "" : "없음"],
-      help: "산출방법서 나. 기호의 정의 아래 위험률 합성 표입니다. 여러 위험률을 한 기호(사망이 들면 Q, 질병끼리는 R)로 묶고 이름을 붙입니다 — 질병끼리는 곱, 사망과는 겹치는 부분 절반으로 결합합니다. 유지자의 대상 위험률과 보험금의 급부 위험률은 M04 위험률이나 여기서 만든 합성을 콤보로 골라 씁니다.",
+      help: "산출방법서 나. 기호의 정의 아래 위험률 합성 표입니다. 여러 위험률을 한 기호(사망이 들면 Q, 질병끼리는 R)로 묶고 이름을 붙입니다 — 질병끼리는 곱, 사망과는 겹치는 부분 절반으로 결합합니다. 유지자의 대상 위험률과 보험금의 대상 위험률은 M04 위험률이나 여기서 만든 합성을 콤보로 골라 씁니다.",
       body: <CombosBody combos={combos} rates={rates} users={comboUsers} ops={comboOps} /> },
     { id: "S01", code: "S01", title: "유지자 — lx · Dx · Nx", paths: unitSurvs.length ? unitSurvs.map((x) => `formula:surv.${x.id}`) : ["formula:surv"], owns: ["survivors"], formulas: true,
       status: unitSurvs.length ? "done" : "editing",
@@ -1289,7 +1279,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       status: status(benErr, unitBens.length > 0 && unitBens.every((x) => x.multiple !== undefined || x.amount !== undefined)), message: benErr,
       summary: [`보험금 ${unitBens.length}개`, ...unitBens.slice(0, 2).map((x) => `${x.name} ${x.multiple !== undefined ? `${x.multiple}배` : krw(x.amount)}`),
         unitBens.some((x) => x.waitDays) ? "면책·삭감 있음" : "", editChip(edited(/^(benefit|pv:H$)/))],
-      help: "산출방법서 라. 보험금입니다. 보험금마다 대상자수(앞 유지자 카드의 lx 를 콤보로)와 급부 위험률(M04 위험률 · C01 위험률 합성을 콤보로 — 비우면 대상자수 유지자의 대상 위험률)을 고르면 지급자수 d = 대상자수 × 급부 위험률, 급부 발생자의 현가 Cx 와 누계 Mx 가 나옵니다. 보장금액 배수·면책·삭감은 다음 B02 보장 카드에서 한꺼번에 정합니다. 보험기간은 M01 가입 조건에서 정합니다.",
+      help: "산출방법서 라. 보험금입니다. 보험금마다 대상자수(S01 유지자의 lx)와 대상 위험률(M04 위험률 · C01 위험률 합성)을 콤보로 고르면 지급자수 d = 대상자수 × 대상 위험률, 급부 발생자의 현가 Cx 와 누계 Mx 가 나옵니다. 보장금액 배수·면책·삭감은 다음 B02 보장 카드에서 한꺼번에 정합니다. 보험기간은 M01 가입 조건에서 정합니다.",
       body: <><BenefitsBody bens={bens} idxs={unitIdxs} rates={rates} combos={combos} keepCombos={keepCombos} survs={survs} spec={sp} addBen={(role) => addBen(role)} sumAssured={sumAssured}
           models={benefitModels(sp)} formulas={full.formulas} show={formulasOn.includes("B01")} onSurv={onSurvCard} onBenSurvivor={onBenSurvivor} sheets={sheets} />
         <Formulas items={byKey(/^pv:H$/)} show={formulasOn.includes("B01")} />

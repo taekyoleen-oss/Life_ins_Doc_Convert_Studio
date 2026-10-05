@@ -73,7 +73,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("산출방법서 표의 머리(1행)는 가운데 정렬", (await p.$$eval(".doc-body th", (els) => els.every((e) => getComputedStyle(e).textAlign === "center"))));
   await p.fill(".card[data-card=C01] input[aria-label='위험률 합성 (1) 이름']", "사망·장해 탈퇴율");
   await p.waitForTimeout(700);
-  ok("합성에 이름을 붙이면 산출방법서 위험률 합성 표 · 보험금 급부 위험률 콤보에 그 이름", (await p.textContent(".doc-body")).includes("사망·장해 탈퇴율"));
+  ok("합성에 이름을 붙이면 산출방법서 위험률 합성 표 · 보험금 대상 위험률 콤보에 그 이름", (await p.textContent(".doc-body")).includes("사망·장해 탈퇴율"));
   await p.fill(".card[data-card=C01] input[aria-label='위험률 합성 (1) 이름']", "");
   await p.waitForTimeout(500);
   // 유지자 카드 — 산출방법서 다. 유지자와 같다: lx(k) 마다 대상 위험률 → lx · Dx · Nx, 보험료 납입기수(N*)에 쓰는 유지자에 [납입](문서의 D′)
@@ -143,21 +143,22 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위 칸도 없다(탭에서) · 증액·감액 구간도 없다 · 배수·면책은 B02 로",
     (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0
     && (await p.locator(".card[data-card=B01] [data-path$='.multiple']").count()) === 0);
-  // 급부 위험률은 위험률 표의 열을 고르는 콤보 — 비우면 사망형은 탈퇴 사유 전부의 결합 Q
+  // 대상 위험률 — 앞 카드에서 정한 위험률(M04)과 위험률 합성(C01)만 고른다. 사망형 첫 보험금은 대상자수 lx(1) 의 Q(1)
   const rateOpts = await p.$$eval(".card[data-card=B01] .sub-open [data-path$='.rateId'] select option", (o) => o.map((x) => x.textContent));
+  const ratePick = await p.$eval(".card[data-card=B01] .sub-open select[aria-label='대상 위험률']", (e) => e.selectedOptions[0]?.textContent ?? "");
   const b1 = (await p.textContent(".card[data-card=B01] .sub-open")).replace(/\s+/g, " ");
-  ok("B01 급부 위험률 콤보: 기본 = 대상 위험률 그대로(Q(1) 사망·80% 이상 장해 결합) + M04 위험률 + C01 위험률 합성 · [결합 위험률을 위험률 표에 넣기]",
-    rateOpts[0].includes("대상 위험률 그대로 — Q(1) 사망·80% 이상 장해 결합") && rateOpts.some((t) => t.startsWith("암발생률")) && rateOpts.some((t) => t.endsWith("(위험률 합성)")) && b1.includes("결합 위험률을 위험률 표에 넣기"), rateOpts.join(" / ").slice(0, 200));
+  ok("B01 대상 위험률 콤보: M04 위험률 셋 + C01 위험률 합성 셋만(다른 문구 없음) — 고른 것 Q(1) 사망·80% 이상 장해 결합 · 결합 위험률 넣기 단추 없음",
+    rateOpts.join("|") === "사망률|80% 이상 장해율|암발생률|Q(1) 사망·80% 이상 장해 결합|Q(2) 사망·암 결합|Q(3) 사망·80% 이상 장해·암 결합" && ratePick === "Q(1) 사망·80% 이상 장해 결합" && !b1.includes("결합 위험률을 위험률 표에 넣기"), `${rateOpts.join(" / ")} · ${ratePick}`);
   const benRes = (await p.textContent(".card[data-card=B01] .calc-panel .calc-table")).replace(/\s+/g, " ");
-  ok("B01 산출 결과: 대상자수 · 급부 위험률 열(Q(1) 사망·80% 이상 장해 결합)", benRes.includes("급부 위험률") && benRes.includes("Q(1) 사망·80% 이상 장해 결합"), benRes.slice(0, 160));
+  ok("B01 산출 결과: 대상자수 · 대상 위험률 열(Q(1) 사망·80% 이상 장해 결합)", benRes.includes("대상 위험률") && benRes.includes("Q(1) 사망·80% 이상 장해 결합"), benRes.slice(0, 160));
   ok("보험금 산출 결과(Cx · Mx)는 접혀 있다", (await p.locator(".card[data-card=B01] .sub-open details.calc-fold").count()) === 1 && (await p.locator(".card[data-card=B01] details.calc-fold[open]").count()) === 0);
   await p.click(".card[data-card=B01] .sub-open details.calc-fold summary");
   await p.waitForTimeout(300);
   const cmHead = await p.$$eval(".card[data-card=B01] details.calc-fold[open] thead th", (e) => e.map((x) => x.textContent.trim()));
   const cmRows = await p.locator(".card[data-card=B01] details.calc-fold[open] tbody tr").count();
   ok("펼치면 연령마다 Cx · Mx (종신 — 72줄)", cmHead.join("|") === "t|연령|Cx|Mx" && cmRows === 72, `${cmHead.join("|")} · ${cmRows}줄`);
-  ok("보험금 칸: 이름 · 급부 유형 · 보험기간(M01 에서) · 대상자수 · 급부 위험률",
-    ["급부 유형", "보험기간", "대상자수 (유지자 lx)", "급부 위험률"].every((t) => b1.includes(t))
+  ok("보험금 칸: 이름 · 급부 유형 · 보험기간(M01 에서) · 대상자수 · 대상 위험률",
+    ["급부 유형", "보험기간", "대상자수", "대상 위험률"].every((t) => b1.includes(t))
     && (await p.locator(".card[data-card=B01] .sub-open [data-path$='.endAge'] input").count()) === 0
     && (await p.textContent(".card[data-card=B01] .sub-open [data-path$='.endAge'] .ben-term")).includes("종신"), b1.slice(0, 120));
   ok("보험기간은 보험금에서 고치지 않는다 — 맨 위 산출 조건에 보이고(종신은 고정), M01 가입 조건에서 정한다",
