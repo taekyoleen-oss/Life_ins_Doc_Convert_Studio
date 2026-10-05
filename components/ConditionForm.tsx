@@ -504,10 +504,10 @@ type SurvivorRow = { id: string; name?: string; unit?: string; exitRateIds: stri
 const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "(": "⁽", ")": "⁾" };
 /** 기호를 콤보 글자로 — "r^{(1)}" → "r⁽¹⁾ₓ", "q" → "qₓ" (option 에는 첨자 태그를 쓸 수 없다) */
 const symText = (sym: string) => `${sym.replace(/\^\{([^}]*)\}/g, (_, x: string) => [...x].map((ch) => SUP[ch] ?? ch).join(""))}ₓ`;
-/** 위험률 표시 — "사망률(qₓ)" */
-const rateLabel = (spec: MethodSpec, r: { id: string; name: string }) => { const sym = rateSymbols(spec).get(r.id); return sym ? `${r.name}(${symText(sym)})` : r.name; };
-/** 합성 표시 — "사망·80% 이상 장해 결합(Q⁽¹⁾ₓ)" */
-const comboName = (c: ComboModel) => `${c.label}(${symText(c.sym)})`;
+/** 위험률 표시 — 기호 앞, 이름은 괄호: "qₓ(사망률)" */
+const rateLabel = (spec: MethodSpec, r: { id: string; name: string }) => { const sym = rateSymbols(spec).get(r.id); return sym ? `${symText(sym)}(${r.name})` : r.name; };
+/** 합성 표시 — "Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)" */
+const comboName = (c: ComboModel) => `${symText(c.sym)}(${c.label})`;
 
 interface ComboOps {
   rates: (id: string, ids: string[]) => void;
@@ -737,7 +737,7 @@ function BenefitBody({ i, rates, combos, keepCombos, survs, mine, spec, onBenSur
           <select className="inp fld-box" value={mine?.id ?? ""} aria-label="대상자수" onFocus={() => f.select([`benefits[${i}].survivorId`, ...(mine ? [`formula:surv.${mine.id}`] : [])])}
             onChange={(e) => onBenSurvivor(i, e.target.value)}>
             {!mine && <option value="">—</option>}
-            {survs.map((x) => <option key={x.id} value={x.id}>lx({x.k}) {x.label}</option>)}
+            {survs.map((x) => <option key={x.id} value={x.id}>lx({x.k})({x.label})</option>)}
           </select>
         </label>
         <label data-path={`benefits[${i}].rateId`} className="fld">

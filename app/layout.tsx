@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
-import { Fraunces, JetBrains_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
-const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"], weight: ["600", "700"] });
-const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
+// 글꼴은 모두 저장소에 둔다(OFL) — next/font/google 은 빌드 때 Google 에서 받아 오는데, Vercel 빌드에서 Google 이 준 새 주소 형식을
+// Turbopack 이 못 읽어 배포가 깨졌다(2026-10-05 "next/font/google queries have exactly one entry")
+const fraunces = localFont({ variable: "--font-fraunces", display: "swap", src: [
+  { path: "../public/fonts/fraunces-latin-600-normal.woff2", weight: "600" },
+  { path: "../public/fonts/fraunces-latin-700-normal.woff2", weight: "700" },
+] });
+const jetbrains = localFont({ src: "../public/fonts/jetbrains-mono-latin-wght-normal.woff2", variable: "--font-jetbrains", weight: "100 800", display: "swap" });
 const pretendard = localFont({ src: "../public/fonts/PretendardVariable.woff2", variable: "--font-pretendard", weight: "45 920", display: "swap" });
 
 export const metadata: Metadata = {

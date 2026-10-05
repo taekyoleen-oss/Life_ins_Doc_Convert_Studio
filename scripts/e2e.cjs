@@ -99,7 +99,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const survRows = await p.$$eval(".card[data-card=S01] details.calc-fold[open] tbody tr", (rs) => rs.map((r) => [...r.cells].map((c) => c.textContent.trim())));
   ok("펼치면 연령마다 lx · Dx · Nx — 40세 lx = 100,000", survRows.length >= 60 && survRows[0][1] === "40" && survRows[0][2] === "100,000.00" && Number(survRows[1][2].replace(/,/g, "")) < 100000, JSON.stringify(survRows.slice(0, 2)));
   const survPick = await p.$$eval(".card[data-card=S01] select[aria-label$='대상 위험률'] option:checked", (o) => o.map((x) => x.textContent));
-  ok("S01 대상 위험률은 콤보 — 이름 뒤에 기호: lx(1) = 사망·80% 이상 장해 결합(Q⁽¹⁾ₓ)", survPick[0] === "사망·80% 이상 장해 결합(Q⁽¹⁾ₓ)" && survPick.length === 3, survPick.join(" / "));
+  ok("S01 대상 위험률은 콤보 — 이름 뒤에 기호: lx(1) = Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)", survPick[0] === "Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)" && survPick.length === 3, survPick.join(" / "));
   await p.focus(".card[data-card=S01] select[aria-label='lx(1) 대상 위험률']");
   await p.waitForTimeout(400);
   const hlR = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
@@ -138,7 +138,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const survOpts = await p.$$eval(".card[data-card=B01] .sub-open select[aria-label='대상자수'] option", (o) => o.map((x) => x.textContent));
   ok("B01: 대상자수는 앞의 유지자 lx 를 콤보로 고른다(탈퇴 사유 체크 없음) — lx(1)·lx(2)·lx(3), 첫 보험금은 lx(1)",
     (await p.locator(".card[data-card=B01] .sub-open [data-path$='.exitRateIds'] input[type=checkbox]").count()) === 0 && survOpts.length === 3
-    && (await p.locator(".card[data-card=B01] .sub-open select[aria-label='대상자수'] option:checked").textContent()).startsWith("lx(1) 사망, 80% 이상 장해 아닌 유지자")
+    && (await p.locator(".card[data-card=B01] .sub-open select[aria-label='대상자수'] option:checked").textContent()) === "lx(1)(사망, 80% 이상 장해 아닌 유지자)"
     && lxFrom.includes("유지자 카드에서 보기"), `${survOpts.join(" / ")} · ${lxFrom.slice(0, 80)}`);
   ok("담보 이름과 겹치던 [지급 사유] 칸은 없앴다 · 계약 단위 칸도 없다(탭에서) · 증액·감액 구간도 없다 · 배수·면책은 B02 로",
     (await p.locator("[data-path$='.trigger']").count()) === 0 && (await p.locator("[data-path$='.unit']").count()) === 0 && (await p.locator("[data-path$='.steps']").count()) === 0
@@ -147,10 +147,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const rateOpts = await p.$$eval(".card[data-card=B01] .sub-open [data-path$='.rateId'] select option", (o) => o.map((x) => x.textContent));
   const ratePick = await p.$eval(".card[data-card=B01] .sub-open select[aria-label='대상 위험률']", (e) => e.selectedOptions[0]?.textContent ?? "");
   const b1 = (await p.textContent(".card[data-card=B01] .sub-open")).replace(/\s+/g, " ");
-  ok("B01 대상 위험률 콤보: M04 위험률 셋 + C01 위험률 합성 셋만(다른 문구 없음) — 이름 뒤에 기호(사망률(qₓ)) · 고른 것 사망·80% 이상 장해 결합(Q⁽¹⁾ₓ) · 결합 위험률 넣기 단추 없음",
-    rateOpts.join("|") === "사망률(qₓ)|80% 이상 장해율(r⁽¹⁾ₓ)|암발생률(r⁽²⁾ₓ)|사망·80% 이상 장해 결합(Q⁽¹⁾ₓ)|사망·암 결합(Q⁽²⁾ₓ)|사망·80% 이상 장해·암 결합(Q⁽³⁾ₓ)" && ratePick === "사망·80% 이상 장해 결합(Q⁽¹⁾ₓ)" && !b1.includes("결합 위험률을 위험률 표에 넣기"), `${rateOpts.join(" / ")} · ${ratePick}`);
+  ok("B01 대상 위험률 콤보: M04 위험률 셋 + C01 위험률 합성 셋만(다른 문구 없음) — 이름 뒤에 기호(qₓ(사망률)) · 고른 것 Q⁽¹⁾ₓ(사망·80% 이상 장해 결합) · 결합 위험률 넣기 단추 없음",
+    rateOpts.join("|") === "qₓ(사망률)|r⁽¹⁾ₓ(80% 이상 장해율)|r⁽²⁾ₓ(암발생률)|Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)|Q⁽²⁾ₓ(사망·암 결합)|Q⁽³⁾ₓ(사망·80% 이상 장해·암 결합)" && ratePick === "Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)" && !b1.includes("결합 위험률을 위험률 표에 넣기"), `${rateOpts.join(" / ")} · ${ratePick}`);
   const benRes = (await p.textContent(".card[data-card=B01] .calc-panel .calc-table")).replace(/\s+/g, " ");
-  ok("B01 산출 결과: 대상자수 · 대상 위험률 열(Q(1) 사망·80% 이상 장해 결합)", benRes.includes("대상 위험률") && benRes.includes("사망·80% 이상 장해 결합(Q⁽¹⁾ₓ)"), benRes.slice(0, 160));
+  ok("B01 산출 결과: 대상자수 · 대상 위험률 열(Q(1) 사망·80% 이상 장해 결합)", benRes.includes("대상 위험률") && benRes.includes("Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)"), benRes.slice(0, 160));
   ok("보험금 산출 결과(Cx · Mx)는 접혀 있다", (await p.locator(".card[data-card=B01] .sub-open details.calc-fold").count()) === 1 && (await p.locator(".card[data-card=B01] details.calc-fold[open]").count()) === 0);
   await p.click(".card[data-card=B01] .sub-open details.calc-fold summary");
   await p.waitForTimeout(300);
