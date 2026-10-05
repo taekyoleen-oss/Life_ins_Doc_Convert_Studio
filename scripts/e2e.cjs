@@ -49,7 +49,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
 
   // 0-1) 카드 흐름 — 유지자(S01: lx·Dx·Nx) → 보험금(B01: 대상자수·d·Cx·Mx) → 보장(B02: 배수·면책·삭감 → PVB) → 보험료의 계산(M07)
   const codes = await p.$$eval(".form-body [data-card]", (els) => els.map((e) => e.dataset.card));
-  ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 유지자 → 보험금 → 보장 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,S01,B01,B02,M07,M08,M09", codes.join(","));
+  ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 위험률 합성 → 유지자 → 보험금 → 보장 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,C01,S01,B01,B02,M07,M08,M09", codes.join(","));
   const trial = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("맨 위 [산출 조건] — 계약 한 점(가입금액 포함)과 그 보험료, 조건에 저장하지 않는다고 알린다",
     trial.includes("산출 조건") && trial.includes("342,000") && trial.includes("조건 파일에 저장하지 않습니다") && (await p.locator(".trial-bar select").count()) === 5, trial.slice(0, 80));
@@ -60,6 +60,22 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("계약 단위 탭 — 주계약 하나와 [＋ 특약]", (await p.locator(".unit-tabs .unit-tab").count()) === 1 && (await p.textContent(".unit-tabs")).includes("주계약") && (await p.locator(".unit-tabs button:has-text('＋ 특약')").count()) === 1);
   ok("머리의 [보기]는 묶음 제목으로 따로 보인다(단추와 다른 모양)", (await p.locator("header .seg-label").count()) === 1
     && (await p.$eval("header .seg-label", (e) => getComputedStyle(e).backgroundColor)) !== (await p.$eval("header .seg > button", (e) => getComputedStyle(e).backgroundColor)));
+  // 위험률 합성 카드 — 산출방법서 나. 기호의 정의 아래 위험률 합성 표와 같다: 합성마다 기호 Q(j)·R(j) · 이름 · 묶는 위험률
+  await p.click(".card[data-card=C01] .card-head");
+  await p.waitForTimeout(700);
+  const hlCombo = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 60)));
+  const docAll = (await p.textContent(".doc-body")).replace(/\s+/g, " ");
+  ok("C01 위험률 합성 — 합성 셋(Q(1) 사망·80% 장해 · Q(2) 사망·암 · Q(3) 셋 — 안의 R(3)), 열면 기호의 정의 아래 위험률 합성 표가 강조된다",
+    (await p.locator(".card[data-card=C01] .sub").count()) === 3 && hlCombo.some((t) => t.startsWith("Q(1)x사망·80% 이상 장해 결합")) && hlCombo.some((t) => t.startsWith("R(3)x"))
+    && !hlCombo.some((t) => t.includes("아닌 유지자")), hlCombo.join(" / ").slice(0, 300));
+  ok("산출방법서: 유지자 표의 대상 위험률은 합성 기호만(식은 위험률 합성 표에) · 질병 발생률 행 없음 · 보험금 표 셋째 행은 '현가 및 누계'",
+    docAll.includes("대상 위험률Q(1)x+t계산기수") && !docAll.includes("질병 발생률") && docAll.includes("현가 및 누계") && !/계산기수C/.test(docAll), docAll.slice(docAll.indexOf("대상 위험률"), docAll.indexOf("대상 위험률") + 60));
+  ok("산출방법서 표의 머리(1행)는 가운데 정렬", (await p.$$eval(".doc-body th", (els) => els.every((e) => getComputedStyle(e).textAlign === "center"))));
+  await p.fill(".card[data-card=C01] input[aria-label='위험률 합성 (1) 이름']", "사망·장해 탈퇴율");
+  await p.waitForTimeout(700);
+  ok("합성에 이름을 붙이면 산출방법서 위험률 합성 표 · 보험금 급부 위험률 콤보에 그 이름", (await p.textContent(".doc-body")).includes("사망·장해 탈퇴율"));
+  await p.fill(".card[data-card=C01] input[aria-label='위험률 합성 (1) 이름']", "");
+  await p.waitForTimeout(500);
   // 유지자 카드 — 산출방법서 다. 유지자와 같다: lx(k) 마다 대상 위험률 → lx · Dx · Nx, 보험료 납입기수(N*)에 쓰는 유지자에 [납입](문서의 D′)
   await p.click(".card[data-card=S01] .card-head");
   await p.waitForTimeout(700);
@@ -82,10 +98,12 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForTimeout(300);
   const survRows = await p.$$eval(".card[data-card=S01] details.calc-fold[open] tbody tr", (rs) => rs.map((r) => [...r.cells].map((c) => c.textContent.trim())));
   ok("펼치면 연령마다 lx · Dx · Nx — 40세 lx = 100,000", survRows.length >= 60 && survRows[0][1] === "40" && survRows[0][2] === "100,000.00" && Number(survRows[1][2].replace(/,/g, "")) < 100000, JSON.stringify(survRows.slice(0, 2)));
-  await p.focus(".card[data-card=S01] .sub >> nth=0 >> label.rounded input");
+  const survPick = await p.$$eval(".card[data-card=S01] select[aria-label$='대상 위험률'] option:checked", (o) => o.map((x) => x.textContent));
+  ok("S01 대상 위험률은 콤보 — M04 위험률 하나 또는 C01 위험률 합성(lx(1) = Q(1) 사망·80% 이상 장해 결합)", survPick[0] === "Q(1) 사망·80% 이상 장해 결합" && survPick.length === 3, survPick.join(" / "));
+  await p.focus(".card[data-card=S01] select[aria-label='lx(1) 대상 위험률']");
   await p.waitForTimeout(400);
   const hlR = await p.$$eval(".doc-body .doc-hl", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").slice(0, 40)));
-  ok("대상 위험률 칸 → 예정위험률 표의 그 행 + 그 유지자 표", hlR.some((t) => t.startsWith("사망률q")) && hlR.some((t) => t.startsWith("(1) l(1)x")), hlR.join(" / ").slice(0, 300));
+  ok("대상 위험률 칸 → 위험률 합성 표의 그 행 + 그 유지자 표", hlR.some((t) => t.startsWith("Q(1)x")) && hlR.some((t) => t.startsWith("(1) l(1)x")), hlR.join(" / ").slice(0, 300));
   await p.locator(".card[data-card=S01] .pane-tool", { hasText: "＋ 위험률" }).first().click();
   await p.waitForTimeout(500);
   ok("S01 [＋ 위험률] → 기본 위험률 모음 창이 열린다(위험률 더하기의 기본)", (await p.locator(".modal.lib-modal").count()) === 1);
@@ -128,10 +146,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   // 급부 위험률은 위험률 표의 열을 고르는 콤보 — 비우면 사망형은 탈퇴 사유 전부의 결합 Q
   const rateOpts = await p.$$eval(".card[data-card=B01] .sub-open [data-path$='.rateId'] select option", (o) => o.map((x) => x.textContent));
   const b1 = (await p.textContent(".card[data-card=B01] .sub-open")).replace(/\s+/g, " ");
-  ok("B01 급부 위험률 콤보: 기본 = 결합 Q (사망률 ⊕ 80% 이상 장해율) + 위험률 표의 열 · [결합 위험률을 위험률 표에 넣기]",
-    rateOpts[0].includes("결합 Q (사망률 ⊕ 80% 이상 장해율)") && rateOpts.some((t) => t.startsWith("암발생률")) && b1.includes("결합 위험률을 위험률 표에 넣기"), rateOpts.join(" / ").slice(0, 160));
+  ok("B01 급부 위험률 콤보: 기본 = 대상 위험률 그대로(Q(1) 사망·80% 이상 장해 결합) + M04 위험률 + C01 위험률 합성 · [결합 위험률을 위험률 표에 넣기]",
+    rateOpts[0].includes("대상 위험률 그대로 — Q(1) 사망·80% 이상 장해 결합") && rateOpts.some((t) => t.startsWith("암발생률")) && rateOpts.some((t) => t.endsWith("(위험률 합성)")) && b1.includes("결합 위험률을 위험률 표에 넣기"), rateOpts.join(" / ").slice(0, 200));
   const benRes = (await p.textContent(".card[data-card=B01] .calc-panel .calc-table")).replace(/\s+/g, " ");
-  ok("B01 산출 결과: 대상자수 · 급부 위험률 열(결합 Q — 사망률 ⊕ 80% 이상 장해율)", benRes.includes("급부 위험률") && benRes.includes("결합 Q — 사망률 ⊕ 80% 이상 장해율"), benRes.slice(0, 160));
+  ok("B01 산출 결과: 대상자수 · 급부 위험률 열(Q(1) 사망·80% 이상 장해 결합)", benRes.includes("급부 위험률") && benRes.includes("Q(1) 사망·80% 이상 장해 결합"), benRes.slice(0, 160));
   ok("보험금 산출 결과(Cx · Mx)는 접혀 있다", (await p.locator(".card[data-card=B01] .sub-open details.calc-fold").count()) === 1 && (await p.locator(".card[data-card=B01] details.calc-fold[open]").count()) === 0);
   await p.click(".card[data-card=B01] .sub-open details.calc-fold summary");
   await p.waitForTimeout(300);
@@ -577,8 +595,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const heads2 = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent));
   ok("다른 샘플 세트로 바뀜(2대질병 + 그 위험률 표 — 뇌출혈·급성심근경색증 열)", (await p.textContent(".doc-body h1")).includes("2대질병") && heads2.some((h) => h.includes("뇌출혈")) && heads2.some((h) => h.includes("급성심근경색증")), heads2.join(","));
   const twoDoc = await p.textContent(".doc-body");
-  ok("2대질병: 보험금 둘(뇌출혈 진단 · 급성심근경색증 진단) · [납입] 유지자는 질병끼리 곱(질병 발생률 R) · 사망과 결합 Q", twoDoc.includes("뇌출혈 진단") && twoDoc.includes("급성심근경색증 진단")
-    && twoDoc.includes("사망, 뇌출혈, 급성심근경색증 아닌 유지자") && twoDoc.includes("질병 발생률") && /Q.*min/.test(twoDoc));
+  ok("2대질병: 보험금 둘(뇌출혈 진단 · 급성심근경색증 진단) · [납입] 유지자는 위험률 합성(질병끼리 곱 R · 사망과 결합 Q)", twoDoc.includes("뇌출혈 진단") && twoDoc.includes("급성심근경색증 진단")
+    && twoDoc.includes("사망, 뇌출혈, 급성심근경색증 아닌 유지자") && twoDoc.includes("위험률 합성") && /Q.*min/.test(twoDoc));
   const srcCells = await p.$$eval(".doc-body table", (ts) => ts.filter((t) => [...t.querySelectorAll("th")].some((h) => h.textContent.includes("근거"))).flatMap((t) => [...t.querySelectorAll("tbody tr")].map((r) => r.children[3]?.textContent ?? "")));
   ok("산출방법서의 위험률 근거는 모두 경험생명표(가상)", srcCells.length >= 3 && srcCells.every((c) => c.startsWith("경험생명표(가상)")), srcCells.join(" / "));
   await p.click("summary:has-text('샘플')");

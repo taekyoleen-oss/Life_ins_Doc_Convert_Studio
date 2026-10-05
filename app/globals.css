@@ -242,7 +242,7 @@ td.sheet-no { z-index: 1 !important; }
 .doc-body table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
 .doc-body table.wide { font-size: 11.5px; }
 .doc-body th, .doc-body td { border: 1px solid #c9ced5; padding: 4px 8px; text-align: left; vertical-align: top; word-break: keep-all; }
-.doc-body th { background: #f0f2f5; font-weight: 600; }
+.doc-body th { background: #f0f2f5; font-weight: 600; text-align: center; }
 .doc-body td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .doc-linked { cursor: pointer; }
 .doc-linked:hover { outline: 1px dashed #c7d6e4; }

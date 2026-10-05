@@ -51,7 +51,7 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, "B6")).toEqual({ v: 0.025 });         // 적용이율 i
     expect(cell(sheet1, "B7")).toEqual({ f: "1/(1+i_rate)" }); // 현가율 v
     expect(cell(sheet1, "B8")).toEqual({ v: 0.0325 });        // 표준이율
-    expect(colsOf(sheet1, 2).map(([, t]) => t).slice(0, 8)).toEqual(["t (경과)", "연령 x+t", "사망률", "80% 이상 장해율", "암발생률", "v^t 현가율", "v^{t+½} 현가율", "Q^{(1)} 결합 탈퇴율 lx(1)"]);
+    expect(colsOf(sheet1, 2).map(([, t]) => t).slice(0, 8)).toEqual(["t (경과)", "연령 x+t", "사망률", "80% 이상 장해율", "암발생률", "v^t 현가율", "v^{t+½} 현가율", "Q^{(1)} 위험률 합성 (1)"]);
   });
 
   it("표 — 위험률(공통 열)만 값이고 현가율·유지자 lx·기수·준비금·환급금은 모두 수식, 담보 둘이 한 장에", () => {

@@ -1,9 +1,9 @@
 import { Document, isCollection, isMap, isNode, isScalar, isSeq, LineCounter, parseDocument, stringify, type Node } from "yaml";
-import { generateFormulas, syncFromSurvivors } from "../methoddoc/formulas";
+import { combosOf, generateFormulas, syncFromSurvivors } from "../methoddoc/formulas";
 import { normFormula, parseRate, parseTimes } from "../methoddoc/parse";
 import {
   emptySpec, hasProduct, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
-  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole, type SurvivorSpec,
+  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole, type SurvivorSpec, type ComboSpec,
 } from "../methoddoc/spec";
 
 /**
@@ -67,6 +67,7 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
       times: e.times !== undefined ? `${e.times}배` : undefined,
       phase: e.phase,
     })),
+    combos: spec.combos?.length ? spec.combos.map((x) => clean({ id: x.id, name: x.name, rateIds: x.rateIds })) : undefined,
     survivors: spec.survivors?.length ? spec.survivors.map((x) => clean({ id: x.id, name: x.name, unit: x.unit, exitRateIds: x.exitRateIds, payFor: x.payFor })) : undefined,
     benefits: spec.benefits.map((x) => clean({
       id: x.id, name: x.name, unit: x.unit, role: x.role, trigger: x.trigger, multiple: x.multiple, amount: x.amount, endAge: x.endAge,
@@ -99,6 +100,7 @@ function styleFlow(doc: Document) {
   flowItems(["basis", "lapse"]);
   flowItems(["product", "terms"]);
   flowItems(["survivors"]);
+  flowItems(["combos"]);
   { const w = doc.getIn(["basis", "waiverRateIds"], true); if (isSeq(w)) w.flow = true; }
   for (const key of ["types", "payFreqs"]) { const s = doc.getIn(["product", key], true); if (isSeq(s)) s.flow = true; }
   const bens = doc.getIn(["benefits"], true);
@@ -214,6 +216,12 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
     ...(arr(x.payFor).length ? { payFor: arr(x.payFor).map(str).filter((s): s is string => !!s) } : {}),
   }));
   if (survivors.length) spec.survivors = survivors;
+  // 위험률 합성 — 유지자의 대상 위험률 · 보험금의 급부 위험률(rateId)이 가져다 쓴다
+  const combos = arr(raw.combos).map(obj).map((x, i): ComboSpec => ({
+    id: str(x.id) ?? `c${i + 1}`, ...(str(x.name) ? { name: str(x.name) } : {}), rateIds: arr(x.rateIds).map(str).filter((s): s is string => !!s),
+  }));
+  if (combos.length) spec.combos = combos;
+  for (const c of combos) for (const id of c.rateIds) if (!spec.rates.some((r) => r.id === id)) errors.push({ line: 0, message: `위험률 합성 "${c.id}" 가 없는 위험률 id "${id}" 를 가리킵니다` });
   arr(raw.benefits).map(obj).forEach((x, i) => { if (str(x.survivorId) && spec.benefits[i]) spec.benefits[i].survivorId = str(x.survivorId); });
   for (const ben of spec.benefits) if (ben.survivorId && !survivors.some((s) => s.id === ben.survivorId)) errors.push({ line: 0, message: `담보 "${ben.name}" 가 없는 생존자 "${ben.survivorId}" 를 가리킵니다` });
   for (const sv of survivors) for (const id of sv.exitRateIds) if (!spec.rates.some((r) => r.id === id)) errors.push({ line: 0, message: `생존자 "${sv.id}" 가 없는 위험률 id "${id}" 를 가리킵니다` });
@@ -369,10 +377,19 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
       if (!next) out.benefits = out.benefits.map((b) => ({ ...b, survivorId: undefined }));
     }
   }
+  // 위험률 합성 — 갱신한 유지자·보험금에서 만들어지는 것까지 펼쳐 견준다(적지 않아도 같은 합성이면 바뀐 게 아니다)
+  if (took.has("combos") || (opt.standard && took.has("survivors"))) {
+    const next = parsed.combos?.map((x) => ({ ...x, rateIds: x.rateIds.map((id) => idMap.get(id) ?? id) }));
+    const view = (s: MethodSpec) => JSON.stringify(combosOf(s).map((c) => [c.id, c.name ?? "", [...c.rateIds].sort()]));
+    if (view({ ...out, combos: next }) !== view(out)) {
+      changes.push(`combos: 위험률 합성 ${combosOf(out).length}개 → ${combosOf({ ...out, combos: next }).length}개 갱신`);
+      out.combos = next;
+    }
+  }
   // 표준 양식의 위험률 표에서 지운 행 — 담보(갱신된)가 쓰지 않는 것만 뺀다
   if (opt.standard && took.has("rates")) {
     const kept = new Set(parsed.rates.map((r) => idMap.get(r.id) ?? r.id));
-    const used = new Set([...out.benefits.flatMap((b) => [b.rateId, ...(b.exitRateIds ?? [])]), ...(out.survivors ?? []).flatMap((x) => x.exitRateIds)].filter(Boolean));
+    const used = new Set([...out.benefits.flatMap((b) => [b.rateId, ...(b.exitRateIds ?? [])]), ...(out.survivors ?? []).flatMap((x) => x.exitRateIds), ...(out.combos ?? []).flatMap((x) => x.rateIds)].filter(Boolean));
     const gone = out.rates.filter((r) => !kept.has(r.id) && !used.has(r.id));
     if (gone.length) { changes.push(`rates: "${gone.map((r) => r.name).join('", "')}" 삭제`); out.rates = out.rates.filter((r) => !gone.includes(r)); }
   }
@@ -441,7 +458,7 @@ export interface YamlEdit { path: YamlPath; value?: unknown; add?: boolean }
 export const pathKey = (p: YamlPath) => p.map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k)).join("");
 
 /** 새로 만드는 항목 중 한 줄로 두는 것 — specToYaml 의 styleFlow 와 같은 관례 */
-const FLOW = /^(expenses|basis\.lapse|product\.terms|survivors)\[\d+\]$|\.(exitRateIds|payFor|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
+const FLOW = /^(expenses|basis\.lapse|product\.terms|survivors|combos)\[\d+\]$|\.(exitRateIds|rateIds|payFor|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
 function markFlow(node: unknown, key: string) {
   if (!isCollection(node)) return;
   if (FLOW.test(key)) node.flow = true;

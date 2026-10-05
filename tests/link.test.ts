@@ -40,10 +40,11 @@ describe("조건 줄 → 산출방법서 블록", () => {
     expect(got.some((t) => /PVB = 1·M_x/.test(t))).toBe(true);                     // 종신 · 면책 없음 — 배수 × M_x
     expect(got.some((t) => /^(대상자수|대상 위험률|계산기수) \|/.test(t))).toBe(false);
   });
-  it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 쓰는 유지자 표", () => {
+  it("80% 장해율 위험률 → 위험률 표의 그 행 + 그 위험률을 묶은 위험률 합성(나. 기호의 정의 아래) + 그 합성을 쓰는 유지자 표", () => {
     const got = hl(lineOf(/id: r80/));
     expect(got.some((t) => /^80% 이상 장해율 \| r80 \| 최초발생/.test(t))).toBe(true);
-    expect(got.some((t) => /Q\^\{\(1\)\}_\{x\+t\} = min\( 1, q_\{x\+t\} \+ r_\{x\+t\}/.test(t))).toBe(true);
+    expect(got.some((t) => /^Q\^\{\(1\)\}_x \| 사망·80% 이상 장해 결합 \| Q\^\{\(1\)\}_\{x\+t\} = min\( 1, q_\{x\+t\} \+ r_\{x\+t\}/.test(t))).toBe(true);
+    expect(got.some((t) => /^대상 위험률 \| Q\^\{\(1\)\}_\{x\+t\}$/.test(t))).toBe(true);
   });
 });
 

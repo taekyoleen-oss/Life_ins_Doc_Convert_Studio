@@ -64,7 +64,7 @@ ${Q}
 ${EXPENSES}
 survivors:            # 유지자 lx(k) — 탈퇴 위험률로 줄어드는 사람 수(lx · Dx · Nx). 보험금은 이 가운데 하나를 대상자수로 고른다
   - id: s1            # lx(1) 사망, 80% 이상 장해 아닌 유지자
-    exitRateIds: [q, r80]   # 대상 위험률 — Q = min(1, q + r − q·r/2)
+    exitRateIds: [q, r80]   # 대상 위험률 — 위험률 합성 Q^{(1)} = min(1, q + r − q·r/2) (combos 에 적지 않으면 저절로 만든다)
   - id: s2            # lx(2) 사망 아닌 유지자 — 보험료 납입기수(N*)에 쓴다(D′ · N′)
     exitRateIds: [q]
     payFor: [주계약]
