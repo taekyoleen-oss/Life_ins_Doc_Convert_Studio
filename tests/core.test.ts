@@ -20,7 +20,8 @@ describe("조건 파일(YAML)", () => {
     expect(spec.basis.standardInterest).toBe(0.0325);
     expect(spec.expenses.map((e) => e.rate ?? e.times)).toEqual([0.01, 1, 0.0015, 0.045, 0.001, 0.025]);
     expect(spec.benefits[0].exitRateIds).toEqual(["q"]);                                        // 종신: 보장은 사망만(대상자수 lx(2))
-    expect(spec.survivors!.map((x) => [x.exitRateIds, x.payFor])).toEqual([[["q", "r80"], undefined], [["q"], ["주계약"]]]);
+    expect(spec.survivors!.map((x) => [x.exitRateIds, x.payFor])).toEqual([[["q", "r80"], ["주계약"]], [["q"], undefined]]);   // 납입자 = 사망·80% 장해 아닌 유지자 lx(1)
+    expect([spec.basis.waiver, spec.basis.waiverRateIds]).toEqual([true, ["r80"]]);
     expect(sample("cancer").spec.basis.lowRatio).toBe(0);
     // 샘플은 일곱 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약, 위험률 근거는 모두 가상
     expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan"]);
@@ -61,11 +62,11 @@ describe("조건 → 산출식", () => {
   /** 짝(key)으로 식 덩이를 집는다 — 조건 카드·계산(calc)이 쓰는 것과 같은 짝이다 */
   const byKey = (id: string, key: string) => generateFormulas(sample(id as never).spec).find((x) => x.key === key)!;
 
-  it("종신: 유지자 둘 — lx(1) 사망·80% 장해(Q = min(1, q + r − q·r/2)) · lx(2) 사망(q 그대로) · 사망 보험금과 납입(N*)이 lx(2) 를 쓴다", () => {
+  it("종신: 유지자 둘 — lx(1) 사망·80% 장해(Q = min(1, q + r − q·r/2)) 는 납입(N*) · lx(2) 사망(q 그대로) 은 사망 보험금", () => {
     const g = byKey("whole", "surv:s1");
     expect(g.section).toBe("유지자");
     expect(g.label).toBe("유지자수 lx(1) — 사망, 80% 이상 장해 아닌 유지자");
-    expect(g.path).toBe("survivors[0]|rates[0]|rates[1]|basis.interest");
+    expect(g.path).toBe("survivors[0]|rates[0]|rates[1]|basis.waiver|basis.waiverRateIds|basis.interest");
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
     expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
     expect(g.text).toContain("유지자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − Q^{(1)}_{x+t} )");
@@ -79,7 +80,7 @@ describe("조건 → 산출식", () => {
     expect(b.section).toBe("보험금");
     expect(b.label).toBe("보험금 — 사망");
     expect(b.text).toContain("l_{x+t} = l^{(2)}_{x+t}");
-    expect(b.text).toContain("N′_{x+t} = N^{(2)}_{x+t}");                                  // 납입(N*)도 lx(2)
+    expect(b.text).toContain("N′_{x+t} = N^{(1)}_{x+t}");                                  // 납입(N*)은 lx(1) — 80% 장해면 납입면제
     expect(b.text).toContain("C_{x+t} = l^{(2)}_{x+t}·q_{x+t}·v^{t+½}");
     expect(b.text).toContain("M_{x+t} = Σ_{u=t}^{n−1} S_u·C_{x+u}");
     expect(b.text).toContain("PVB = M_x");
@@ -170,7 +171,7 @@ describe("LaTeX", () => {
     expect(changes.join("\n")).toMatch(/basis\.interest: 2\.5% → 3%/);
     const next = patchYaml(src, merged);
     expect(next).toContain("interest: 3%");
-    expect(next).toContain("# 납입만 면제되는 추가 사유");   // 고치지 않은 줄의 사용자 주석 유지
+    expect(next).toContain("# 납입면제 — 80% 이상 장해 시");   // 고치지 않은 줄의 사용자 주석 유지
     expect(yamlToSpec(next).spec).toEqual(merged);
   });
 });

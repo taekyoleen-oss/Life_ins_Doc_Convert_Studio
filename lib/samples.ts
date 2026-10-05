@@ -54,7 +54,8 @@ product:              # 가입 조건 — 산출방법서에 싣는 판매 범�
 basis:
   interest: 2.5%      # 적용(예정)이율
   standardInterest: 3.25%
-  waiver: false       # 납입만 면제되는 추가 사유 — 유지자의 [납입](payFor)으로 정한다
+  waiver: true        # 납입면제 — 80% 이상 장해 시 이후 보험료 면제. 납입자 = [납입] 유지자 lx(1)(사망 · 80% 장해 아닌 유지자)
+  waiverRateIds: [r80]
 rates:                # role: death 사망 · incidence 최초발생 · recurring 반복지급 · waiver 납입면제 · other 기타
 ${Q}
   - id: r80
@@ -63,11 +64,11 @@ ${Q}
     source: 경험생명표(가상) 80%이상 재해장해율 + 질병장해율
 ${EXPENSES}
 survivors:            # 유지자 lx(k) — 탈퇴 위험률로 줄어드는 사람 수(lx · Dx · Nx). 보험금은 이 가운데 하나를 대상자수로 고른다
-  - id: s1            # lx(1) 사망, 80% 이상 장해 아닌 유지자
+  - id: s1            # lx(1) 사망, 80% 이상 장해 아닌 유지자 — 납입자: 보험료 납입기수(N*)에 쓴다(D′ · N′). 80% 장해면 이후 보험료 납입면제
     exitRateIds: [q, r80]   # 대상 위험률 — 위험률 합성 Q^{(1)} = min(1, q + r − q·r/2) (combos 에 적지 않으면 저절로 만든다)
-  - id: s2            # lx(2) 사망 아닌 유지자 — 보험료 납입기수(N*)에 쓴다(D′ · N′)
-    exitRateIds: [q]
     payFor: [주계약]
+  - id: s2            # lx(2) 사망 아닌 유지자 — l_{x+t+1} = l_{x+t} × (1 − q). 보험금(사망)의 대상자수
+    exitRateIds: [q]
 benefits:
   - id: b1
     name: 사망

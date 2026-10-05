@@ -418,7 +418,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const y2 = await p.$$eval(".cm-editor", (eds) => [...eds[0].querySelectorAll(".cm-line")].map((e) => e.textContent).join("\n"));
   ok("LaTeX 수정 → 조건 반영: 이율 3.5%", /interest: 3\.5%/.test(y2), toast);
   ok("LaTeX 수정 → 조건 반영: 배수 0.7배", /multiple: 0\.7/.test(y2));
-  ok("조건 파일 주석 유지", y2.includes("# 납입만 면제되는 추가 사유"));
+  ok("조건 파일 주석 유지", y2.includes("# 납입면제 — 80% 이상 장해"));
   await p.click("button.tab:has-text('산출방법서')");
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5_latex_applied.png` });
@@ -781,7 +781,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await q.setViewportSize({ width: 1500, height: 900 });
   ok("넓은 화면 — 알림 없음", !(await q.locator(".narrow-warn").isVisible()));
   const h1 = await q.textContent(".doc-body h1");
-  ok("공유 화면: 첫 화면은 종신보험(사망 보장 · 유지자 둘) — 월 249,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("249,000"), h1);
+  ok("공유 화면: 첫 화면은 종신보험(사망 보장 · 유지자 둘 · 80% 장해 납입면제) — 월 250,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("250,000"), h1);
   await q.click("summary:has-text('내보내기')");
   const expItems = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => [x.firstChild.textContent.trim(), x.disabled || !!x.closest("fieldset:disabled")]));
   ok("공유 화면: 내보내기 = Word .docx · Word (작성 안내 없이) · 조건 .yaml 이 먼저, 나머지는 추가기능(개발중)으로 비활성",

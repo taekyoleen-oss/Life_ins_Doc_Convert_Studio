@@ -143,6 +143,19 @@ export default function Studio() {
       if (Array.isArray(rec)) writeJson(`${KEY}:recent`, rec.map((r) => (r && typeof r.yaml === "string" ? { ...r, yaml: virtualizeSources(r.yaml) } : r)));
       writeJson(VSRC, 1);
     }
+    // 공유 샘플을 새 모양으로 바꾼 뒤 — 예전 샘플에서 시작한 저장본(첫 줄이 그 샘플의 머리말)은 한 번 새 샘플로 바꾸고, 예전 것은 최근 작업에 남긴다
+    const SV = `${KEY}:sample-v2`;
+    if (!readJson(SV)) {
+      const head = (y: string) => y.split("\n", 1)[0];
+      const fresh = s ? SAMPLES.find((x) => SHARED_SAMPLE_IDS.includes(x.id) && head(x.yaml) === head(s!) && x.yaml !== s) : undefined;
+      if (fresh && s) {
+        const rec = readJson(`${KEY}:recent`);
+        writeJson(`${KEY}:recent`, [{ id: `${Date.now()}`, name: "예전 샘플 저장본", at: Date.now(), product: yamlToSpec(s).spec.meta.productName, yaml: s, sheet: null }, ...(Array.isArray(rec) ? rec : [])].slice(0, RECENT_MAX));
+        s = fresh.yaml; writeStore(s); writeJson(`${KEY}:sheet`, null);
+        setToast({ text: `${fresh.label} 샘플이 새 모양으로 바뀌어 다시 열었습니다 — 예전 저장본은 [최근 작업]에 남겨 두었습니다`, kind: "ok" });
+      }
+      writeJson(SV, 1);
+    }
     setAllSamples(urlParam("all") !== null);
     setGuide(!readJson(`${KEY}:guide-v1`));
     // 주소로 고른 샘플 — 저장된 작업 대신 그 샘플 세트를 연다

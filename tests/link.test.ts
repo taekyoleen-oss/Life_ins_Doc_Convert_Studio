@@ -22,7 +22,7 @@ describe("조건 줄 → 산출방법서 블록", () => {
     const got = hl(lineOf(/^\s+interest:/));
     expect(got.some((t) => /^적용이율 i \| 2\.500%/.test(t))).toBe(true);
     expect(got.some((t) => /0\.97/.test(t))).toBe(false);
-    expect(got.some((t) => /D\^\{\(1\)\}_\{x\+t\}/.test(t))).toBe(true);     // 유지자 표의 현가누계 Dx
+    expect(got.some((t) => /D\^\{\(\d\)\}_\{x\+t\}/.test(t))).toBe(true);     // 유지자 표의 현가누계 Dx
     expect(got.some((t) => /표준이율/.test(t))).toBe(false);
   });
   it("β_G 사업비 줄 → 사업비 표의 β_G 행만", () => {
