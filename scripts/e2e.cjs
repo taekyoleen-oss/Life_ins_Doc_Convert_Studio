@@ -54,11 +54,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("카드 순서가 산출방법서 차례다 — 문서 정보 · 개요 · 이율 · 위험률 · 사업비 → 위험률 합성 → 유지자 → 보험금 → 보장 → 보험료 계산 → 준비금 → 따로 적는 식", codes.join(",") === "M00,M01,M03,M04,M06,C01,S01,B01,B02,M07,M08,M09", codes.join(","));
   const trial = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("맨 위 [산출 조건] — 계약 한 점(가입금액 포함)과 그 보험료, 조건에 저장하지 않는다고 알린다",
-    trial.includes("산출 조건") && trial.includes("342,000") && trial.includes("조건 파일에 저장하지 않습니다") && (await p.locator(".trial-bar select").count()) === 5, trial.slice(0, 80));
+    trial.includes("산출 조건") && trial.includes("342,500") && trial.includes("조건 파일에 저장하지 않습니다") && (await p.locator(".trial-bar select").count()) === 5, trial.slice(0, 80));
   const payCols = await p.$$eval(".trial-pay th", (e) => e.map((x) => x.textContent.trim()));
   const payVals = await p.$$eval(".trial-pay td", (e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
-  ok("납입방법별 보험료 — 월납·3개월납·6개월납·연납 넷, 월납이 342,000원이고 연납이 월납 × 11 보다 크다",
-    payCols.join(",") === "월납,3개월납,6개월납,연납" && payVals[0].startsWith("342,000원") && Number(payVals[3].replace(/[^0-9]/g, "").slice(0, 9)) > 342000 * 11, payVals.join(" | "));
+  ok("납입방법별 보험료 — 월납·3개월납·6개월납·연납 넷, 월납이 342,500원이고 연납이 월납 × 11 보다 크다",
+    payCols.join(",") === "월납,3개월납,6개월납,연납" && payVals[0].startsWith("342,500원") && Number(payVals[3].replace(/[^0-9]/g, "").slice(0, 9)) > 342500 * 11, payVals.join(" | "));
   ok("계약 단위 탭 — 주계약 하나와 [＋ 특약]", (await p.locator(".unit-tabs .unit-tab").count()) === 1 && (await p.textContent(".unit-tabs")).includes("주계약") && (await p.locator(".unit-tabs button:has-text('＋ 특약')").count()) === 1);
   ok("머리의 [보기]는 묶음 제목으로 따로 보인다(단추와 다른 모양)", (await p.locator("header .seg-label").count()) === 1
     && (await p.$eval("header .seg-label", (e) => getComputedStyle(e).backgroundColor)) !== (await p.$eval("header .seg > button", (e) => getComputedStyle(e).backgroundColor)));
@@ -111,8 +111,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click(".card[data-card=M07] .card-head");
   await p.waitForTimeout(700);
   const calc0 = await p.$$eval(".card[data-card=M07] .calc-table tbody tr", (rows) => rows.map((r) => [...r.cells].map((c) => c.textContent.trim())));
-  ok("M07: 산출방법서의 식을 그대로 읽어 산출 — 1원당 6자리(0.002606 · 0.001624) → 10만원당 261 · 162 → 담보 보험료 합 342,000원",
-    calc0[0].includes("0.002606") && calc0[0].includes("261") && calc0[1].includes("0.001624") && calc0[1].includes("162") && calc0[2].includes("342,000 원"), JSON.stringify(calc0));
+  ok("M07: 산출방법서의 식을 그대로 읽어 산출 — 1원당 6자리(0.002606 · 0.001625) → 10만원당 261 · 163 → 담보 보험료 합 342,500원",
+    calc0[0].includes("0.002606") && calc0[0].includes("261") && calc0[1].includes("0.001625") && calc0[1].includes("163") && calc0[2].includes("342,500 원"), JSON.stringify(calc0));
 
   // 0-1b) 카드의 식은 기본이 숨김 — 값부터 보게 한다. 뒤의 식 확인을 위해 켠다
   ok("카드의 식은 기본이 숨김 — 식이 있는 카드(S01·B01·B02·M07·M08)에만 머리에 [수식 보이기], 없는 카드(M01·M04·M06)에는 없다",
@@ -282,7 +282,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const sums = (await p.textContent(".calc-modal .calc-sum")).replace(/\s+/g, " ");
   ok("담보 하나가 보장기간 만큼 한 해 한 줄(72줄) · 표 아래 N*·PVB·P·G·10만원당 261 · 담보 보험료 261,000원",
     nRow === 72 && /N\*/.test(sums) && sums.includes("261") && sums.includes("261,000 원"), `${nRow}줄 · ${sums.slice(0, 80)}`);
-  ok("보험료 합계 — 이 앱이 독자적으로 낸 값", (await p.textContent(".calc-total")).replace(/\s+/g, " ").includes("342,000 원"));
+  ok("보험료 합계 — 이 앱이 독자적으로 낸 값", (await p.textContent(".calc-total")).replace(/\s+/g, " ").includes("342,500 원"));
   ok("표 옆 보험료: G₁(6자리) · 10만원당 · P_β · 표준기초율·해약공제 신계약비까지", /G₁/.test(sums) && /P_?β/.test(sums) && /α/.test(sums) && sums.includes("준비금 산출용"), sums.slice(0, 160));
   await p.click(".calc-modal th.calc-col:has-text('유지자수 lx(1)') >> nth=0");
   await p.waitForTimeout(300);
@@ -394,7 +394,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.click("button[title^='카드의 칸을 채우면']");
   await p.waitForTimeout(1200);
   const trial10 = (await p.textContent(".trial-bar")).replace(/\s+/g, " ");
-  ok("PDF 로 가져온 조건에서도 시산 보험료가 같다 — 월 342,000원", trial10.includes("342,000"), trial10.slice(0, 90));
+  ok("PDF 로 가져온 조건에서도 시산 보험료가 같다 — 월 342,500원", trial10.includes("342,500"), trial10.slice(0, 90));
   const sheet10 = await p.locator("table.sheet tbody tr").count();
   ok("PDF 의 별첨 위험률 표 = 연령 0~110세 111줄", sheet10 === 111, `${sheet10}줄`);
   await p.click("button[title^='같은 조건을 MethodSpec']");            // 다음 확인을 위해 [YAML] 탭으로 되돌린다
@@ -820,7 +820,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const tabs = await q.$$eval(".unit-tabs .unit-tab", (e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   const trialC = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("암보험: 탭 셋(주계약 · 암입원특약 · 암수술특약) · 사망률 없음 · 보험료가 나온다", tabs.length === 3 && tabs[1].includes("암입원특약") && tabs[2].includes("암수술특약")
-    && (await q.locator(".doc-body tr", { hasText: "사망률" }).count()) === 0 && trialC.includes("240,300"), `${tabs.join(" / ")} · ${trialC.slice(0, 120)}`);
+    && (await q.locator(".doc-body tr", { hasText: "사망률" }).count()) === 0 && trialC.includes("240,270"), `${tabs.join(" / ")} · ${trialC.slice(0, 120)}`);
   await q.click(".unit-tabs .unit-tab:has-text('암입원특약')");
   await q.click(".card[data-card=B01] .card-head");                     // 보장 카드를 펼쳐야 담보 덩이가 그려진다
   await q.waitForTimeout(600);

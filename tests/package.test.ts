@@ -23,7 +23,7 @@ describe("패키지 저장 → 열기", () => {
     expect(files.get("위험률표.csv")!.slice(0, 3)).toEqual(new Uint8Array([0xef, 0xbb, 0xbf]));                       // Excel 용 BOM
     expect(dec(files.get("위험률표.csv")!)).toMatch(/^연령,사망률\(남\),사망률\(여\),80% 이상 장해율\(남\),80% 이상 장해율\(여\)\n0,/);
     const q = JSON.parse(dec(files.get("MethodSpec.json")!)).rates[0].tables.F;
-    expect(q.values[q.ages.indexOf(40)]).toBeCloseTo(0.00051, 12);                    // 40세 여자 사망률
+    expect(q.values[q.ages.indexOf(40)]).toBeCloseTo(0.0005067, 12);                    // 40세 여자 사망률
     expect(dec(files.get("산출방법서.md")!)).toContain("별첨 — 위험률 표");
     expect(files.get("산출방법서.docx")!.length).toBeGreaterThan(5000);
     const r = await readPackage(buf);

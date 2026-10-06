@@ -35,8 +35,8 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
   it("위험률은 모두 남·여 두 벌(장해율 포함) — 계산 앱이 계약 성별로 고른다", () => {
     for (const r of spec.rates) expect(Object.keys(r.tables ?? {}).sort()).toEqual(["F", "M"]);
     const r80 = spec.rates.find((r) => r.id === "r80")!;
-    expect(r80.tables!.M!.values[40]).toBeCloseTo(0.000147, 12);
-    expect(r80.tables!.F!.values[40]).toBeCloseTo(0.000167, 12);
+    expect(r80.tables!.M!.values[40]).toBeCloseTo(0.000144, 12);
+    expect(r80.tables!.F!.values[40]).toBeCloseTo(0.00017495, 12);
   });
 
   it("산출식: 유지자 셋 — lx(1) 사망·장해 · lx(2) 사망·암 (보험금마다) · lx(3) 사망·장해·암 [납입] · 암 진단은 첫해 (1 − 3/12)", () => {
@@ -68,13 +68,13 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(md).not.toContain("1원당 보험료의 반올림");
   });
 
-  it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 162 · 가입금액 1억 기준 월 342,000원)", () => {
+  it("산출방법서의 식을 그대로 읽어 계산해도 같은 보험료 (1원당 6자리 → 10만원당 261 · 163 · 가입금액 1억 기준 월 342,500원)", () => {
     const got = computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 1e8 });
     expect(got.errors).toEqual([]);
-    expect(got.benefits.map((b) => [b.gross6, b.per100k, b.amount])).toEqual([[0.002606, 261, 1e8], [0.001624, 162, 5e7]]);
-    expect(got.premium).toBe(342000);
+    expect(got.benefits.map((b) => [b.gross6, b.per100k, b.amount])).toEqual([[0.002606, 261, 1e8], [0.001625, 163, 5e7]]);
+    expect(got.premium).toBe(342500);
     // 가입금액을 바꾸면 담보 보험료만 비례해 바뀐다(10만원당은 그대로) · 납입방법마다 N* 만 다르다
-    expect(computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 5e7 }).premium).toBe(171000);
+    expect(computeSpec(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 5e7 }).premium).toBe(171250);
     const byPay = computeByPayMethod(spec, { age: 40, sex: "M", payYears: 20, freq: 12, sumAssured: 1e8 });
     expect(byPay.map((r) => r.label)).toEqual(["월납", "3개월납", "6개월납", "연납"]);
     expect(byPay[3].premium).toBeGreaterThan(byPay[0].premium * 11);

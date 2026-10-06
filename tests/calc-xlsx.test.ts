@@ -58,7 +58,7 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(cell(sheet1, "D2")?.s).toBe("t (경과)");
     expect(cell(sheet1, "D3")).toEqual({ v: 0 });
     expect(cell(sheet1, "E3")).toEqual({ f: "x_age+D3" });
-    expect(cell(sheet1, "F4")).toEqual({ v: 0.00094 });                     // 사망률 41세 — 값
+    expect(cell(sheet1, "F4")).toEqual({ v: 0.0009773 });                     // 사망률 41세 — 값
     expect(cell(sheet1, "I3")).toEqual({ f: "v_disc^(D3)" });
     expect(cell(sheet1, "J3")).toEqual({ f: "v_disc^(D3+0.5)" });
     expect(cell(sheet1, "K1")?.s).toContain("담보 1: 사망·80% 이상 장해 (대상자수 lx(1)");
@@ -123,6 +123,6 @@ describe("보험료 계산 → 엑셀 수식", () => {
     expect(at(sum, "담보 보험료")?.f).toBe(`SUM(${v1}${rowOf("담보 보험료")}:${v2}${rowOf("담보 보험료")})`);
     // 앱이 낸 값(엑셀이 다시 계산하면 같아야 한다 — scripts/check-calc-xlsx.ps1)
     const got = calcSheets(spec, contract);
-    expect([got.per100k, got.premium]).toEqual([423, 342000]);
+    expect([got.per100k, got.premium]).toEqual([424, 342500]);
   });
 });

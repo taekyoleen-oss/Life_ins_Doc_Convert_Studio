@@ -104,8 +104,8 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(col("l^{(1)}").parts(1)[0].value).toBe(100000);
     // 표 아래 한 값들 — 엔진·엑셀과 같은 보험료
     expect(s0.scalars.map((x) => x.sym)).toEqual(["N*", "PVB", "P", "P_base", "G", "G₁", "G_10만", "P_β", "α^{표준}", "α^{공제}"]);
-    expect(sheets.map((s) => s.per100k)).toEqual([261, 162]);
-    expect([per100k, premium]).toEqual([423, 342000]);
+    expect(sheets.map((s) => s.per100k)).toEqual([261, 163]);
+    expect([per100k, premium]).toEqual([424, 342500]);
     // 책임준비금 — 엔진(자유설계보험)의 연도별 10만원당 준비금과 같다 · P_β 도 같다
     sheets.forEach((s, i) => {
       const w = want.coverages[i];
@@ -127,7 +127,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     // 캐시가 있으면 계산 표(열 28개 + 표준이율 모델)는 보험료만 내는 것의 약 7배, O(n²) 이면 40배였다. 세 번 재어 가장 빠른 것끼리 견준다
     const best = (f: () => void) => Math.min(...[0, 1, 2].map(() => { const t0 = performance.now(); f(); return performance.now() - t0; }));
     const r = calcSheets(spec, want.contract);
-    expect([r.per100k, r.premium]).toEqual([423, 342000]);
+    expect([r.per100k, r.premium]).toEqual([424, 342500]);
     const sheet = best(() => calcSheets(spec, want.contract)), premiumOnly = best(() => computeSpec(spec, want.contract));
     expect(sheet / premiumOnly).toBeLessThan(20);
   });

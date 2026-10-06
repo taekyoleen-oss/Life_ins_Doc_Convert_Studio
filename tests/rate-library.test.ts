@@ -41,7 +41,7 @@ describe("기본 위험률 모음", () => {
     expect(st.sheet.rows.length).toBe(111);                                   // 0~110세로 넓어진다
     expect(st.map.slice(2)).toEqual([{ to: "rate", rateId: "r80", sex: "M" }, { to: "rate", rateId: "r80", sex: "F" }]);
     const withT = attachTables(spec, st);
-    expect(withT.rates.find((r) => r.id === "r80")!.tables!.F!.values[40]).toBeCloseTo(0.000167, 12);
+    expect(withT.rates.find((r) => r.id === "r80")!.tables!.F!.values[40]).toBeCloseTo(0.00017495, 12);
     expect(withT.rates.find((r) => r.id === "q")!.table!.ages).toEqual([40, 41]);  // 기존 열은 그 나이만
     // 표가 없으면 연령 열부터
     expect(mergeColumns(null, itemColumns(it)).sheet.head).toEqual(["연령", "80% 이상 장해율(남)", "80% 이상 장해율(여)"]);
