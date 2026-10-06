@@ -74,7 +74,7 @@ describe("특약은 주계약 아래 따로 · 위험률 기호는 M04 표의 �
     expect(text(7)).toContain("(3) l^{(3)}_x — 암 아닌 유지자");
     expect(text(7)).toContain("암발생률|rc|최초발생");
     expect(text(7)).toContain("암수술률|cs|최초발생");
-    expect(text(7)).not.toContain("주계약");
+    expect(text(7)).not.toMatch(/주계약과 같다|주계약 다. 유지자/);   // 주계약에서 가져오는 것이 없다(머리말의 납입면제 관례 문장만 주계약을 말한다)
     // 암입원특약은 탈퇴 사유가 없어 기준 인원 100,000 명을 그대로 유지하고, 주계약의 납입면제(암)를 가져오지 않는다 — 납입자도 그 lx
     expect(text(4)).toContain("l^{(2)}_{x+t+1} = l^{(2)}_{x+t}");
     expect(text(4)).toContain("D′_{x+t} = l^{(2)}_{x+t}·v^t");

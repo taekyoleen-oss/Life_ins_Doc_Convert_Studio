@@ -305,6 +305,9 @@ export default function Studio() {
   /** 입력 화면에서 칸을 고름 — YAML 줄을 고른 것과 같다 */
   const onFormSelect = useCallback((paths: string[]) => { setLeftSel(paths); setRightSel([]); setFollow(true); }, []);
 
+  /** 조건에서 고른 계약 단위 탭 — 산출방법서는 그 부만 비춘다. unitWant 는 산출방법서의 특약 부를 눌렀을 때 조건 탭을 옮기라는 요청 */
+  const [docPart, setDocPart] = useState<string | null>(null);
+  const [unitWant, setUnitWant] = useState<{ u: string; n: number }>({ u: "", n: 0 });
   const pickPaths = useCallback((paths: string[], scroll: boolean) => {
     setRightSel(paths);
     setLeftSel(paths);            // 오른쪽에서도 같은 조건이 만든 곳을 함께 비춘다
@@ -780,7 +783,7 @@ export default function Studio() {
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
                         calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)} onShowDoc={(paths) => { setTab("doc"); showPane("doc"); onFormSelect([...paths]); }}
-                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRenameRate={onRenameRate} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} />
+                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRenameRate={onRenameRate} onUnit={setDocPart} unitWant={unitWant} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
@@ -801,7 +804,7 @@ export default function Studio() {
                       <span className="truncate text-muted-foreground">블록을 누르면 왼쪽에서 그 조건이 표시됩니다 — 식을 더하려면 왼쪽 [＋ 수식 더하기]</span>
                     </div>
                     <div className="thin-scroll min-h-0 flex-1 overflow-auto bg-white">
-                      <DocPreview sections={sections} title={title} highlight={leftSel} changed={changed} follow={follow} onPick={pickPaths} />
+                      <DocPreview sections={sections} title={title} highlight={leftSel} changed={changed} follow={follow} onPick={pickPaths} part={docPart ?? undefined} onPart={(u) => setUnitWant((w) => ({ u, n: w.n + 1 }))} />
                     </div>
                   </div>
                 )}

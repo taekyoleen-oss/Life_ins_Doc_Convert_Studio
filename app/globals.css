@@ -82,9 +82,22 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .card-open > .card-head h3 { color: var(--primary); }
 .card:not(.card-open) .card-head:hover { background: #f8fafc; border-radius: 11px; }
 .card-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer; }
-.card-no { display: flex; width: 30px; height: 30px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--muted); color: var(--muted-foreground); }
-.card-no-done { background: #5b86b8; color: #fff; }
-.card-no-error { background: #fee2e2; color: #9f1239; }
+/* 카드 단계 아이콘 — 색연필로 칠한 원(굵은 남색 테두리 · 빗금 바탕 · 아래 상태 점 · 펼치면 위에 반짝 선 · 카드 사이 화살표) */
+.card-step { --step-ink: #1e3a5f; --step-bg: #d6e8f7; --step-fill: #9cc7ea; position: relative; display: flex; width: 40px; height: 40px; flex-shrink: 0; align-items: center; justify-content: center;
+  border: 2px solid var(--step-ink); border-radius: 50% 48% 52% 50% / 50% 52% 48% 50%; color: var(--step-ink);
+  background: repeating-linear-gradient(-55deg, #ffffff66 0 2px, transparent 2px 5px), var(--step-bg); box-shadow: inset 0 0 0 2px #ffffff55; }
+.card-step.step-mint { --step-bg: #cdeee6; --step-fill: #6fcfbb; }
+.card-step.step-sun { --step-bg: #fbe6a8; --step-fill: #8fbbe6; }
+.card-step::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; border: 1.5px solid var(--step-ink); background: #f08f80; }
+.card-step-editing::after { background: #f6c453; }
+.card-step-error::after { background: #e5484d; }
+.card-step-optional::after { background: #e2e8f0; }
+/* 앞 카드에서 이어지는 화살표 — 카드 사이 틈에 아래로 */
+.card-step-flow::before { content: ""; position: absolute; left: 50%; top: -25px; width: 10px; height: 16px; margin-left: -5px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cpath d='M5 1v12M1.5 9.5L5 13.5 8.5 9.5' fill='none' stroke='%232f6fb0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / contain; }
+/* 펼친 카드 — 그림처럼 원 위에 반짝 선 셋 */
+.card-open .card-step { box-shadow: inset 0 0 0 2px #ffffff55, 0 0 0 4px #9cc7ea44; }
+.card-open .card-step::before { content: ""; position: absolute; left: 50%; top: -15px; width: 26px; height: 10px; margin-left: -13px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 10'%3E%3Cpath d='M5 8L2 3M13 7V1M21 8l3-5' fill='none' stroke='%232f6fb0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain; }
 .card-icon { border-radius: 4px; padding: 1px 5px; font-size: 12px; color: #9aa3ad; }
 .card-icon:hover { background: var(--muted); }
 .card-toggle { flex-shrink: 0; width: 26px; height: 26px; border-radius: 999px; font-size: 12px; line-height: 1; color: var(--muted-foreground); }

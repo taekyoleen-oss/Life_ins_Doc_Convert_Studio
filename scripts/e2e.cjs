@@ -817,6 +817,16 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     && docC.includes("탈퇴 사유 없는 유지자") && /납입: 암입원특약$/.test(payRow.trim()) && !payRow.includes("주계약") && wait90 === 3,
     `보험금 ${await q.locator(".card[data-card=B01] .sub").count()} · 납입 ${payRow} · 90일 행 ${wait90}`);
   await q.screenshot({ path: `${OUT}/s14_shared_cancer.png` });
+  // 특약 탭에서 조건을 고르면 그 특약의 부만 비춘다(주계약 부는 같은 이율·사업비를 써도 비추지 않는다)
+  await q.click(".card[data-card=M03] .card-head");
+  await q.waitForTimeout(700);
+  const hlParts = await q.$$eval(".doc-body section", (ss) => ss.filter((x) => x.querySelector(".doc-hl")).map((x) => x.dataset.part ?? "(공통)"));
+  ok("특약 탭에서 조건을 고르면 그 특약 부만 강조 — 주계약 부는 비추지 않는다", hlParts.length > 0 && hlParts.every((x) => x === "암입원특약" || x === "(공통)") && hlParts.includes("암입원특약"), hlParts.join(" / "));
+  // 산출방법서의 주계약 부를 누르면 조건 탭이 주계약으로
+  await q.locator(".doc-body section[data-part='주계약'] [data-path]").first().click();
+  await q.waitForTimeout(600);
+  ok("산출방법서의 주계약 부를 누르면 조건 탭이 주계약으로", (await q.locator(".unit-tabs .unit-tab[aria-selected='true'], .unit-tabs button[aria-selected='true']").first().textContent()).includes("주계약"));
+  ok("카드 단계는 색연필 원 아이콘 — 그림 · 상태 점 · 카드 사이 화살표", (await q.locator(".card-step svg").count()) >= 10 && (await q.locator(".card-step-flow").count()) >= 9);
   await q.close();
 
   ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));

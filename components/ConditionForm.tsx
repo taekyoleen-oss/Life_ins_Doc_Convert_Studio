@@ -172,6 +172,29 @@ const Add = ({ onClick, children }: { onClick: () => void; children: ReactNode }
   <button type="button" className="btn mt-2" onClick={onClick}>{children}</button>
 );
 
+// ── 카드 단계 아이콘 — 색연필로 칠한 원(사용자 견본 그림): 굵은 남색 테두리 · 빗금 친 연한 바탕 · 가운데 그림 · 아래 상태 점 · 위 반짝 선(펼친 카드) · 카드 사이 화살표
+const STEP_TONE = ["sky", "mint", "sun", "sky", "mint", "sun"] as const;
+/** 카드마다 그림 — 선은 남색(currentColor), 칠은 강조색(var(--step-fill)) */
+function StepIcon({ id }: { id: string }) {
+  const c = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const f = { fill: "var(--step-fill)", stroke: "currentColor", strokeWidth: 1.8, strokeLinejoin: "round" as const };
+  const body: Record<string, ReactNode> = {
+    M00: <><path {...f} d="M7 3h7l4 4v14H7z" /><path {...c} d="M14 3v4h4M9.5 12h6M9.5 15.5h6M9.5 9h2.5" /></>,
+    M01: <><path {...f} d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" /><path {...c} d="M8.8 12.2l2.3 2.3 4.3-4.6" /></>,
+    M03: <><circle {...f} cx="12" cy="12" r="8" /><path {...c} d="M9 15l6-6" /><circle {...c} cx="9.3" cy="9.3" r="1.2" /><circle {...c} cx="14.7" cy="14.7" r="1.2" /></>,
+    M04: <><rect {...f} x="4" y="4" width="16" height="16" rx="2" /><path {...c} d="M4 9h16M4 14h16M10 9v11" /></>,
+    M06: <><ellipse {...f} cx="12" cy="7" rx="6" ry="2.6" /><path {...c} d="M6 7v5c0 1.4 2.7 2.6 6 2.6s6-1.2 6-2.6V7M6 12v5c0 1.4 2.7 2.6 6 2.6s6-1.2 6-2.6v-5" /></>,
+    C01: <><circle {...f} cx="9.3" cy="12" r="5.3" /><circle {...c} cx="14.7" cy="12" r="5.3" /></>,
+    S01: <><circle {...f} cx="10" cy="8" r="3.4" /><path {...f} d="M3.8 19.5c.6-3.6 3.2-5.6 6.2-5.6 1.6 0 3 .5 4.1 1.5" /><circle {...c} cx="17" cy="17" r="3.6" /><path {...c} d="M15.4 17l1.1 1.1 2-2.2" /></>,
+    B01: <><path {...f} d="M3.5 12a8.5 8.5 0 0117 0z" /><path {...c} d="M12 12v6.2a1.8 1.8 0 01-3.6 0M12 3.5V2.6" /></>,
+    B02: <><rect {...f} x="5" y="3.5" width="14" height="17" rx="1.6" /><path {...c} d="M8 8.5l1.2 1.2 2-2.2M8 13.5l1.2 1.2 2-2.2M13.5 8.8H16M13.5 13.8H16M8.5 17.6H16" /></>,
+    M07: <><rect {...f} x="5.5" y="3" width="13" height="18" rx="2" /><path {...c} d="M8.5 6.5h7v3h-7zM9 13h.01M12 13h.01M15 13h.01M9 16.5h.01M12 16.5h.01M15 16.5h.01" /></>,
+    M08: <><path {...f} d="M4 20V10l8-5 8 5v10z" /><path {...c} d="M8 20v-6M12 20v-6M16 20v-6M3 20h18" /></>,
+    M09: <><path {...f} d="M14.7 6.3a4 4 0 00-5.2 5.2l-5.3 5.3a1.6 1.6 0 002.3 2.3l5.3-5.3a4 4 0 005.2-5.2l-2.4 2.4-2.3-.5-.5-2.3z" /><circle {...c} cx="18" cy="17" r="2.2" /><path {...c} d="M18 13.6v1.2M18 19.2v1.2M14.6 17h1.2M20.2 17h1.2" /></>,
+  };
+  return <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">{body[id] ?? <circle {...f} cx="12" cy="12" r="6" />}</svg>;
+}
+
 // ── 카드 ────────────────────────────────────────────────────────────────────
 const BADGE: Record<Status, [string, string]> = {
   done: ["완료", "bg-accent text-primary"], editing: ["입력 중", "bg-amber-100 text-amber-800"],
@@ -184,7 +207,9 @@ function Card({ c, index, open, onToggle, showF, onToggleF, onDoc }: { c: CardDe
   return (
     <section data-path={c.paths.join("|")} data-card={c.id} className={`card ${open ? "card-open" : ""}`}>
       <header className="card-head" onClick={onToggle}>
-        <span className={`card-no card-no-${c.status}`}>{index + 1}</span>
+        <span className={`card-step step-${STEP_TONE[index % STEP_TONE.length]} card-step-${c.status}${index ? " card-step-flow" : ""}`} aria-label={`${index + 1}단계 · ${label}`} title={`${index + 1}단계 · ${label}`}>
+          <StepIcon id={c.id} />
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
@@ -1106,6 +1131,10 @@ interface Props {
   onRateSource: (rateId: string, key: string) => void;
   /** M04 기호(위험률 id) 바꾸기 — 조건의 그 위험률 참조와 위험률 표의 잇기를 함께 */
   onRenameRate: (from: string, to: string) => void;
+  /** 고른 계약 단위 탭 — 산출방법서가 그 부만 비춘다 */
+  onUnit?: (unit: string) => void;
+  /** 산출방법서의 특약 부를 눌렀을 때 그 탭으로 */
+  unitWant?: { u: string; n: number };
   /** 스프레드시트에서 위험률 불러오기 · 위험률 가공 창 */
   onRateImport: () => void;
   onRateProcess: () => void;
@@ -1113,7 +1142,7 @@ interface Props {
   onShowDoc: (paths: string[]) => void;
 }
 
-export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml, calc: calcOn, setCalc: setCalcOn, formulasOn, toggleFormulas, onPremiumSheet, rateSources, rateSourceOf, onRateSource, onRenameRate, onRateImport, onRateProcess, onShowDoc }: Props) {
+export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml, calc: calcOn, setCalc: setCalcOn, formulasOn, toggleFormulas, onPremiumSheet, rateSources, rateSourceOf, onRateSource, onRenameRate, onUnit, unitWant, onRateImport, onRateProcess, onShowDoc }: Props) {
   const { doc, syntax, raw } = useMemo(() => {
     const doc = parseDocument(yaml);
     const syntax = doc.errors[0] ?? (doc.contents !== null && !isMap(doc.contents)
@@ -1176,6 +1205,8 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   // 고르기 전에는 담보가 있는 첫 단위 — 특약만 있는 조건(입원·수술 특약 샘플)이 빈 주계약 탭으로 열리지 않게
   const unitOfBen = (x: Record<string, unknown>) => str(x.unit).trim() || MAIN_UNIT;
   const unit = unitSel && units.includes(unitSel) ? unitSel : units.find((u) => bens.some((x) => unitOfBen(x) === u)) ?? MAIN_UNIT;
+  useEffect(() => { onUnit?.(unit); }, [unit, onUnit]);
+  useEffect(() => { if (unitWant?.u) setUnit(unitWant.u); }, [unitWant]);
   const unitIdxs = bens.map((x, i) => (((str(x.unit).trim() || MAIN_UNIT) === unit) ? i : -1)).filter((i) => i >= 0);
   const unitIds = unitIdxs.map((i) => spec.benefits[i]?.id).filter(Boolean) as string[];
   // 지금 단위의 생존자 — 그 단위 담보가 쓰거나, 그 단위 [납입]이거나, 그 단위에서 만든 것(아직 아무도 안 쓰는 새 생존자)
