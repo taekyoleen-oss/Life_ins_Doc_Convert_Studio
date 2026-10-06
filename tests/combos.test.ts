@@ -59,7 +59,7 @@ describe("위험률 합성", () => {
 describe("특약은 주계약 아래 따로 · 위험률 기호는 M04 표의 기호", () => {
   const spec = spec0("cancerPlan");
   const secs = renderMethodDoc(withFormulas(spec));
-  it("주계약 1~3장 다음에 특약마다 [특약 이름] 1~3장 — 보험금·보장은 그 부에만", () => {
+  it("주계약 1~3장 다음에 특약마다 [특약 이름] 1~3장 — 독립특약: 그 특약의 예정기초율 · 유지자 · 보험금 · 보장", () => {
     expect(secs.map((s) => s.title).filter((t) => !/별첨/.test(t))).toEqual([
       "개요", "1. 보험료의 계산에 관한 사항", "2. 책임준비금의 계산에 관한 사항", "3. 해지환급금의 계산에 관한 사항",
       "[암입원특약] 1. 보험료의 계산에 관한 사항", "[암입원특약] 2. 책임준비금의 계산에 관한 사항", "[암입원특약] 3. 해지환급금의 계산에 관한 사항",
@@ -69,8 +69,16 @@ describe("특약은 주계약 아래 따로 · 위험률 기호는 M04 표의 �
     expect(text(1)).not.toContain("암 입원");
     expect(text(4)).toContain("(1) 암 입원(1일당)");
     expect(text(4)).toContain("d^{(2)}_{x+t} = l^{(2)}_{x+t} × ch_{x+t}");
-    expect(text(7)).toContain("d^{(1)}_{x+t} = l^{(1)}_{x+t} × cs_{x+t}");
-    expect(text(7)).toContain("lx(1) 암 아닌 유지자 — 주계약 다. 유지자의 것을 쓴다");
+    // 독립특약 — 주계약과 같은 탈퇴 사유(암)라도 그 특약의 유지자 lx(3) 을 따로 세우고, 예정위험률도 그 특약이 쓰는 것만 다시 싣는다
+    expect(text(7)).toContain("d^{(3)}_{x+t} = l^{(3)}_{x+t} × cs_{x+t}");
+    expect(text(7)).toContain("(3) l^{(3)}_x — 암 아닌 유지자");
+    expect(text(7)).toContain("암발생률|rc|최초발생");
+    expect(text(7)).toContain("암수술률|cs|최초발생");
+    expect(text(7)).not.toContain("주계약");
+    // 암입원특약은 탈퇴 사유가 없어 기준 인원 100,000 명을 그대로 유지하고, 주계약의 납입면제(암)를 가져오지 않는다 — 납입자도 그 lx
+    expect(text(4)).toContain("l^{(2)}_{x+t+1} = l^{(2)}_{x+t}");
+    expect(text(4)).toContain("D′_{x+t} = l^{(2)}_{x+t}·v^t");
+    expect(text(4)).not.toContain("암발생률");
     // 대상 위험률은 M04 에서 정한 기호(rc) — r^{(1)} 이 아니다
     expect(text(1)).toContain("대상 위험률|rc_{x+t}");
     expect(text(1)).not.toContain("r^{(1)}");

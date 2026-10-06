@@ -418,7 +418,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const y2 = await p.$$eval(".cm-editor", (eds) => [...eds[0].querySelectorAll(".cm-line")].map((e) => e.textContent).join("\n"));
   ok("LaTeX 수정 → 조건 반영: 이율 3.5%", /interest: 3\.5%/.test(y2), toast);
   ok("LaTeX 수정 → 조건 반영: 배수 0.7배", /multiple: 0\.7/.test(y2));
-  ok("조건 파일 주석 유지", y2.includes("# 납입면제 — 암 진단 시"));
+  ok("조건 파일 주석 유지", y2.includes("# 주계약은 암 진단 시 소멸"));
   await p.click("button.tab:has-text('산출방법서')");
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5_latex_applied.png` });
@@ -806,15 +806,15 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const tabs = await q.$$eval(".unit-tabs .unit-tab", (e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   const trialC = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("암보험: 탭 셋(주계약 · 암입원특약 · 암수술특약) · 사망률 없음 · 보험료가 나온다", tabs.length === 3 && tabs[1].includes("암입원특약") && tabs[2].includes("암수술특약")
-    && (await q.locator(".doc-body tr", { hasText: "사망률" }).count()) === 0 && trialC.includes("240,520"), `${tabs.join(" / ")} · ${trialC.slice(0, 120)}`);
+    && (await q.locator(".doc-body tr", { hasText: "사망률" }).count()) === 0 && trialC.includes("240,300"), `${tabs.join(" / ")} · ${trialC.slice(0, 120)}`);
   await q.click(".unit-tabs .unit-tab:has-text('암입원특약')");
   await q.click(".card[data-card=B01] .card-head");                     // 보장 카드를 펼쳐야 담보 덩이가 그려진다
   await q.waitForTimeout(600);
   const docC = await q.textContent(".doc-body");
   const payRow = (await q.locator(".doc-body tr", { hasText: "납입:" }).allTextContents()).find((t) => t.includes("암입원특약")) ?? "";
   const wait90 = await q.locator(".doc-body tr", { hasText: "90일" }).count();
-  ok("암보험: 암입원특약 탭 — 보험금 하나(암 입원) · 암 아닌 유지자 하나가 세 단위의 [납입](D′) · 보장 셋 모두 90일 면책", (await q.locator(".card[data-card=B01] .sub").count()) === 1
-    && docC.includes("암 아닌 유지자") && /주계약.*암입원특약.*암수술특약/.test(payRow) && wait90 === 3,
+  ok("암보험: 암입원특약 탭 — 보험금 하나(암 입원) · 독립특약이라 그 특약의 유지자가 [납입](D′, 기준 인원 100,000 명 그대로) · 보장 셋 모두 90일 면책", (await q.locator(".card[data-card=B01] .sub").count()) === 1
+    && docC.includes("탈퇴 사유 없는 유지자") && /납입: 암입원특약$/.test(payRow.trim()) && !payRow.includes("주계약") && wait90 === 3,
     `보험금 ${await q.locator(".card[data-card=B01] .sub").count()} · 납입 ${payRow} · 90일 행 ${wait90}`);
   await q.screenshot({ path: `${OUT}/s14_shared_cancer.png` });
   await q.close();
