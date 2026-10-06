@@ -146,7 +146,7 @@ export default function RateSheetPane({ state, onMap, onText, onFile, onClear, r
                 {sh.head.map((h, i) => (
                   <th key={i} className={`sheet-name ${cls(i)}`} onClick={() => colPaths[i].length && onPick(colPaths[i])} onDoubleClick={() => setEdit({ r: -1, c: i })}
                     title={`${colPaths[i].length ? "누르면 이 열을 이은 위험률을 조건·산출방법서에서 표시합니다 · " : ""}두 번 누르면 열 이름을 고칩니다`}>
-                    <span className="font-mono text-[10px] text-muted-foreground">{colLetter(i)}</span> {edit?.r === -1 && edit.c === i ? editor(h) : h}
+                    <span className="font-mono text-[10px] text-muted-foreground">{colLetter(i)}</span> {edit?.r === -1 && edit.c === i ? editor(h) : map[i]?.to === "rate" && map[i].sex ? baseName(h) : h}
                   </th>
                 ))}
               </tr>

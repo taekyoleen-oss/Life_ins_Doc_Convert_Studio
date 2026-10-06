@@ -10,6 +10,7 @@ import { calcSheets, checkFormula, survivorTables, computeByPayMethod, computeSp
 import { subSup } from "@/lib/methoddoc/render";
 import { coverFields, coverTerms, endAgeLabel, MAIN_UNIT, RATE_ROLE_LABEL, unitNames, WHOLE_LIFE_AGE, type ComboSpec, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
 import { EXPENSE_PRESET } from "@/lib/samples";
+import { newRateId } from "@/lib/sheet";
 import { SECTION_OF } from "@/lib/snippets";
 import { formulaHtml } from "./DocPreview";
 import FormulaPalette from "./FormulaPalette";
@@ -440,17 +441,29 @@ function BasisBody() {
   );
 }
 
+/** M04 기호(위험률 id) 칸 — 고친 뒤 칸을 떠나거나 Enter 를 누를 때 한 번에 바꾼다(글자마다 바꾸면 참조가 중간 이름으로 흩어진다) */
+function RateIdInput({ id, onRename, onFocus }: { id: string; onRename: (v: string) => void; onFocus: () => void }) {
+  const [v, setV] = useState(id);
+  const [was, setWas] = useState(id);
+  if (was !== id) { setWas(id); setV(id); }
+  return (
+    <input className="inp font-mono" value={v} aria-label={`위험률 기호 ${id}`} title="식에 쓰는 위험률 기호 — 영문자로 시작하는 영문·숫자(q · rc · r80). 바꾸면 담보·유지자·합성의 참조와 위험률 표의 잇기가 함께 바뀝니다"
+      onFocus={onFocus} onChange={(e) => setV(e.target.value)} onBlur={() => { if (v.trim() !== id) onRename(v); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setV(id); e.currentTarget.blur(); } }} />
+  );
+}
+
 /** 위험률의 출처(값 표) 고르기 — 기본 위험률 모음의 항목 또는 위험률 표 창의 열(이름) */
 export interface RateSource { key: string; label: string; group: string }
 
 /**
- * M04 위험률 — 산출방법서 가.(2) 예정위험률 표와 같은 열(위험률 · 기호 · 유형 · 근거·출처 · 표).
- * 출처는 콤보에서 고른다: 기본 위험률 모음의 항목이나 위험률 표의 열을 고르면 그 값이 이어지고 근거 칸이 "경험생명표(가상) <이름>" 으로 채워진다.
- * 더하기는 기본 위험률 모음이 기본이고, 다른 위험률은 스프레드시트에서 불러오거나 있는 위험률을 가공해 만든다.
+ * M04 위험률 — 산출방법서 가.(2) 예정위험률 표와 같은 칸(위험률 · 기호 · 유형 · 근거·출처)을 모두 여기서 고친다.
+ * 오른쪽 "위험률 표" 콤보가 이 위험률을 위험률 표의 어느 열(남·여)에 잇는지 정한다 — 값은 늘 위험률 표에서 온다.
+ * 새로 필요한 위험률은 [＋ 위험률] 로 더하면 위험률 표에 그 열이 생긴다(기본 위험률 모음에서 따로 가져오지 않는다 — 사용자 요청 2026-10-06).
  */
-function RatesBody({ rates, used, tableNote, onLibrary, sources, sourceOf, onSource, onImport, onProcess }: {
-  rates: RateItem[]; used: (id: string) => string[]; tableNote: (id: string) => string | undefined; onLibrary: () => void;
-  sources: RateSource[]; sourceOf: (id: string) => string | undefined; onSource: (rateId: string, key: string) => void; onImport: () => void; onProcess: () => void;
+function RatesBody({ rates, used, tableNote, sources, sourceOf, onSource, onRename, onImport, onProcess }: {
+  rates: RateItem[]; used: (id: string) => string[]; tableNote: (id: string) => string | undefined;
+  sources: RateSource[]; sourceOf: (id: string) => string | undefined; onSource: (rateId: string, key: string) => void; onRename: (from: string, to: string) => void; onImport: () => void; onProcess: () => void;
 }) {
   const f = useForm();
   const remove = (i: number) => {
@@ -458,35 +471,41 @@ function RatesBody({ rates, used, tableNote, onLibrary, sources, sourceOf, onSou
     if (who.length && !window.confirm(`${who.join(", ")} 담보가 이 위험률을 씁니다. 지울까요?`)) return;
     f.edit([{ path: ["rates", i] }]);
   };
-  const groups = [...new Set(sources.map((s) => s.group))];
+  const add = () => {
+    const taken = rates.map((r) => r.id);
+    const id = newRateId("incidence", taken);
+    // 조건에 더하면 위험률 표에 그 이름의 빈 열이 생긴다(Studio onEdit) — 값은 표에 붙여넣는다
+    f.edit([{ path: ["rates"], add: true, value: { id, name: "새 위험률", role: "incidence", source: "경험생명표(가상) 새 위험률" } }]);
+  };
   return (
     <div className="space-y-2">
       <div className="rate-table">
-        <div className="rate-row rate-head"><span>위험률</span><span>기호</span><span>유형</span><span>근거·출처 (값 표)</span><span>표</span><span /></div>
+        <div className="rate-row rate-head"><span>위험률</span><span>기호</span><span>유형</span><span>근거·출처</span><span>위험률 표 (연결)</span><span /></div>
         {rates.map((r, i) => {
           const cur = sourceOf(r.id) ?? "";
-          const src = str(f.get(["rates", i, "source"]));
+          const note = tableNote(r.id)?.replace(/^표: /, "");
           return (
             <div key={i} data-path={`rates[${i}]`} className="rate-row">
               <F p={["rates", i, "name"]} label="위험률 이름" bare placeholder="위험률 이름" />
-              <span className="chip" title="담보가 이 위험률을 가리키는 기호(id) — 식의 q · r · f 와 같은 뜻, YAML 탭에서 바꿉니다">{r.id}</span>
+              <RateIdInput id={r.id} onRename={(v) => onRename(r.id, v)} onFocus={() => f.select([`rates[${i}]`, `rate:${r.id}`])} />
               <Sel p={["rates", i, "role"]} label="유형" bare options={Object.entries(RATE_ROLE_LABEL)} />
-              <span data-path={`rates[${i}].source`} className="min-w-0">
-                <select className="inp w-full" value={cur} aria-label={`${r.name} 출처`} onFocus={() => f.select([`rates[${i}]`, `rate:${r.id}`])}
+              <F p={["rates", i, "source"]} label="근거·출처" bare placeholder="경험생명표(가상) …" />
+              <span data-path={`rates[${i}]`} className="min-w-0">
+                <select className="inp w-full" value={cur} aria-label={`${r.name} 위험률 표 열`} onFocus={() => f.select([`rates[${i}]`, `rate:${r.id}`])}
                   onChange={(e) => { if (e.target.value) onSource(r.id, e.target.value); }}>
-                  <option value="">{cur ? "—" : "값 표 고르기 …"}</option>
-                  {groups.map((g) => <optgroup key={g} label={g}>{sources.filter((s) => s.group === g).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</optgroup>)}
+                  {!cur && <option value="">열 고르기 …</option>}
+                  {sources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  <option value="new">＋ 위험률 표에 새 열 ({r.name})</option>
                 </select>
-                <span className="block truncate text-[11px] text-muted-foreground" title={src}>{src || "근거 없음"}</span>
+                <span className={`block truncate text-[11px] ${note ? "text-primary" : "text-rose-700"}`} title={note}>{note ?? "값 표 없음"}</span>
               </span>
-              <span className={`text-[11px] ${tableNote(r.id) ? "text-primary" : "text-rose-700"}`}>{tableNote(r.id)?.replace(/^표: /, "") ?? "값 표 없음"}</span>
               <Remove onClick={() => remove(i)} />
             </div>
           );
         })}
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn-primary" onClick={onLibrary} title="공개 기본 위험률(과 개발 PC 의 사내 모음)에서 골라 표와 조건에 넣습니다">＋ 위험률 (기본 위험률 모음)</button>
+        <button type="button" className="btn-primary" onClick={add} title="새 위험률을 조건에 더하고 위험률 표에 그 열을 만듭니다 — 이름·기호·유형·근거를 고치고 값을 표에 붙여넣으세요">＋ 위험률</button>
         <button type="button" className="btn" onClick={onImport} title="다른 위험률 — 스프레드시트를 띄워 값과 함께 불러옵니다">＋ 스프레드시트에서 불러오기</button>
         <button type="button" className="btn" onClick={onProcess} title="있는 위험률을 합치거나 곱해 새 위험률을 만듭니다">위험률 가공</button>
       </div>
@@ -601,7 +620,6 @@ function SurvivorsBody({ survs, names, unit, rates, combos, spec, formulas, show
                 {combos.length > 0 && <optgroup label="위험률 합성 (C01)">{combos.map((c) => <option key={c.id} value={`combo:${c.id}`}>{comboName(c)}</option>)}</optgroup>}
               </select>
               <button type="button" className="pane-tool" title="여러 위험률을 묶은 합성은 C01 위험률 합성 카드에서 만들고 이름을 붙입니다" onClick={onCombos}>위험률 합성 카드</button>
-              <button type="button" className="pane-tool" title="기본 위험률 모음에서 위험률을 더합니다(값 표와 함께)" onClick={() => f.library?.()}>＋ 위험률</button>
             </label>
             <p className="fld-hint">{[sv.benefitIdx.length ? `보험금 ${sv.benefitIdx.map((i) => spec.benefits[i]?.name).join(" · ")} 이(가) 쓴다` : "쓰는 보험금 없음",
               sv.payUnits.length ? `납입(N*): ${sv.payUnits.join(" · ")}` : ""].filter(Boolean).join(" · ")}</p>
@@ -1086,6 +1104,8 @@ interface Props {
   rateSources: RateSource[];
   rateSourceOf: (rateId: string) => string | undefined;
   onRateSource: (rateId: string, key: string) => void;
+  /** M04 기호(위험률 id) 바꾸기 — 조건의 그 위험률 참조와 위험률 표의 잇기를 함께 */
+  onRenameRate: (from: string, to: string) => void;
   /** 스프레드시트에서 위험률 불러오기 · 위험률 가공 창 */
   onRateImport: () => void;
   onRateProcess: () => void;
@@ -1093,7 +1113,7 @@ interface Props {
   onShowDoc: (paths: string[]) => void;
 }
 
-export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml, calc: calcOn, setCalc: setCalcOn, formulasOn, toggleFormulas, onPremiumSheet, rateSources, rateSourceOf, onRateSource, onRateImport, onRateProcess, onShowDoc }: Props) {
+export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, changed, onSelect, open, setOpen, tableNote, noTableIds, onLibrary, onShowYaml, calc: calcOn, setCalc: setCalcOn, formulasOn, toggleFormulas, onPremiumSheet, rateSources, rateSourceOf, onRateSource, onRenameRate, onRateImport, onRateProcess, onShowDoc }: Props) {
   const { doc, syntax, raw } = useMemo(() => {
     const doc = parseDocument(yaml);
     const syntax = doc.errors[0] ?? (doc.contents !== null && !isMap(doc.contents)
@@ -1266,7 +1286,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
       message: noTable.length ? `값 표가 없는 위험률: ${noTable.join(", ")} — 아래 [위험률 표]에 같은 이름의 열을 붙여넣으면 이어집니다(계산 앱에서는 그때까지 0). 위험률을 더하면 표에 빈 열이 생깁니다.` : undefined,
       summary: [...rates.slice(0, 4).map((r) => r.name), rates.length > 4 ? `외 ${rates.length - 4}` : "", sp.rates.some((r) => r.table) ? `표 ${sp.rates.filter((r) => r.table).length}개 연결` : "", noTable.length ? `표 없음 ${noTable.length}` : ""],
       help: "산출방법서 가.(2) 예정위험률 표와 같은 칸입니다. 출처 콤보에서 값 표(기본 위험률 모음 · 위험률 표의 열)를 고르면 값이 이어지고 근거가 채워집니다. 더하기는 기본 위험률 모음이 기본이고, 다른 위험률은 스프레드시트에서 불러오거나 [위험률 가공]으로 있는 위험률을 합치거나 곱해 만듭니다.",
-      body: <RatesBody rates={rates} used={used} tableNote={tableNote} onLibrary={onLibrary} sources={rateSources} sourceOf={rateSourceOf} onSource={onRateSource} onImport={onRateImport} onProcess={onRateProcess} /> },
+      body: <RatesBody rates={rates} used={used} tableNote={tableNote} sources={rateSources} sourceOf={rateSourceOf} onSource={onRateSource} onRename={onRenameRate} onImport={onRateImport} onProcess={onRateProcess} /> },
     { id: "M06", code: "M06", title: "예정사업비율", paths: ["expenses"], status: status(errM06, nExp > 0), message: errM06,
       summary: [`${nExp}줄`, sp.expenses.some((e) => /^(α_S|α_P|β_S|β_G)$/.test(e.symbol)) ? "산출방법서형" : ""],
       help: "산출방법서형은 α_S·α_P·β_S·β_G·β′·γ 를 씁니다. 보장기간이 20년보다 짧으면 α_P 는 n/20 배로 줄입니다. 이 값들이 다음 카드의 영업보험료 식에 그대로 들어갑니다.", body: <ExpenseBody count={nExp} /> },

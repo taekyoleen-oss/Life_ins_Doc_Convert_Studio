@@ -16,7 +16,7 @@ import RateSheetPane from "./RateSheetPane";
 // 보험료 계산 화면(스프레드시트)은 열 때만 받는다
 const PremiumSheet = dynamic(() => import("./PremiumSheet"), { ssr: false });
 import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
-import { itemColumns, itemSummary, libraryItems, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
+import { itemColumns, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
 import { SAMPLES, SHARED_SAMPLE_IDS, START_SAMPLE_ID } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
@@ -35,7 +35,7 @@ import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId,
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 import { buildPackage, isPackage, PACKAGE_EXT, readPackage } from "@/lib/package";
 import { BASE_RATES_CSV } from "@/lib/base-rates";
-import { baseName, guessRole, hasNumbers, mergeColumns, sampleSheet, setCell, setHead, sexOf, type ColMap } from "@/lib/sheet";
+import { baseName, guessRole, mergeColumns, sampleSheet, setCell, setHead, sexOf, type ColMap } from "@/lib/sheet";
 
 /** 샘플은 조건 + 위험률 표 한 세트 — 기본 위험률 표(공개, 남·여)에서 그 조건의 위험률과 이름이 맞는 열만 */
 const sampleSet = (y: string) => ({ yaml: y, sheet: sampleSheet(yamlToSpec(y).spec.rates, BASE_RATES_CSV, "기본 위험률 표") });
@@ -392,15 +392,11 @@ export default function Studio() {
     setToast({ text: `위험률 ${picks.length}개를 표에 넣고 조건에 이었습니다 (${picks.map((p) => p.item.name).join(", ")})${priv ? " — 사내 자료(외부 반출 금지)가 들어 있습니다" : ""}`, kind: priv ? "warn" : "ok" });
   };
 
-  // ── M04 출처 콤보 — 위험률마다 값 표를 고른다(지금 위험률 표의 열 · 기본 위험률 모음 · 개발 PC 의 사내 모음)
-  const libItems = useMemo(() => libraryItems(library), [library]);
+  // M04 의 위험률 표 연결 — 지금 위험률 표의 열(성별을 뺀 이름)만 고른다. 새로 필요한 위험률은 표에 새 열을 더한다(사용자 요청 2026-10-06 — 기본 위험률 모음에서 따로 가져오지 않는다)
   const rateSources = useMemo<RateSource[]>(() => {
-    const cols = sheet ? [...new Set(sheet.sheet.head.flatMap((h, i) => (sheet.map[i]?.to !== "age" && hasNumbers(sheet.sheet, i) ? [baseName(h)] : [])))] : [];
-    return [
-      ...cols.map((n) => ({ key: `col:${n}`, label: n, group: "위험률 표의 열 (지금 표)" })),
-      ...libItems.map((it) => ({ key: `lib:${it.key}`, label: `${it.name} — ${itemSummary(it)}`, group: it.private ? "사내 위험률 모음 (개발 PC)" : "기본 위험률 모음" })),
-    ];
-  }, [sheet, libItems]);
+    const cols = sheet ? [...new Set(sheet.sheet.head.flatMap((h, i) => (sheet.map[i]?.to !== "age" ? [baseName(h)] : [])))] : [];
+    return cols.map((n) => ({ key: `col:${n}`, label: n, group: "위험률 표의 열" }));
+  }, [sheet]);
   const rateSourceOf = useCallback((id: string) => {
     const i = sheet ? sheet.map.findIndex((m) => m.to === "rate" && m.rateId === id) : -1;
     return i >= 0 ? `col:${baseName(sheet!.sheet.head[i])}` : undefined;
@@ -412,11 +408,17 @@ export default function Studio() {
     if (i >= 0) onEdit([{ path: ["rates", i, "source"], value: virtualSource(undefined, name) }]);
   };
   const onRateSource = (rateId: string, key: string) => {
-    if (key.startsWith("lib:")) {
-      const item = libItems.find((x) => `lib:${x.key}` === key);
-      if (!item) return;
-      addFromLibrary([{ item, target: rateId }]);
-      setRateSource(rateId, item.name);
+    if (key === "new") {
+      // 위험률 표에 이 위험률의 새 열(남·여) — 값은 표에 붙여넣는다. 표가 없으면 연령 0~110 열부터 만든다
+      const r = specT.rates.find((x) => x.id === rateId);
+      if (!r) return;
+      setSheet((st) => {
+        const hasAge = !!st && st.map.some((m) => m.to === "age") && st.sheet.rows.length > 0;
+        const base: SheetState = hasAge ? st! : { sheet: { name: st?.sheet.name ?? "위험률 표", head: ["연령"], rows: Array.from({ length: 111 }, (_, a) => [String(a)]) }, map: [{ to: "age" }] };
+        return mergeColumns(unlinkRate(base, rateId)!, (["M", "F"] as const).map((sx) => ({ head: `${r.name}(${sx === "M" ? "남" : "여"})`, ages: [], values: [], target: rateId })), base.sheet.name);
+      });
+      showPane("sheet");
+      setToast({ text: `위험률 표에 ${r.name} 열(남·여)을 더했습니다 — 값을 붙여넣으세요`, kind: "ok" });
       return;
     }
     const name = key.slice(4);
@@ -425,12 +427,33 @@ export default function Studio() {
       if (!st) return st;
       const map = st.map.map((m, i): ColMap => {
         if (m.to === "rate" && m.rateId === rateId) return { to: "skip" };
-        if (m.to !== "age" && hasNumbers(st.sheet, i) && baseName(st.sheet.head[i]) === name) { const sx = sexOf(st.sheet.head[i]); return { to: "rate", rateId, ...(sx ? { sex: sx } : {}) }; }
+        if (m.to !== "age" && baseName(st.sheet.head[i]) === name) { const sx = m.to === "rate" && m.sex ? m.sex : sexOf(st.sheet.head[i]); return { to: "rate", rateId, ...(sx ? { sex: sx } : {}) }; }
         return m;
       });
       return { ...st, map };
     });
     setRateSource(rateId, name);
+  };
+  /** M04 기호(위험률 id) 바꾸기 — 조건에서 그 위험률을 가리키는 곳(담보·유지자·합성·납입면제)과 위험률 표의 잇기를 함께 */
+  const onRenameRate = (from: string, to: string) => {
+    const id = to.trim();
+    if (!id || id === from) return;
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(id)) { setToast({ text: `기호 "${id}" 는 쓸 수 없습니다 — 영문자로 시작하는 영문·숫자로 적으세요(예: rc · r80)`, kind: "err" }); return; }
+    if (specT.rates.some((r) => r.id === id)) { setToast({ text: `기호 "${id}" 는 이미 다른 위험률이 씁니다`, kind: "err" }); return; }
+    const raw = parseDocument(yaml).toJS() as { rates?: { id?: unknown }[]; benefits?: { rateId?: unknown; exitRateIds?: unknown[] }[]; survivors?: { exitRateIds?: unknown[] }[]; combos?: { rateIds?: unknown[] }[]; basis?: { waiverRateIds?: unknown[] } } | null;
+    const swap = (list?: unknown[]) => (list ?? []).map((x) => (String(x) === from ? id : x));
+    const has = (list?: unknown[]) => (list ?? []).some((x) => String(x) === from);
+    const edits: YamlEdit[] = [];
+    (raw?.rates ?? []).forEach((r, i) => { if (String(r?.id) === from) edits.push({ path: ["rates", i, "id"], value: id }); });
+    (raw?.benefits ?? []).forEach((b, i) => {
+      if (String(b?.rateId ?? "") === from) edits.push({ path: ["benefits", i, "rateId"], value: id });
+      if (has(b?.exitRateIds)) edits.push({ path: ["benefits", i, "exitRateIds"], value: swap(b.exitRateIds) });
+    });
+    (raw?.survivors ?? []).forEach((x, i) => { if (has(x?.exitRateIds)) edits.push({ path: ["survivors", i, "exitRateIds"], value: swap(x.exitRateIds) }); });
+    (raw?.combos ?? []).forEach((x, i) => { if (has(x?.rateIds)) edits.push({ path: ["combos", i, "rateIds"], value: swap(x.rateIds) }); });
+    if (has(raw?.basis?.waiverRateIds)) edits.push({ path: ["basis", "waiverRateIds"], value: swap(raw?.basis?.waiverRateIds) });
+    onEdit(edits);
+    setSheet((st) => (st ? { ...st, map: st.map.map((m): ColMap => (m.to === "rate" && m.rateId === from ? { ...m, rateId: id } : m)) } : st));
   };
   /** 스프레드시트에서 불러온 열 → 위험률 표 + 조건(새 위험률은 이름마다 하나 · 남·여 열은 한 위험률) */
   const addFromImport = (picks: ImportPick[]) => {
@@ -757,7 +780,7 @@ export default function Studio() {
                     ? <ConditionForm yaml={yaml} spec={specT} errors={parsed.errors} onEdit={onEdit} highlight={rightSel} changed={changed} onSelect={onFormSelect}
                         open={layout.open} setOpen={setOpen} tableNote={tableNote} noTableIds={noTable.map((r) => r.id)} onLibrary={() => setLibOpen(true)} onShowYaml={() => setLayout((l) => ({ ...l, left: "yaml" }))}
                         calc={calcOn} setCalc={setCalcOn} formulasOn={layout.formulas} toggleFormulas={(id) => setLayout((l) => ({ ...l, formulas: l.formulas.includes(id) ? l.formulas.filter((x) => x !== id) : [...l.formulas, id] }))} onPremiumSheet={() => setCalcOpen(true)} onShowDoc={(paths) => { setTab("doc"); showPane("doc"); onFormSelect([...paths]); }}
-                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} />
+                        rateSources={rateSources} rateSourceOf={rateSourceOf} onRateSource={onRateSource} onRenameRate={onRenameRate} onRateImport={() => setImportOpen(true)} onRateProcess={() => setProcessOpen(true)} />
                     : <CodeEditor value={yaml} onChange={setYaml} language="yaml" mirror={mirror} errors={errorLines} onSelectLines={onSelectLines} apiRef={editor} />}
                 </div>
               </section>
