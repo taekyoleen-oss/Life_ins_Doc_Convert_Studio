@@ -27,7 +27,7 @@ describe("조건 파일(YAML)", () => {
     expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan"]);
     // 공유용 [샘플] 메뉴는 종신보험 · 암보험 둘, 첫 화면은 종신보험
     expect(SHARED_SAMPLE_IDS).toEqual(["whole", "cancerPlan"]);
-    expect(START_SAMPLE_ID).toBe("whole");
+    expect(START_SAMPLE_ID).toBe("cancerPlan");
     for (const x of SAMPLES) for (const r of yamlToSpec(x.yaml).spec.rates) expect(r.source, `${x.id} ${r.name}`).toMatch(/^경험생명표\(가상\) /);
   });
   it("조건 경로마다 줄 번호를 안다 (양쪽 대응 위치의 바탕)", () => {
@@ -68,7 +68,7 @@ describe("조건 → 산출식", () => {
     expect(g.label).toBe("유지자수 lx(1) — 사망, 80% 이상 장해 아닌 유지자");
     expect(g.path).toBe("survivors[0]|rates[0]|rates[1]|basis.waiver|basis.waiverRateIds|basis.interest");
     // 설명 한 줄 → 식 한 줄 (기존 산출방법서 모양)
-    expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + r_{x+t} − q_{x+t}·r_{x+t}/2 )");
+    expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + r80_{x+t} − q_{x+t}·r80_{x+t}/2 )");
     expect(g.text).toContain("유지자수 — 탈퇴 사유가 생긴 사람을 뺀다\nl^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − Q^{(1)}_{x+t} )");
     expect(g.text).toContain("N^{(1)}_{x+t} = Σ_{u≥t} D^{(1)}_{x+u}");
     // 위험률이 하나뿐인 유지자는 결합 Q 없이 그 위험률 그대로(메모: 수식이 아니면 그 위험률)
@@ -90,7 +90,7 @@ describe("조건 → 산출식", () => {
     const b = generateFormulas(spec).find((x) => x.key === "benefit:b1")!;
     // R 은 생존자 식에서 질병끼리 곱으로 묶은 것 — 사망과는 겹치는 부분 절반
     const g = generateFormulas(spec).find((x) => x.key === "surv:s1")!;
-    expect(g.text).toContain("R^{(1)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )·( 1 − r^{(3)}_{x+t} )");
+    expect(g.text).toContain("R^{(1)}_{x+t} = 1 − ( 1 − rc_{x+t} )·( 1 − rs_{x+t} )·( 1 − ra_{x+t} )");
     expect(g.text).toContain("Q^{(1)}_{x+t} = min( 1, q_{x+t} + R^{(1)}_{x+t} − q_{x+t}·R^{(1)}_{x+t}/2 )");
     expect(b.text).toContain("C_{x+t} = l^{(1)}_{x+t}·R^{(1)}_{x+t}·v^{t+½}");
     expect(b.text).not.toContain("R^{(1)}_{x+t} =");
@@ -105,12 +105,12 @@ describe("조건 → 산출식", () => {
     const fs = withFormulas(spec).formulas;
     const surv = fs.filter((f) => f.key?.startsWith("surv:"));
     expect(surv.map((f) => f.label)).toEqual(["유지자수 lx(1) — 사망, 뇌출혈 아닌 유지자", "유지자수 lx(2) — 사망, 급성심근경색증 아닌 유지자", "유지자수 lx(3) — 사망, 뇌출혈, 급성심근경색증 아닌 유지자"]);
-    expect(surv[2].text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
+    expect(surv[2].text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − rs_{x+t} )·( 1 − ra_{x+t} )");
     expect(surv[2].text).toContain("Q^{(3)}_{x+t} = min( 1, q_{x+t} + R^{(3)}_{x+t} − q_{x+t}·R^{(3)}_{x+t}/2 )");
   });
   it("진단형은 급부 = 진단율, 무해지는 해지율 w·CSV", () => {
-    expect(byKey("twoMajor", "benefit:b1").text).toContain("C_{x+t} = l^{(1)}_{x+t}·r^{(1)}_{x+t}·v^{t+½}");
-    expect(byKey("cancer", "surv:s1").text).toContain("l^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − r_{x+t} − w_{x+t} + r_{x+t}·w_{x+t}/2 )");   // 암 단일탈퇴 + 해지율
+    expect(byKey("twoMajor", "benefit:b1").text).toContain("C_{x+t} = l^{(1)}_{x+t}·rs_{x+t}·v^{t+½}");
+    expect(byKey("cancer", "surv:s1").text).toContain("l^{(1)}_{x+t+1} = l^{(1)}_{x+t} × ( 1 − rc_{x+t} − w_{x+t} + rc_{x+t}·w_{x+t}/2 )");   // 암 단일탈퇴 + 해지율
     // 납입주기는 k (mm 아님) — 연납 환산 납입기수·영업보험료·납입누계
     const all = generateFormulas(sample("whole").spec).map((x) => x.text).join("\n");
     expect(all).not.toMatch(/mm/);
@@ -120,7 +120,7 @@ describe("조건 → 산출식", () => {
     expect(low[0].text).toContain("w_{x+t}");
     expect(low.some((x) => x.label === "저해지·무해지환급형")).toBe(true);
     // 기본 상품의 [납입] 생존자 = 사망·장해·암 — 질병끼리 곱, 사망과는 겹침 절반
-    expect(byKey("wholeCancer", "surv:s3").text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
+    expect(byKey("wholeCancer", "surv:s3").text).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r80_{x+t} )·( 1 − rc_{x+t} )");
     // 준비금·환급금 식도 계산할 수 있는 식이다
     const keys = generateFormulas(sample("whole").spec).map((x) => x.key);
     expect(keys).toEqual(expect.arrayContaining(["reserve:P", "reserve:V", "surrender:alpha", "surrender:deduct", "surrender:W", "surrender:paid", "surrender:ratio", "premium:round"]));

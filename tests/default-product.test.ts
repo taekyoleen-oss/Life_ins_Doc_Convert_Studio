@@ -44,10 +44,10 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     const surv = f.filter((x) => x.key?.startsWith("surv:"));
     expect(surv.map((x) => x.label)).toEqual(["유지자수 lx(1) — 사망, 80% 이상 장해 아닌 유지자", "유지자수 lx(2) — 사망, 암 아닌 유지자", "유지자수 lx(3) — 사망, 80% 이상 장해, 암 아닌 유지자"]);
     const main = surv[2].text;
-    expect(main).toContain("r^{(1)}_x : 80% 이상 장해율");
-    expect(main).toContain("r^{(2)}_x : 암발생률");
+    expect(main).toContain("r80_x : 80% 이상 장해율");
+    expect(main).toContain("rc_x : 암발생률");
     // 질병(장해 · 암)은 곱으로, 사망과는 겹치는 부분 절반
-    expect(main).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
+    expect(main).toContain("R^{(3)}_{x+t} = 1 − ( 1 − r80_{x+t} )·( 1 − rc_{x+t} )");
     expect(main).toContain("Q^{(3)}_{x+t} = min( 1, q_{x+t} + R^{(3)}_{x+t} − q_{x+t}·R^{(3)}_{x+t}/2 )");
     expect(main).toContain("l^{(3)}_{x+t+1} = l^{(3)}_{x+t} × ( 1 − Q^{(3)}_{x+t} )");
     expect(f.find((x) => x.key === "benefit:b1")!.text).toContain("N′_{x+t} = N^{(3)}_{x+t}");
@@ -62,7 +62,7 @@ describe("기본 상품 종신보험(암진단 포함)", () => {
     expect(md).toContain("### 라. 보험금");
     expect(md).toContain("### 마. 보장");
     expect(md).toContain("### 바. 순보험료 및 영업보험료");
-    expect(md).toContain("(2) 암 진단\n\n| 구분 | 식 |\n|---|---|\n| 대상자수 | l^{(2)}_{x+t} |\n| 계산기수 | d^{(2)}_{x+t} = l^{(2)}_{x+t} × r^{(2)}_{x+t} |");
+    expect(md).toContain("(2) 암 진단\n\n| 구분 | 식 |\n|---|---|\n| 대상자수 | l^{(2)}_{x+t} |\n| 계산기수 | d^{(2)}_{x+t} = l^{(2)}_{x+t} × rc_{x+t} |");
     expect(md).toContain("| 암 진단 | 100세 만기 | 0.5 | 90일 | — | — |");
     expect(md).not.toContain("[식] 보험금 —");                 // 유지자·보험금의 자세한 식은 보험료 계산이 맡는다
     expect(md).not.toContain("1원당 보험료의 반올림");

@@ -44,7 +44,7 @@ describe("위험률 합성", () => {
   it("보험금이 고른 합성은 그 기호로 지급자수를 내고, 정의 식을 보험금 식에 함께 싣는다", () => {
     const m = benefitModels(named)[1];
     expect(m.ev).toBe("R^{(4)}_{x+t}");
-    expect(m.lines).toContain("R^{(4)}_{x+t} = 1 − ( 1 − r^{(1)}_{x+t} )·( 1 − r^{(2)}_{x+t} )");
+    expect(m.lines).toContain("R^{(4)}_{x+t} = 1 − ( 1 − r80_{x+t} )·( 1 − rc_{x+t} )");
     expect(per100k(named)[1]).toBeGreaterThan(per100k(spec)[1]);   // 장해까지 지급하므로 더 비싸다
   });
   for (const [fmt, make] of FORMATS) {
@@ -54,4 +54,25 @@ describe("위험률 합성", () => {
       expect(per100k(r.spec)).toEqual(per100k(named));
     });
   }
+});
+
+describe("특약은 주계약 아래 따로 · 위험률 기호는 M04 표의 기호", () => {
+  const spec = spec0("cancerPlan");
+  const secs = renderMethodDoc(withFormulas(spec));
+  it("주계약 1~3장 다음에 특약마다 [특약 이름] 1~3장 — 보험금·보장은 그 부에만", () => {
+    expect(secs.map((s) => s.title).filter((t) => !/별첨/.test(t))).toEqual([
+      "개요", "1. 보험료의 계산에 관한 사항", "2. 책임준비금의 계산에 관한 사항", "3. 해지환급금의 계산에 관한 사항",
+      "[암입원특약] 1. 보험료의 계산에 관한 사항", "[암입원특약] 2. 책임준비금의 계산에 관한 사항", "[암입원특약] 3. 해지환급금의 계산에 관한 사항",
+      "[암수술특약] 1. 보험료의 계산에 관한 사항", "[암수술특약] 2. 책임준비금의 계산에 관한 사항", "[암수술특약] 3. 해지환급금의 계산에 관한 사항"]);
+    const text = (i: number) => secs[i].blocks.map((b) => (b.t === "table" ? b.rows.map((r) => r.join("|")).join("\n") : b.text)).join("\n");
+    expect(text(1)).toContain("(1) 암 진단");
+    expect(text(1)).not.toContain("암 입원");
+    expect(text(4)).toContain("(1) 암 입원(1일당)");
+    expect(text(4)).toContain("d^{(2)}_{x+t} = l^{(2)}_{x+t} × ch_{x+t}");
+    expect(text(7)).toContain("d^{(1)}_{x+t} = l^{(1)}_{x+t} × cs_{x+t}");
+    expect(text(7)).toContain("lx(1) 암 아닌 유지자 — 주계약 다. 유지자의 것을 쓴다");
+    // 대상 위험률은 M04 에서 정한 기호(rc) — r^{(1)} 이 아니다
+    expect(text(1)).toContain("대상 위험률|rc_{x+t}");
+    expect(text(1)).not.toContain("r^{(1)}");
+  });
 });

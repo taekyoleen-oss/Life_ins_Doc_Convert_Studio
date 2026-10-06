@@ -155,6 +155,12 @@ export default function Studio() {
       }
       writeJson(SV, 1);
     }
+    // 첫 화면을 암보험으로 바꾼 뒤(2026-10-06) — 손대지 않은 공유 샘플 그대로인 저장본이면 한 번 첫 화면 샘플로 연다
+    const SV3 = `${KEY}:sample-v3`;
+    if (!readJson(SV3)) {
+      if (s && s !== START_SAMPLE.yaml && SAMPLES.some((x) => SHARED_SAMPLE_IDS.includes(x.id) && x.yaml === s)) { s = START_SAMPLE.yaml; writeStore(s); writeJson(`${KEY}:sheet`, null); }
+      writeJson(SV3, 1);
+    }
     setAllSamples(urlParam("all") !== null);
     setGuide(!readJson(`${KEY}:guide-v1`));
     // 주소로 고른 샘플 — 저장된 작업 대신 그 샘플 세트를 연다
@@ -665,7 +671,7 @@ export default function Studio() {
             <p className="menu-head">샘플 세트 — 조건 · 산출방법서 · 위험률 표(기본 위험률)</p>
             {(allSamples ? SAMPLES : SHARED_SAMPLES).map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
             <p className="menu-head">산출방법서 샘플</p>
-            <button onClick={() => loadSample(START_SAMPLE.yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>종신보험 — 이율·금액을 고친 뒤 [조건에 반영]</small></button>
+            <button onClick={() => loadSample(START_SAMPLE.yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>암보험 — 이율·배수를 고친 뒤 [조건에 반영]</small></button>
             <button onClick={() => loadSample((SHARED_SAMPLES[1] ?? START_SAMPLE).yaml, "markdown")}>Markdown 산출방법서 고쳐 보기<small>암보험 — 면책 기간·보장금액을 바꿔 보기</small></button>
           </div>
         </details>

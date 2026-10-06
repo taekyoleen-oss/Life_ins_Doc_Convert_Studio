@@ -436,5 +436,5 @@ reserve:
 
 /** 공유·시험용으로 [샘플] 메뉴에 보이는 것 — 나머지는 코드·시험에만 두고 하나씩 늘린다(주소 ?all 이면 모두, ?sample=<id> 로 바로 연다) */
 export const SHARED_SAMPLE_IDS = ["whole", "cancerPlan"];
-/** 첫 화면에 여는 상품 */
-export const START_SAMPLE_ID = "whole";
+/** 첫 화면에 여는 상품 — 암보험(주계약 + 특약 둘, 사용자 결정 2026-10-06) */
+export const START_SAMPLE_ID = "cancerPlan";

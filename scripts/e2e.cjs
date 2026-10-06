@@ -31,7 +31,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.evaluate(() => localStorage.clear());
   await p.waitForTimeout(900);                                   // 자동 저장 타이머(300·500ms)가 지난 뒤 한 번 더 지운다
   await p.evaluate(() => localStorage.clear());
-  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 종신보험 · 샘플 둘)은 맨 끝에서 새 창으로 본다
+  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 암보험 · 샘플 둘)은 맨 끝에서 새 창으로 본다
   await p.goto("http://localhost:3217/?sample=wholeCancer&all", { waitUntil: "networkidle" });
   await p.waitForSelector(".doc-body h1");
   if (await p.locator(".guide-bar").count()) await p.click(".guide-bar button:has-text('안내 닫기')");
@@ -148,7 +148,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const ratePick = await p.$eval(".card[data-card=B01] .sub-open select[aria-label='대상 위험률']", (e) => e.selectedOptions[0]?.textContent ?? "");
   const b1 = (await p.textContent(".card[data-card=B01] .sub-open")).replace(/\s+/g, " ");
   ok("B01 대상 위험률 콤보: M04 위험률 셋 + C01 위험률 합성 셋만(다른 문구 없음) — 이름 뒤에 기호(qₓ(사망률)) · 고른 것 Q⁽¹⁾ₓ(사망·80% 이상 장해 결합) · 결합 위험률 넣기 단추 없음",
-    rateOpts.join("|") === "qₓ(사망률)|r⁽¹⁾ₓ(80% 이상 장해율)|r⁽²⁾ₓ(암발생률)|Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)|Q⁽²⁾ₓ(사망·암 결합)|Q⁽³⁾ₓ(사망·80% 이상 장해·암 결합)" && ratePick === "Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)" && !b1.includes("결합 위험률을 위험률 표에 넣기"), `${rateOpts.join(" / ")} · ${ratePick}`);
+    rateOpts.join("|") === "qₓ(사망률)|r80ₓ(80% 이상 장해율)|rcₓ(암발생률)|Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)|Q⁽²⁾ₓ(사망·암 결합)|Q⁽³⁾ₓ(사망·80% 이상 장해·암 결합)" && ratePick === "Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)" && !b1.includes("결합 위험률을 위험률 표에 넣기"), `${rateOpts.join(" / ")} · ${ratePick}`);
   const benRes = (await p.textContent(".card[data-card=B01] .calc-panel .calc-table")).replace(/\s+/g, " ");
   ok("B01 산출 결과: 대상자수 · 대상 위험률 열(Q(1) 사망·80% 이상 장해 결합)", benRes.includes("대상 위험률") && benRes.includes("Q⁽¹⁾ₓ(사망·80% 이상 장해 결합)"), benRes.slice(0, 160));
   ok("보험금 산출 결과(Cx · Mx)는 접혀 있다", (await p.locator(".card[data-card=B01] .sub-open details.calc-fold").count()) === 1 && (await p.locator(".card[data-card=B01] details.calc-fold[open]").count()) === 0);
@@ -409,7 +409,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     await p.keyboard.press("Escape");
   };
   await replaceAll("적용이율 i & 2.500", "적용이율 i & 3.500");
-  await replaceAll("사망 & 1 &", "사망 & 0.7 &");                         // v8 — 마. 보장 표의 배수 칸
+  await replaceAll("암 진단 & 1 &", "암 진단 & 0.7 &");                   // 첫 화면 암보험 — 주계약 마. 보장 표의 배수 칸
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5a_latex_edited.png` });
   log.push("apply enabled: " + await p.locator("button.btn-primary:has-text('조건에 반영')").isEnabled());
@@ -419,7 +419,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const y2 = await p.$$eval(".cm-editor", (eds) => [...eds[0].querySelectorAll(".cm-line")].map((e) => e.textContent).join("\n"));
   ok("LaTeX 수정 → 조건 반영: 이율 3.5%", /interest: 3\.5%/.test(y2), toast);
   ok("LaTeX 수정 → 조건 반영: 배수 0.7배", /multiple: 0\.7/.test(y2));
-  ok("조건 파일 주석 유지", y2.includes("# 납입면제 — 80% 이상 장해"));
+  ok("조건 파일 주석 유지", y2.includes("# 납입면제 — 암 진단 시"));
   await p.click("button.tab:has-text('산출방법서')");
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5_latex_applied.png` });
@@ -765,7 +765,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const kept = await p.evaluate(() => ({ local: localStorage.getItem("life_ins_doc_convert_studio:anthropic-key"), yaml: localStorage.getItem("life_ins_doc_convert_studio:yaml") || "" }));
   ok("API 키는 이 창에만 — localStorage·조건 파일에 없음", kept.local === null && !kept.yaml.includes("sk-ant"));
 
-  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 종신보험, [샘플] 메뉴는 종신보험 · 암보험 둘
+  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 암보험, [샘플] 메뉴는 종신보험 · 암보험 둘
   const q = await b.newPage({ viewport: { width: 1500, height: 900 } });
   q.on("pageerror", (e) => errs.push("pageerror(공유) " + e.message));
   q.on("console", (m) => { if (m.type() === "error") errs.push("console(공유) " + m.text()); });
@@ -782,7 +782,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await q.setViewportSize({ width: 1500, height: 900 });
   ok("넓은 화면 — 알림 없음", !(await q.locator(".narrow-warn").isVisible()));
   const h1 = await q.textContent(".doc-body h1");
-  ok("공유 화면: 첫 화면은 종신보험(사망 보장 · 유지자 둘 · 80% 장해 납입면제) — 월 250,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("250,000"), h1);
+  const qDoc = (await q.textContent(".doc-body")).replace(/\s+/g, " ");
+  const qTrial = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
+  ok("공유 화면: 첫 화면은 암보험 — 주계약 1~3장 아래 특약마다 따로([암입원특약] · [암수술특약] 1~3장), 위험률 기호는 M04 의 rc · ch · cs",
+    h1.includes("암보험") && ["[암입원특약] 1. 보험료의 계산에 관한 사항", "[암입원특약] 3. 해지환급금의 계산에 관한 사항", "[암수술특약] 1. 보험료의 계산에 관한 사항"].every((t) => qDoc.includes(t))
+    && qDoc.indexOf("[암입원특약] 1.") > qDoc.indexOf("3. 해지환급금의 계산에 관한 사항") && qDoc.includes("rcx+t") && qDoc.includes("chx+t") && qDoc.includes("csx+t") && !qDoc.includes("r(1)x+t"), `${h1} · ${qTrial.slice(0, 120)}`);
   await q.click("summary:has-text('내보내기')");
   const expItems = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => [x.firstChild.textContent.trim(), x.disabled || !!x.closest("fieldset:disabled")]));
   ok("공유 화면: 내보내기 = Word .docx · Word (작성 안내 없이) · 조건 .yaml 이 먼저, 나머지는 추가기능(개발중)으로 비활성",

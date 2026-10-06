@@ -84,7 +84,7 @@ describe("산출방법서의 식으로 낸 보험료 = 계산 앱의 값", () =>
     expect(s0.error).toBeUndefined();
     expect([s0.n, s0.m, s0.ages[0], s0.ages.at(-1)]).toEqual([71, 20, 40, 111]);
     // 위험률 열이 먼저, 그 뒤로 사람 수 → 현가 → 누계 → 보험금
-    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r^{(1)}", "r^{(2)}"]);   // 사망 · 장해 · 암 — 기호는 상품 전체에서 하나
+    expect(s0.cols.filter((c) => c.kind === "rate").map((c) => c.sym)).toEqual(["q", "r80", "rc"]);   // 사망 · 장해 · 암 — 기호는 상품 전체에서 하나
     // 이 담보의 생존자 lx(1)(사망·장해) 과 [납입] 생존자 lx(3)(사망·장해·암)이 먼저, 그 뒤로 이 담보의 l(= lx(1)) · d · 현가 · 보험금
     expect(s0.cols.filter((c) => c.kind === "series").map((c) => c.sym)).toEqual(["Q^{(1)}", "l^{(1)}", "D^{(1)}", "N^{(1)}", "R^{(3)}", "Q^{(3)}", "l^{(3)}", "D^{(3)}", "N^{(3)}",
       "l", "d", "D", "D′", "N", "N′", "S", "C", "M", "V", "V^{10만}", "V^{표준}", "V^{결산}", "해약공제", "W^{표준}", "W", "납입누계", "환급률"]);
