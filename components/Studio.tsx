@@ -156,6 +156,14 @@ export default function Studio() {
       writeJson(SV, 1);
     }
     // 첫 화면을 암보험으로 바꾼 뒤(2026-10-06) — 손대지 않은 공유 샘플 그대로인 저장본이면 한 번 첫 화면 샘플로 연다
+    // 용어 바꿈(2026-10-06) — "암입원 기대일수" → "암입원율": 저장본의 조건·위험률 표 머리도 한 번 바꾼다
+    const SV4 = `${KEY}:term-v4`;
+    if (!readJson(SV4)) {
+      const re = /암입원 기대일수/g;
+      if (s && re.test(s)) { s = s.replace(re, "암입원율"); writeStore(s); }
+      try { const raw = localStorage.getItem(`${KEY}:sheet`); if (raw && raw.includes("암입원 기대일수")) localStorage.setItem(`${KEY}:sheet`, raw.replace(re, "암입원율")); } catch { /* 저장소를 못 쓰면 그대로 */ }
+      writeJson(SV4, 1);
+    }
     const SV3 = `${KEY}:sample-v3`;
     if (!readJson(SV3)) {
       if (s && s !== START_SAMPLE.yaml && SAMPLES.some((x) => SHARED_SAMPLE_IDS.includes(x.id) && x.yaml === s)) { s = START_SAMPLE.yaml; writeStore(s); writeJson(`${KEY}:sheet`, null); }

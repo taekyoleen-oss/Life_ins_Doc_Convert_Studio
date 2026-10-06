@@ -213,7 +213,7 @@ function Card({ c, index, open, onToggle, showF, onToggleF, onDoc }: { c: CardDe
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
-            <h3 className="text-[14px] font-semibold">{c.title}</h3>
+            <h3 className="text-[14px] font-semibold">{index + 1}. {c.title}</h3>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>{label}</span>
             {c.dirty && <span className="chip-changed" title="연 뒤에 바뀐 칸이 있습니다">● 바뀜</span>}
           </div>

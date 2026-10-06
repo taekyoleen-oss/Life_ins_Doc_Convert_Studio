@@ -26,7 +26,7 @@ describe("스프레드시트 읽기", () => {
   it("열 이름에서 성별·이름·유형을 읽는다", () => {
     expect([sexOf("사망률(남)"), sexOf("암발생률_여"), sexOf("q_M"), sexOf("f_x")]).toEqual(["M", "F", "M", undefined]);
     expect([baseName("사망률(남)"), baseName("암발생률_여"), baseName("남자 사망률"), baseName("q M")]).toEqual(["사망률", "암발생률", "사망률", "q"]);
-    expect([guessRole("사망률"), guessRole("암입원 기대일수"), guessRole("납입면제율"), guessRole("암발생률")]).toEqual(["death", "recurring", "waiver", "incidence"]);
+    expect([guessRole("사망률"), guessRole("암입원율"), guessRole("납입면제율"), guessRole("암발생률")]).toEqual(["death", "recurring", "waiver", "incidence"]);
   });
   it("XLSX 첫 시트를 SheetJS 없이 읽는다 (공유 문자열·빈 칸)", async () => {
     const rows = await readXlsx(zipStored({

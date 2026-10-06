@@ -220,7 +220,7 @@ benefits:
     exitRateIds: [q, ra]    # 급성심근경색증이 아직 생기지 않은 생존자에게 지급
 ${NOTES}
 ` },
-  { id: "hospital", label: "입원보험(특약) · 암입원 1일당", hint: "반복지급(일당형) — 사망만 탈퇴 · 급부 = 암입원 기대일수 · 90일 면책", yaml: `# 산출방법서 조건 — 암입원특약
+  { id: "hospital", label: "입원보험(특약) · 암입원 1일당", hint: "반복지급(일당형) — 사망만 탈퇴 · 급부 = 암입원율 · 90일 면책", yaml: `# 산출방법서 조건 — 암입원특약
 # 입원 1일당 정액. 입원은 여러 번 생겨도 담보가 소멸하지 않으므로 탈퇴 사유는 사망뿐이다.
 # 급부 발생률 = 1일 기준 암입원율 × 365 = 한 해 기대 입원일수.
 meta:
@@ -240,7 +240,7 @@ basis:
 rates:
 ${Q}
   - id: ch
-    name: 암입원 기대일수
+    name: 암입원율
     role: recurring
     source: 경험생명표(가상) 암입원율 × 365일
 ${EXPENSES}
@@ -382,13 +382,13 @@ basis:
   interest: 2.5%      # 적용(예정)이율
   standardInterest: 3.25%
   waiver: false       # 주계약은 암 진단 시 소멸(암 단일탈퇴)하므로 납입도 그때 끝난다. 특약은 독립특약이라 주계약의 납입면제를 가져오지 않는다
-rates:                # 사망률 없음 — 암발생률 · 암입원 기대일수 · 암수술률만
+rates:                # 사망률 없음 — 암발생률 · 암입원율 · 암수술률만
   - id: rc
     name: 암발생률
     role: incidence
     source: 경험생명표(가상) 암발생률
   - id: ch
-    name: 암입원 기대일수
+    name: 암입원율
     role: recurring
     source: 경험생명표(가상) 암입원율 × 365일
   - id: cs

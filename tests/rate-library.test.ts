@@ -12,7 +12,7 @@ import { SAMPLES } from "@/lib/samples";
 describe("기본 위험률 모음", () => {
   it("공개 기본 위험률 — 사망률·80% 장해율·암·뇌출혈·급성심근경색증·암입원·암수술, 모두 남·여 한 항목 · 근거는 가상", () => {
     const items = libraryItems(null).filter((x) => !x.private);
-    expect(items.map((x) => x.name)).toEqual(["사망률", "80% 이상 장해율", "암발생률", "뇌출혈 발생률", "급성심근경색증 발생률", "암입원 기대일수", "암수술률"]);
+    expect(items.map((x) => x.name)).toEqual(["사망률", "80% 이상 장해율", "암발생률", "뇌출혈 발생률", "급성심근경색증 발생률", "암입원율", "암수술률"]);
     for (const it of items) expect(it.source).toMatch(/경험생명표\(가상\)/);
     for (const it of items) { expect(it.M && it.F).toBeTruthy(); expect(itemColumns(it).map((c) => c.head)).toEqual([`${it.name}(남)`, `${it.name}(여)`]); }
   });
