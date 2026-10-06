@@ -155,7 +155,6 @@ export default function Studio() {
       }
       writeJson(SV, 1);
     }
-    // 첫 화면을 암보험으로 바꾼 뒤(2026-10-06) — 손대지 않은 공유 샘플 그대로인 저장본이면 한 번 첫 화면 샘플로 연다
     // 용어 바꿈(2026-10-06) — "암입원 기대일수" → "암입원율": 저장본의 조건·위험률 표 머리도 한 번 바꾼다
     const SV4 = `${KEY}:term-v4`;
     if (!readJson(SV4)) {
@@ -164,7 +163,8 @@ export default function Studio() {
       try { const raw = localStorage.getItem(`${KEY}:sheet`); if (raw && raw.includes("암입원 기대일수")) localStorage.setItem(`${KEY}:sheet`, raw.replace(re, "암입원율")); } catch { /* 저장소를 못 쓰면 그대로 */ }
       writeJson(SV4, 1);
     }
-    const SV3 = `${KEY}:sample-v3`;
+    // 첫 화면 샘플을 바꾼 뒤(암보험 → 다시 종신보험, 2026-10-06) — 손대지 않은 공유 샘플 그대로인 저장본이면 한 번 첫 화면 샘플로 연다
+    const SV3 = `${KEY}:sample-v5`;
     if (!readJson(SV3)) {
       if (s && s !== START_SAMPLE.yaml && SAMPLES.some((x) => SHARED_SAMPLE_IDS.includes(x.id) && x.yaml === s)) { s = START_SAMPLE.yaml; writeStore(s); writeJson(`${KEY}:sheet`, null); }
       writeJson(SV3, 1);
@@ -705,7 +705,7 @@ export default function Studio() {
             <p className="menu-head">샘플 세트 — 조건 · 산출방법서 · 위험률 표(기본 위험률)</p>
             {(allSamples ? SAMPLES : SHARED_SAMPLES).map((x) => <button key={x.id} onClick={() => loadSample(x.yaml)}>{x.label}<small>{x.hint}</small></button>)}
             <p className="menu-head">산출방법서 샘플</p>
-            <button onClick={() => loadSample(START_SAMPLE.yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>암보험 — 이율·배수를 고친 뒤 [조건에 반영]</small></button>
+            <button onClick={() => loadSample(START_SAMPLE.yaml, "latex")}>LaTeX 산출방법서 고쳐 보기<small>종신보험 — 이율·배수를 고친 뒤 [조건에 반영]</small></button>
             <button onClick={() => loadSample((SHARED_SAMPLES[1] ?? START_SAMPLE).yaml, "markdown")}>Markdown 산출방법서 고쳐 보기<small>암보험 — 면책 기간·보장금액을 바꿔 보기</small></button>
           </div>
         </details>

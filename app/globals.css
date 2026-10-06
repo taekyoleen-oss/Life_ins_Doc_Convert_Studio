@@ -348,6 +348,9 @@ tr.doc-changed > td:first-child { box-shadow: inset 3px 0 0 var(--changed); }
 
 /* ---------- 보험료 계산 — 엑셀처럼 한 해 한 줄 ---------- */
 .modal.calc-modal { max-width: 1500px; width: 100%; max-height: 94vh; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* 보험료 계산 — 전체 보기: 화면 가득히 */
+.modal-back.calc-full-back { padding: 0; }
+.modal.calc-modal.calc-full { max-width: none; width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
 .calc-head { display: flex; align-items: center; gap: 8px; }
 .calc-head h2 { flex: 1; margin: 0; }
 .calc-head h2 span { font-size: 12px; font-weight: 400; color: var(--muted-foreground); margin-left: 8px; }

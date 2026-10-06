@@ -47,6 +47,8 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
   const [at, setAt] = useState(0);
   const [pick, setPick] = useState<Pick>(null);
   const [python, setPython] = useState(false);
+  /** 전체 보기 — 창을 화면 가득히(표가 넓다). 다시 누르면 원래 크기로 */
+  const [full, setFull] = useState(false);
   const units = useMemo(() => sheetsByUnit(calc), [calc]);
   const [unitAt, setUnitAt] = useState(0);
   const unit = units[Math.min(unitAt, units.length - 1)];
@@ -80,14 +82,15 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
   };
 
   return (
-    <div className="modal-back no-print" onClick={onClose}>
-      <div className="modal calc-modal" onClick={(e) => e.stopPropagation()}>
+    <div className={`modal-back no-print ${full ? "calc-full-back" : ""}`} onClick={onClose}>
+      <div className={`modal calc-modal ${full ? "calc-full" : ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="calc-head">
           <h2>보험료 계산 <span>{spec.meta.productName || "(이름 없음)"} — 산출방법서의 식을 그대로 읽어 이 앱이 계산합니다</span></h2>
           <button className="btn-primary" onClick={xlsx} title="계약 단위마다 한 장 — 담보가 모두 한 장에, 맨 오른쪽에 결과. 위험률과 계약·기초율만 값이고 현가율부터는 엑셀 수식">엑셀로 내려받기 (수식 포함)</button>
           <button className="btn" onClick={() => setPython(true)} title="같은 계산을 단계마다 주석 단 파이썬 셀로 — 브라우저에서 실행하거나 .py 로 내려받습니다">Python 일괄 산출</button>
           <button className="btn" onClick={csv}>이 담보만 CSV (값)</button>
-          <button className="btn" onClick={onClose}>닫기</button>
+          <button className="btn" onClick={() => setFull((f) => !f)} aria-pressed={full} title={full ? "창을 원래 크기로 되돌립니다" : "창을 화면 가득히 넓혀 표를 한눈에 봅니다"}>{full ? "↙ 원래 크기로" : "⤢ 전체 보기"}</button>
+        <button className="btn" onClick={onClose}>닫기</button>
         </header>
 
         <div className="calc-bar">

@@ -31,10 +31,10 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.evaluate(() => localStorage.clear());
   await p.waitForTimeout(900);                                   // 자동 저장 타이머(300·500ms)가 지난 뒤 한 번 더 지운다
   await p.evaluate(() => localStorage.clear());
-  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 암보험 · 샘플 둘)은 맨 끝에서 새 창으로 본다
+  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 종신보험 · 샘플 둘)은 맨 끝에서 새 창으로 본다
   await p.goto("http://localhost:3217/?sample=wholeCancer&all", { waitUntil: "networkidle" });
   await p.waitForSelector(".doc-body h1");
-  // 첫 그림은 첫 화면 샘플(암보험) — 주소의 샘플로 바뀔 때까지 기다린다
+  // 첫 그림은 첫 화면 샘플 — 주소의 샘플로 바뀔 때까지 기다린다
   await p.waitForFunction(() => document.querySelector(".doc-body h1")?.textContent.includes("암진단 포함"));
   if (await p.locator(".guide-bar").count()) await p.click(".guide-bar button:has-text('안내 닫기')");
   const OPEN = "input[aria-label='열 파일']", MERGE = "input[aria-label='고쳐 반영할 파일']";
@@ -261,6 +261,15 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   // 0-5) 보험료 계산 — 엑셀처럼 한 해 한 줄, 열·칸을 누르면 그 식
   await p.click("header button:has-text('보험료 계산')");
   await p.waitForSelector(".calc-modal .calc-grid");
+  // 전체 보기 ↔ 원래 크기로
+  const cw0 = await p.$eval(".calc-modal", (e) => e.getBoundingClientRect().width);
+  await p.click(".calc-modal button:has-text('전체 보기')");
+  await p.waitForTimeout(200);
+  const cw1 = await p.$eval(".calc-modal", (e) => [e.getBoundingClientRect().width, e.getBoundingClientRect().height, window.innerWidth, window.innerHeight]);
+  await p.click(".calc-modal button:has-text('원래 크기로')");
+  await p.waitForTimeout(200);
+  const cw2 = await p.$eval(".calc-modal", (e) => e.getBoundingClientRect().width);
+  ok("보험료 계산 창 — [전체 보기] 로 화면 가득히, [원래 크기로] 로 되돌린다", cw1[0] >= cw1[2] - 1 && cw1[1] >= cw1[3] - 1 && Math.abs(cw2 - cw0) < 2 && (await p.locator(".calc-modal button:has-text('전체 보기')").count()) === 1, `${cw0} → ${cw1.join("×")} → ${cw2}`);
   const cHead = await p.$$eval(".calc-modal thead tr:nth-child(2) th", (e) => e.map((x) => x.textContent.trim()));
   ok("보험료 계산 표: 위험률 → 현가율 둘 → 유지자 lx(k)·Dx·Nx → 이 담보의 l·지급자수 → 현가·누계 → 보장금액 배수·급부 현가",
     /사망률/.test(cHead[3]) && cHead.filter((t) => t.includes("현가율")).length === 2
@@ -408,7 +417,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     await p.keyboard.press("Escape");
   };
   await replaceAll("적용이율 i & 2.500", "적용이율 i & 3.500");
-  await replaceAll("암 진단 & 1 &", "암 진단 & 0.7 &");                   // 첫 화면 암보험 — 주계약 마. 보장 표의 배수 칸
+  await replaceAll("사망 & 1 &", "사망 & 0.7 &");                         // 첫 화면 종신보험 — 마. 보장 표의 배수 칸
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5a_latex_edited.png` });
   log.push("apply enabled: " + await p.locator("button.btn-primary:has-text('조건에 반영')").isEnabled());
@@ -418,7 +427,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const y2 = await p.$$eval(".cm-editor", (eds) => [...eds[0].querySelectorAll(".cm-line")].map((e) => e.textContent).join("\n"));
   ok("LaTeX 수정 → 조건 반영: 이율 3.5%", /interest: 3\.5%/.test(y2), toast);
   ok("LaTeX 수정 → 조건 반영: 배수 0.7배", /multiple: 0\.7/.test(y2));
-  ok("조건 파일 주석 유지", y2.includes("# 주계약은 암 진단 시 소멸"));
+  ok("조건 파일 주석 유지", y2.includes("# 납입면제 — 80% 이상 장해 시"));
   await p.click("button.tab:has-text('산출방법서')");
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/s5_latex_applied.png` });
@@ -768,7 +777,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const kept = await p.evaluate(() => ({ local: localStorage.getItem("life_ins_doc_convert_studio:anthropic-key"), yaml: localStorage.getItem("life_ins_doc_convert_studio:yaml") || "" }));
   ok("API 키는 이 창에만 — localStorage·조건 파일에 없음", kept.local === null && !kept.yaml.includes("sk-ant"));
 
-  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 암보험, [샘플] 메뉴는 종신보험 · 암보험 둘
+  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 종신보험, [샘플] 메뉴는 종신보험 · 암보험 둘
   const q = await b.newPage({ viewport: { width: 1500, height: 900 } });
   q.on("pageerror", (e) => errs.push("pageerror(공유) " + e.message));
   q.on("console", (m) => { if (m.type() === "error") errs.push("console(공유) " + m.text()); });
@@ -785,11 +794,15 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await q.setViewportSize({ width: 1500, height: 900 });
   ok("넓은 화면 — 알림 없음", !(await q.locator(".narrow-warn").isVisible()));
   const h1 = await q.textContent(".doc-body h1");
+  ok("공유 화면: 첫 화면은 종신보험(사망 보장 · 유지자 둘 · 80% 장해 납입면제) — 월 250,000원", h1.includes("종신보험") && !h1.includes("암진단") && (await q.textContent(".trial-bar")).includes("250,000"), h1);
+  const checkCancerDoc = async () => {
+  const h1 = await q.textContent(".doc-body h1");
   const qDoc = (await q.textContent(".doc-body")).replace(/\s+/g, " ");
   const qTrial = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
-  ok("공유 화면: 첫 화면은 암보험 — 주계약 1~3장 아래 특약마다 따로([암입원특약] · [암수술특약] 1~3장), 위험률 기호는 M04 의 rc · ch · cs",
+  ok("암보험: 주계약 1~3장 아래 특약마다 따로([암입원특약] · [암수술특약] 1~3장), 위험률 기호는 M04 의 rc · ch · cs",
     h1.includes("암보험") && ["[암입원특약] 1. 보험료의 계산에 관한 사항", "[암입원특약] 3. 해지환급금의 계산에 관한 사항", "[암수술특약] 1. 보험료의 계산에 관한 사항"].every((t) => qDoc.includes(t))
     && qDoc.indexOf("[암입원특약] 1.") > qDoc.indexOf("3. 해지환급금의 계산에 관한 사항") && qDoc.includes("rcx+t") && qDoc.includes("chx+t") && qDoc.includes("csx+t") && !qDoc.includes("r(1)x+t"), `${h1} · ${qTrial.slice(0, 120)}`);
+  };
   await q.click("summary:has-text('내보내기')");
   const expItems = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => [x.firstChild.textContent.trim(), x.disabled || !!x.closest("fieldset:disabled")]));
   ok("공유 화면: 내보내기 = Word .docx · Word (작성 안내 없이) · 조건 .yaml 이 먼저, 나머지는 추가기능(개발중)으로 비활성",
@@ -803,6 +816,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("공유 화면: [샘플] 메뉴는 종신보험 · 암보험 둘뿐", sets.length === 2 && sets[0].startsWith("종신보험 (") && sets[1].startsWith("암보험 ("), sets.join(" / "));
   await q.click("details[open] .menu-list button:has-text('암보험 (')");
   await q.waitForTimeout(800);
+  await checkCancerDoc();
   const tabs = await q.$$eval(".unit-tabs .unit-tab", (e) => e.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   const trialC = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("암보험: 탭 셋(주계약 · 암입원특약 · 암수술특약) · 사망률 없음 · 보험료가 나온다", tabs.length === 3 && tabs[1].includes("암입원특약") && tabs[2].includes("암수술특약")

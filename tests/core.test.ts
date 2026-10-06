@@ -27,7 +27,7 @@ describe("조건 파일(YAML)", () => {
     expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan"]);
     // 공유용 [샘플] 메뉴는 종신보험 · 암보험 둘, 첫 화면은 종신보험
     expect(SHARED_SAMPLE_IDS).toEqual(["whole", "cancerPlan"]);
-    expect(START_SAMPLE_ID).toBe("cancerPlan");
+    expect(START_SAMPLE_ID).toBe("whole");
     for (const x of SAMPLES) for (const r of yamlToSpec(x.yaml).spec.rates) expect(r.source, `${x.id} ${r.name}`).toMatch(/^경험생명표\(가상\) /);
   });
   it("조건 경로마다 줄 번호를 안다 (양쪽 대응 위치의 바탕)", () => {
