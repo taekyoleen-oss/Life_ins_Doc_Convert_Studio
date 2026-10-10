@@ -2,7 +2,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- node 로 바로 돌리는 CommonJS 스크립트 */
 const path = require("path"), fs = require("fs");
 const PW = path.join(process.env.LOCALAPPDATA, "npm-cache/_npx/9833c18b2d85bc59/node_modules/playwright-core/index.js");
-const CHROME = path.join(process.env.LOCALAPPDATA, "ms-playwright/chromium-1234/chrome-win64/chrome.exe");
+// 받아 둔 chromium 가운데 가장 새것 — 브라우저 캐시가 바뀌어도 그대로 돈다
+const PWB = path.join(process.env.LOCALAPPDATA, "ms-playwright");
+const CHROME = path.join(PWB, fs.readdirSync(PWB).filter((d) => /^chromium-\d+$/.test(d) && fs.existsSync(path.join(PWB, d, "chrome-win64/chrome.exe"))).sort((a, b) => +a.slice(9) - +b.slice(9)).pop(), "chrome-win64/chrome.exe");
 const { chromium } = require(PW);
 const OUT = process.env.OUT;
 // 회사 산출방법서 PDF(OneDrive)가 있으면 그것으로, 없으면 samples/02 실무 양식 PDF 로 (읽는 값이 다르다 — 아래 5) 에서 가른다)
@@ -31,7 +33,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.evaluate(() => localStorage.clear());
   await p.waitForTimeout(900);                                   // 자동 저장 타이머(300·500ms)가 지난 뒤 한 번 더 지운다
   await p.evaluate(() => localStorage.clear());
-  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 종신보험 · 샘플 둘)은 맨 끝에서 새 창으로 본다
+  // 아래 확인은 검산 기준 상품(종신보험(암진단 포함))과 숨긴 샘플까지 쓴다 — ?sample · ?all. 공유 화면(첫 화면 종신보험 · 샘플 셋)은 맨 끝에서 새 창으로 본다
   await p.goto("http://localhost:3217/?sample=wholeCancer&all", { waitUntil: "networkidle" });
   await p.waitForSelector(".doc-body h1");
   // 첫 그림은 첫 화면 샘플 — 주소의 샘플로 바뀔 때까지 기다린다
@@ -777,7 +779,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const kept = await p.evaluate(() => ({ local: localStorage.getItem("life_ins_doc_convert_studio:anthropic-key"), yaml: localStorage.getItem("life_ins_doc_convert_studio:yaml") || "" }));
   ok("API 키는 이 창에만 — localStorage·조건 파일에 없음", kept.local === null && !kept.yaml.includes("sk-ant"));
 
-  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 종신보험, [샘플] 메뉴는 종신보험 · 암보험 둘
+  // 20) 공유 화면 — 처음 여는 사람(저장된 작업 없음): 첫 화면 종신보험, [샘플] 메뉴는 종신보험 · 암보험 · 저축보험 셋
   const q = await b.newPage({ viewport: { width: 1500, height: 900 } });
   q.on("pageerror", (e) => errs.push("pageerror(공유) " + e.message));
   q.on("console", (m) => { if (m.type() === "error") errs.push("console(공유) " + m.text()); });
@@ -812,8 +814,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await q.keyboard.press("Escape");
   await q.click("summary:has-text('샘플')");
   const shared = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => x.textContent));
-  const sets = shared.filter((t) => t.startsWith("종신보험") || t.startsWith("암보험") || t.startsWith("암진단") || t.startsWith("2대") || t.startsWith("입원") || t.startsWith("수술") || t.startsWith("보험료납입"));
-  ok("공유 화면: [샘플] 메뉴는 종신보험 · 암보험 둘뿐", sets.length === 2 && sets[0].startsWith("종신보험 (") && sets[1].startsWith("암보험 ("), sets.join(" / "));
+  const sets = shared.filter((t) => t.startsWith("종신보험") || t.startsWith("암보험") || t.startsWith("암진단") || t.startsWith("2대") || t.startsWith("입원") || t.startsWith("수술") || t.startsWith("보험료납입") || t.startsWith("저축보험"));
+  ok("공유 화면: [샘플] 메뉴는 종신보험 · 암보험 · 저축보험 셋뿐", sets.length === 3 && sets[0].startsWith("종신보험 (") && sets[1].startsWith("암보험 (") && sets[2].startsWith("저축보험 ("), sets.join(" / "));
   await q.click("details[open] .menu-list button:has-text('암보험 (')");
   await q.waitForTimeout(800);
   await checkCancerDoc();

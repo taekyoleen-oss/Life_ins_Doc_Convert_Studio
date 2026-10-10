@@ -26,7 +26,7 @@ describe("조건 파일(YAML)", () => {
     // 샘플은 아홉 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약 · 암보험 · 저축보험(적립형), 위험률 근거는 모두 가상
     expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan", "savings"]);
     // 공유용 [샘플] 메뉴는 종신보험 · 암보험 둘, 첫 화면은 종신보험
-    expect(SHARED_SAMPLE_IDS).toEqual(["whole", "cancerPlan"]);
+    expect(SHARED_SAMPLE_IDS).toEqual(["whole", "cancerPlan", "savings"]);
     expect(START_SAMPLE_ID).toBe("whole");
     for (const x of SAMPLES) for (const r of yamlToSpec(x.yaml).spec.rates) expect(r.source, `${x.id} ${r.name}`).toMatch(/^경험생명표\(가상\) /);
   });

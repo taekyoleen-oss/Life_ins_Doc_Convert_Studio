@@ -471,6 +471,6 @@ savings:                  # 적립형 — 이 칸이 있으면 유지자·보험
 ];
 
 /** 공유·시험용으로 [샘플] 메뉴에 보이는 것 — 나머지는 코드·시험에만 두고 하나씩 늘린다(주소 ?all 이면 모두, ?sample=<id> 로 바로 연다) */
-export const SHARED_SAMPLE_IDS = ["whole", "cancerPlan"];
+export const SHARED_SAMPLE_IDS = ["whole", "cancerPlan", "savings"];
 /** 첫 화면에 여는 상품 — 종신보험(사용자 결정 2026-10-06 — 하루 동안 암보험이었다가 되돌림) */
 export const START_SAMPLE_ID = "whole";
