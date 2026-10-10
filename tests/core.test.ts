@@ -23,8 +23,8 @@ describe("조건 파일(YAML)", () => {
     expect(spec.survivors!.map((x) => [x.exitRateIds, x.payFor])).toEqual([[["q", "r80"], ["주계약"]], [["q"], undefined]]);   // 납입자 = 사망·80% 장해 아닌 유지자 lx(1)
     expect([spec.basis.waiver, spec.basis.waiverRateIds]).toEqual([true, ["r80"]]);
     expect(sample("cancer").spec.basis.lowRatio).toBe(0);
-    // 샘플은 일곱 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약, 위험률 근거는 모두 가상
-    expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan"]);
+    // 샘플은 아홉 — 종신 둘 · 암진단 · 2대질병 · 입원특약 · 수술특약 · 보험료납입지원특약 · 암보험 · 저축보험(적립형), 위험률 근거는 모두 가상
+    expect(SAMPLES.map((x) => x.id)).toEqual(["whole", "wholeCancer", "cancer", "twoMajor", "hospital", "surgery", "support", "cancerPlan", "savings"]);
     // 공유용 [샘플] 메뉴는 종신보험 · 암보험 둘, 첫 화면은 종신보험
     expect(SHARED_SAMPLE_IDS).toEqual(["whole", "cancerPlan"]);
     expect(START_SAMPLE_ID).toBe("whole");

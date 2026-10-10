@@ -843,6 +843,36 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("카드 단계는 색연필 원 아이콘 — 그림 · 상태 점 · 카드 사이 화살표", (await q.locator(".card-step svg").count()) >= 10 && (await q.locator(".card-step-flow").count()) >= 9);
   await q.close();
 
+  // 21) 적립형 — 저축보험(공시이율형): 카드 · 산출 조건(보험기간 · 기본보험료) · 환급률 예시 셋 · 적립액 계산 창 · 산출방법서 장
+  const sv = await b.newPage({ viewport: { width: 1500, height: 900 } });
+  sv.on("pageerror", (e) => errs.push("pageerror " + e.message));
+  sv.on("console", (m) => { if (m.type() === "error") errs.push("console " + m.text()); });
+  sv.on("dialog", (d) => { d.accept().catch(() => {}); });
+  await sv.goto("http://localhost:3217/?sample=savings", { waitUntil: "networkidle" });
+  await sv.waitForTimeout(900);
+  const svCards = await sv.$$eval(".card[data-card]", (e) => e.map((x) => x.dataset.card));
+  ok("적립형: 카드 = M00 · M01 · M03 · M04 · M06 · A01 · A02 · M09 (보장성 카드 없음 · 계약 단위 탭 없음)", svCards.join(",") === "M00,M01,M03,M04,M06,A01,A02,M09" && (await sv.locator(".unit-tabs").count()) === 0, svCards.join(","));
+  const svBar = (await sv.textContent(".trial-bar")).replace(/\s+/g, " ");
+  ok("적립형: 산출 조건 — 40세 남 · 10년 · 월 30만원 → 만기환급금 38,589,551원 · 환급률 107.2%", svBar.includes("38,589,551") && svBar.includes("107.2"), svBar.slice(0, 160));
+  const svDoc = await sv.textContent(".doc-body");
+  ok("적립형: 산출방법서 — 보험료의 구성 · 2. 계약자적립액 · 3. 해약환급금 및 만기환급금 · 적립 조건 표", ["라. 보험료의 구성", "2. 계약자적립액의 계산에 관한 사항", "3. 해약환급금 및 만기환급금의 계산에 관한 사항", "적립 조건"].every((x) => svDoc.includes(x)) && !svDoc.includes("유지자"));
+  await sv.click(".card[data-card=A02] .card-head");
+  await sv.waitForTimeout(600);
+  const svPanel = (await sv.textContent(".card[data-card=A02] .calc-panel")).replace(/\s+/g, " ");
+  ok("적립형: A02 산출 결과 — 공시이율 107.2% · 평균공시이율 109.9% · 최저보증 100.8%(10년)", ["107.2%", "109.9%", "100.8%"].every((x) => svPanel.includes(x)), svPanel.slice(0, 200));
+  await sv.selectOption(".trial-bar select[aria-label=기본보험료]", "100000");
+  await sv.selectOption(".trial-bar select[aria-label=보험기간]", "15");
+  await sv.waitForTimeout(600);
+  const svBar2 = (await sv.textContent(".trial-bar")).replace(/\s+/g, " ");
+  ok("적립형: 보험기간 15년 · 월 10만원으로 바꾸면 만기환급금이 바뀐다", !svBar2.includes("38,589,551") && /만기환급금 [\d,]+원/.test(svBar2), svBar2.slice(0, 160));
+  await sv.click(".trial-bar button:has-text('적립액 계산')");
+  await sv.waitForTimeout(700);
+  const svTabs = await sv.$$eval(".calc-modal .calc-tabs button", (e) => e.map((x) => x.textContent));
+  const svHead = await sv.textContent(".calc-modal .calc-grid thead");
+  ok("적립형: 적립액 계산 창 — 예시 탭 셋 · 열에 AV · W · 환급률", svTabs.length === 3 && ["AV", "환급률", "P적립"].every((x) => svHead.replace(/\s/g, "").includes(x)), `${svTabs.length} · ${svHead.slice(0, 120)}`);
+  await sv.screenshot({ path: `${OUT}/s15_savings.png` });
+  await sv.close();
+
   ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
   fs.writeFileSync(`${OUT}/e2e.txt`, log.join("\n"), "utf8");
   await b.close();

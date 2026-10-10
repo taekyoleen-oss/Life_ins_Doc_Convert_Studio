@@ -6,6 +6,7 @@ import { calcSheets, PAY_METHODS, sheetsByUnit, type CalcColumn, type CalcContra
 import { calcWorkbook } from "@/lib/methoddoc/calc-xlsx";
 import { subSup } from "@/lib/methoddoc/render";
 import type { MethodSpec } from "@/lib/methoddoc/spec";
+import { savingsTerm, savingsTerms } from "@/lib/methoddoc/savings";
 import { formulaHtml } from "./DocPreview";
 // 파이썬 창은 열 때만 받는다
 const PythonPanel = dynamic(() => import("./PythonPanel"), { ssr: false });
@@ -37,7 +38,8 @@ const num = (v: number, digits: number) => {
 };
 const won = (v: number) => `${Math.round(v).toLocaleString("ko-KR")} 원`;
 /** 열 제목의 자리 표기 — 현가율은 기호에 이미 자리가 있고, 보장금액 배수 S·생존 배수 E 는 경과기간 t 로 적는다(식도 S_t) */
-const headOf = (sym: string) => (sym.startsWith("v^") ? sym : ["S", "E"].includes(sym) ? `${sym}_t` : `${sym}_{x+t}`);
+/** 적립형(sav)은 위험률 말고는 모두 경과기간 t 로 적는다(AV_t · W_t) */
+const headOf = (sym: string, sav?: boolean) => (sym.startsWith("v^") ? sym : ["S", "E"].includes(sym) || (sav && sym !== "q") ? `${sym}_t` : `${sym}_{x+t}`);
 
 /** 고른 칸 — 열만 고르면 t 는 없다 */
 type Pick = { col: CalcColumn; t?: number } | { scalar: CalcSheet["scalars"][number] } | null;
@@ -53,6 +55,8 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
   const [unitAt, setUnitAt] = useState(0);
   const unit = units[Math.min(unitAt, units.length - 1)];
   const sheet = unit?.sheets[Math.min(at, unit.sheets.length - 1)];
+  /** 적립형 — 탭은 공시이율 예시, 계약은 보험기간(전기납)·기본보험료 */
+  const sav = !!spec.savings;
   const put = (k: keyof CalcContract, v: string) => { setContract({ ...contract, [k]: k === "sex" ? (v as "M" | "F") : Number(v) }); setPick(null); };
 
   const save = (name: string, data: Uint8Array | string, type: string) => {
@@ -85,10 +89,10 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
     <div className={`modal-back no-print ${full ? "calc-full-back" : ""}`} onClick={onClose}>
       <div className={`modal calc-modal ${full ? "calc-full" : ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="calc-head">
-          <h2>보험료 계산 <span>{spec.meta.productName || "(이름 없음)"} — 산출방법서의 식을 그대로 읽어 이 앱이 계산합니다</span></h2>
+          <h2>{sav ? "적립액 계산" : "보험료 계산"} <span>{spec.meta.productName || "(이름 없음)"} — 산출방법서의 식을 그대로 읽어 이 앱이 계산합니다</span></h2>
           <button className="btn-primary" onClick={xlsx} title="계약 단위마다 한 장 — 담보가 모두 한 장에, 맨 오른쪽에 결과. 위험률과 계약·기초율만 값이고 현가율부터는 엑셀 수식">엑셀로 내려받기 (수식 포함)</button>
           <button className="btn" onClick={() => setPython(true)} title="같은 계산을 단계마다 주석 단 파이썬 셀로 — 브라우저에서 실행하거나 .py 로 내려받습니다">Python 일괄 산출</button>
-          <button className="btn" onClick={csv}>이 담보만 CSV (값)</button>
+          <button className="btn" onClick={csv}>{sav ? "이 표만 CSV (값)" : "이 담보만 CSV (값)"}</button>
           <button className="btn" onClick={() => setFull((f) => !f)} aria-pressed={full} title={full ? "창을 원래 크기로 되돌립니다" : "창을 화면 가득히 넓혀 표를 한눈에 봅니다"}>{full ? "↙ 원래 크기로" : "⤢ 전체 보기"}</button>
         <button className="btn" onClick={onClose}>닫기</button>
         </header>
@@ -97,13 +101,20 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
           <span className="text-[12px] font-semibold text-[#334155]">계약</span>
           <select className="inp w-auto py-0.5 text-xs" value={contract.sex ?? "M"} onChange={(e) => put("sex", e.target.value)}><option value="M">남</option><option value="F">여</option></select>
           <select className="inp w-auto py-0.5 text-xs" value={contract.age} onChange={(e) => put("age", e.target.value)}>{[0, 20, 30, 40, 50, 60].map((a) => <option key={a} value={a}>{a}세</option>)}</select>
+          {sav ? <>
+            <select className="inp w-auto py-0.5 text-xs" value={savingsTerm(spec, contract.payYears)} onChange={(e) => put("payYears", e.target.value)}>{savingsTerms(spec).map((a) => <option key={a} value={a}>{a}년 만기 (전기납)</option>)}</select>
+            <select className="inp w-auto py-0.5 text-xs" value={calc.premium} title="월 기본보험료" onChange={(e) => put("basePremium", e.target.value)}>
+              {[...new Set([5e4, 1e5, 2e5, 3e5, 5e5, 1e6, calc.premium])].sort((a, b) => a - b).map((v) => <option key={v} value={v}>월 {v.toLocaleString("ko-KR")}원</option>)}
+            </select>
+          </> : <>
           <select className="inp w-auto py-0.5 text-xs" value={contract.payYears} onChange={(e) => put("payYears", e.target.value)}>{[5, 10, 15, 20, 30].map((a) => <option key={a} value={a}>{a}년납</option>)}</select>
           <select className="inp w-auto py-0.5 text-xs" value={contract.freq} onChange={(e) => put("freq", e.target.value)}>{PAY_METHODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
           <select className="inp w-auto py-0.5 text-xs" value={contract.sumAssured ?? 1e8} title="보험가입금액 — 보장금액 = 가입금액 × 배수" onChange={(e) => put("sumAssured", e.target.value)}>
             {(SUM_ASSURED.some(([v]) => v === (contract.sumAssured ?? 1e8)) ? SUM_ASSURED : [...SUM_ASSURED, [contract.sumAssured ?? 1e8, `${(contract.sumAssured ?? 1e8).toLocaleString("ko-KR")}원`] as [number, string]]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
+          </>}
           <span className="fld-hint">조건에 저장하지 않습니다 — 계약 한 점은 계산할 때만 씁니다</span>
-          <span className="ml-auto calc-total">보험료 합계 <b>{won(calc.premium)}</b> <small>10만원당 {calc.per100k.toLocaleString("ko-KR")}원{units.length > 1 ? ` · ${units.map((u) => `${u.unit} ${won(u.premium)}`).join(" · ")}` : ""}</small></span>
+          {sav ? <span className="ml-auto calc-total">기본보험료 월 <b>{won(calc.premium)}</b> <small>값은 모두 기본보험료 1원당 — 원 = 값 × 기본보험료</small></span> : <span className="ml-auto calc-total">보험료 합계 <b>{won(calc.premium)}</b> <small>10만원당 {calc.per100k.toLocaleString("ko-KR")}원{units.length > 1 ? ` · ${units.map((u) => `${u.unit} ${won(u.premium)}`).join(" · ")}` : ""}</small></span>}
         </div>
 
         {calc.missingRates.length > 0 && <p className="calc-warn">값 표가 없어 0 으로 둔 위험률: {calc.missingRates.join(", ")} — [위험률 표] 창에서 열을 이으세요</p>}
@@ -122,7 +133,7 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
           <div className="calc-tabs">
             {unit.sheets.map((s, i) => (
               <button key={s.id} className={i === at ? "on" : ""} onClick={() => { setAt(i); setPick(null); }}>
-                {s.name}<small>{s.n}년 / {s.m}년납 · {s.multiple !== undefined ? `${s.multiple}배 · ` : ""}10만원당 {s.per100k.toLocaleString("ko-KR")}원</small>
+                {s.name}<small>{s.savings ? `${s.n}년 · 만기 ${won(s.maturity?.won ?? 0)} · 환급률 ${((s.maturity?.ratio ?? 0) * 100).toFixed(1)}%` : <>{s.n}년 / {s.m}년납 · {s.multiple !== undefined ? `${s.multiple}배 · ` : ""}10만원당 {s.per100k.toLocaleString("ko-KR")}원</>}</small>
               </button>
             ))}
           </div>
@@ -161,7 +172,7 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
                       {sheet.cols.map((c) => (
                         <th key={c.sym} className={`calc-col ${c.kind} ${pick && "col" in pick && pick.col.sym === c.sym ? "on" : ""}`}
                           onClick={() => setPick({ col: c })} title="누르면 이 열을 만든 식을 보여 줍니다">
-                          <span dangerouslySetInnerHTML={{ __html: subSup(headOf(c.sym)) }} />
+                          <span dangerouslySetInnerHTML={{ __html: subSup(headOf(c.sym, sheet.savings)) }} />
                           <small>{c.label}</small>
                         </th>
                       ))}
@@ -188,7 +199,7 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
 
             <div className="calc-side thin-scroll">
               <div className="calc-sum">
-                <p className="calc-sum-title">{sheet.name} — 보험료</p>
+                <p className="calc-sum-title">{sheet.name} — {sheet.savings ? "만기" : "보험료"}</p>
                 <table>
                   <tbody>
                     {sheet.scalars.map((s) => (
@@ -198,8 +209,13 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
                         <td className="num">{num(s.value, s.digits)}</td>
                       </tr>
                     ))}
+                    {sheet.savings ? <>
+                      <tr className="calc-sum-hi"><th>만기환급금</th><td>만기의 W × 기본보험료</td><td className="num">{won(sheet.maturity?.won ?? 0)}</td></tr>
+                      <tr className="calc-sum-hi"><th>환급률</th><td>만기환급금 ÷ 납입보험료</td><td className="num">{((sheet.maturity?.ratio ?? 0) * 100).toFixed(1)}%</td></tr>
+                    </> : <>
                     <tr className="calc-sum-hi"><th>10만원당</th><td>G₁(6자리) × 100,000 을 원으로 반올림</td><td className="num">{sheet.per100k.toLocaleString("ko-KR")}</td></tr>
                     <tr className="calc-sum-hi"><th>담보 보험료</th><td>10만원당 × (보장금액 {sheet.multiple !== undefined ? `= 가입금액 × ${sheet.multiple} ` : ""}÷ 100,000{sheet.amount ? ` = ${(sheet.amount / 1e5).toLocaleString("ko-KR")}` : ""}) · 10원 미만 버림</td><td className="num">{won(sheet.premium)}</td></tr>
+                    </>}
                   </tbody>
                 </table>
               </div>
@@ -216,7 +232,7 @@ export default function PremiumSheet({ spec, contract, setContract, onClose }: P
                 {pick && "col" in pick && (
                   <>
                     <p className="calc-pop-title">
-                      <span dangerouslySetInnerHTML={{ __html: subSup(pick.t === undefined || pick.col.sym.startsWith("v^") ? headOf(pick.col.sym) : `${pick.col.sym}_{${["S", "E"].includes(pick.col.sym) ? pick.t : sheet.ages[pick.t]}}`) }} /> {pick.col.label}
+                      <span dangerouslySetInnerHTML={{ __html: subSup(pick.t === undefined || pick.col.sym.startsWith("v^") ? headOf(pick.col.sym, sheet.savings) : `${pick.col.sym}_{${["S", "E"].includes(pick.col.sym) || (sheet.savings && pick.col.kind !== "rate") ? pick.t : sheet.ages[pick.t]}}`) }} /> {pick.col.label}
                       {pick.t !== undefined && <small> · {pick.t}년 뒤 ({sheet.ages[pick.t]}세)</small>}
                     </p>
                     {pick.col.kind === "rate"

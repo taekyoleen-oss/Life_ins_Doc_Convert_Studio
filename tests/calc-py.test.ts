@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { calcPython, pyName, pythonScript, toPython } from "@/lib/methoddoc/calc-py";
-import { computeSpec, parseEquation } from "@/lib/methoddoc/calc";
+import { computeSavings, computeSpec, parseEquation, SAVINGS_SCENARIOS } from "@/lib/methoddoc/calc";
 import { jsonToSpec, yamlToSpec } from "@/lib/conditions/yaml";
 import { SAMPLES } from "@/lib/samples";
 import { attachTables, sampleSheet } from "@/lib/sheet";
@@ -71,7 +71,13 @@ describe("보험료 계산 → 파이썬", () => {
     writeFileSync(file, pythonScript(calcPython(withRates, contract)));
     const r = spawnSync(py!, [file], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
     expect(r.status, r.stderr).toBe(0);
-    const got = JSON.parse(r.stdout.split("\n").find((l) => l.startsWith("RESULT "))!.slice(7)) as { name: string; per100k: number; premium: number }[];
+    const res = JSON.parse(r.stdout.split("\n").find((l) => l.startsWith("RESULT "))!.slice(7));
+    // 적립형 — 공시이율 예시마다 해마다 환급금(원)이 앱과 같다
+    if (sp.savings) {
+      for (const sc of SAVINGS_SCENARIOS) expect(res[sc.id], sc.id).toEqual(computeSavings(withRates, contract, sc.id).rows.map((x) => x.w));
+      return;
+    }
+    const got = res as { name: string; per100k: number; premium: number }[];
     const want = computeSpec(withRates, contract);
     expect(want.errors).toEqual([]);
     expect(got.map((g) => [g.name, g.per100k, g.premium])).toEqual(want.benefits.map((b) => [b.name, b.per100k, b.premium]));

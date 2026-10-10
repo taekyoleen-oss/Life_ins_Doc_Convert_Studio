@@ -3,7 +3,7 @@ import { combosOf, generateFormulas, syncFromSurvivors } from "../methoddoc/form
 import { normFormula, parseRate, parseTimes } from "../methoddoc/parse";
 import {
   emptySpec, hasProduct, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
-  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole, type SurvivorSpec, type ComboSpec,
+  type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole, type SurvivorSpec, type ComboSpec, type SavingsSpec,
 } from "../methoddoc/spec";
 
 /**
@@ -76,6 +76,12 @@ export function yamlView(spec: MethodSpec): Record<string, unknown> {
       survivorId: x.survivorId, rateId: x.rateId, exitRateIds: x.exitRateIds, steps: x.steps, points: x.points,
     })),
     units: spec.units.length > 1 ? spec.units : undefined,
+    savings: spec.savings ? clean({
+      credited: pct(spec.savings.credited),
+      guarantee: spec.savings.guarantee.map((g) => ({ from: g.from, rate: pct(g.rate) })),
+      deathMultiple: spec.savings.deathMultiple, maturityFloor: pct(spec.savings.maturityFloor),
+      alphaYears: spec.savings.alphaYears, deductRatio: pct(spec.savings.deductRatio), deductYears: spec.savings.deductYears,
+    }) : undefined,
     reserve: spec.reserve.notes.length ? spec.reserve : undefined,
     surrender: spec.surrender.notes.length || spec.surrender.deductionYears ? clean({ ...spec.surrender }) : undefined,
     formulas: spec.formulas.length ? spec.formulas.map((f) => clean({ section: f.section, label: f.label, text: f.text, note: f.note })) : undefined,
@@ -101,6 +107,7 @@ function styleFlow(doc: Document) {
   flowItems(["product", "terms"]);
   flowItems(["survivors"]);
   flowItems(["combos"]);
+  flowItems(["savings", "guarantee"]);
   { const w = doc.getIn(["basis", "waiverRateIds"], true); if (isSeq(w)) w.flow = true; }
   for (const key of ["types", "payFreqs"]) { const s = doc.getIn(["product", key], true); if (isSeq(s)) s.flow = true; }
   const bens = doc.getIn(["benefits"], true);
@@ -227,6 +234,18 @@ function toSpec(raw: Record<string, unknown>, errors: ParsedConditions["errors"]
   for (const sv of survivors) for (const id of sv.exitRateIds) if (!spec.rates.some((r) => r.id === id)) errors.push({ line: 0, message: `생존자 "${sv.id}" 가 없는 위험률 id "${id}" 를 가리킵니다` });
 
   spec.units = arr(raw.units) as MethodSpec["units"];
+  // 적립형(공시이율형 저축보험) — 비율은 "2.27%", 배수·기간은 수
+  if (raw.savings !== undefined) {
+    const sv = obj(raw.savings);
+    const r = (k: string, d: number) => { const v = rateOf(sv[k]); if (v === undefined && sv[k] !== undefined) errors.push({ line: 0, message: `savings.${k}: "${String(sv[k])}" 를 비율로 읽을 수 없습니다 (예: 2.27%)` }); return v ?? d; };
+    const savings: SavingsSpec = {
+      credited: r("credited", 0),
+      guarantee: arr(sv.guarantee).map(obj).map((g) => ({ from: num(g.from) ?? 0, rate: rateOf(g.rate) ?? 0 })).sort((a, b) => a.from - b.from),
+      deathMultiple: num(sv.deathMultiple) ?? 0, maturityFloor: r("maturityFloor", 1),
+      alphaYears: num(sv.alphaYears) ?? 7, deductRatio: r("deductRatio", 0), deductYears: num(sv.deductYears) ?? 7,
+    };
+    spec.savings = savings;
+  }
   const rs = obj(raw.reserve), sr = obj(raw.surrender);
   spec.reserve = { notes: arr(rs.notes).map(str).filter((s): s is string => !!s) };
   spec.surrender = { notes: arr(sr.notes).map(str).filter((s): s is string => !!s), ...(num(sr.deductionYears) ? { deductionYears: num(sr.deductionYears) } : {}) };
@@ -328,6 +347,7 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
     setIf(`basis.${k}`, (s) => s.basis[k], (s, v) => { (s.basis as Record<string, unknown>)[k] = v; });
   }
   setIf("basis.lapse", (s) => s.basis.lapse, (s, v) => { s.basis.lapse = v; });
+  setIf("savings", (s) => s.savings, (s, v) => { s.savings = v; });
   if (took.has("expenses") && parsed.expenses.length) {
     const view = (s: MethodSpec) => s.expenses.map((e) => `${e.symbol}=${e.rate ?? e.times}`).join(" ");
     if (view(out) !== view(parsed)) { changes.push(`expenses: ${view(out)} → ${view(parsed)}`); out.expenses = parsed.expenses.map((e) => ({ ...e, raw: undefined })); }
@@ -458,7 +478,7 @@ export interface YamlEdit { path: YamlPath; value?: unknown; add?: boolean }
 export const pathKey = (p: YamlPath) => p.map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k)).join("");
 
 /** 새로 만드는 항목 중 한 줄로 두는 것 — specToYaml 의 styleFlow 와 같은 관례 */
-const FLOW = /^(expenses|basis\.lapse|product\.terms|survivors|combos)\[\d+\]$|\.(exitRateIds|rateIds|payFor|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
+const FLOW = /^(expenses|basis\.lapse|product\.terms|survivors|combos|savings\.guarantee)\[\d+\]$|\.(exitRateIds|rateIds|payFor|steps|points)(\[\d+\])?$|^product\.(types|payFreqs)$|^basis\.waiverRateIds$/;
 function markFlow(node: unknown, key: string) {
   if (!isCollection(node)) return;
   if (FLOW.test(key)) node.flow = true;

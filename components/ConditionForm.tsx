@@ -6,7 +6,8 @@ import { pathKey, pct, type YamlEdit, type YamlPath } from "@/lib/conditions/yam
 import { matchBlocks, splitPaths, under } from "@/lib/conditions/link";
 import { parseRate, parseTimes } from "@/lib/methoddoc/parse";
 import { amountLabel, benefitModels, comboModels, combosOf, daysLabel, eventCauses, pvbLines, rateSymbols, survivorModels, survivorsOf, waitLabel, withFormulas, type BenefitModel, type ComboModel, type SurvivorModel } from "@/lib/methoddoc/formulas";
-import { calcSheets, checkFormula, survivorTables, computeByPayMethod, computeSpec, PAY_METHODS, SUM_ASSURED_DEFAULT, type CalcContract, type CalcResult, type CalcSheets } from "@/lib/methoddoc/calc";
+import { BASE_PREMIUM_DEFAULT, calcSheets, checkFormula, survivorTables, computeByPayMethod, computeSavings, computeSpec, PAY_METHODS, SAVINGS_SCENARIOS, SUM_ASSURED_DEFAULT, type CalcContract, type CalcResult, type CalcSheets, type SavingsResult } from "@/lib/methoddoc/calc";
+import { savingsTerm, savingsTerms } from "@/lib/methoddoc/savings";
 import { subSup } from "@/lib/methoddoc/render";
 import { coverFields, coverTerms, endAgeLabel, MAIN_UNIT, RATE_ROLE_LABEL, unitNames, WHOLE_LIFE_AGE, type ComboSpec, type FormulaSpec, type MethodSpec, type RateRole, type Sex } from "@/lib/methoddoc/spec";
 import { EXPENSE_PRESET } from "@/lib/samples";
@@ -462,6 +463,77 @@ function BasisBody() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+
+// ── 적립형(공시이율형 저축보험) 카드 ─────────────────────────────────────────
+/** 적립형 M03 — 보장부분 확정이율 · 공시이율(예시) · 평균공시이율 · 최저보증이율(경과기간 구간) */
+function SavingsRateBody() {
+  const f = useForm();
+  const tiers = list(f.get(["savings", "guarantee"]));
+  return (
+    <div className="space-y-3">
+      <Grid>
+        <F p={["basis", "interest"]} label="보장부분 확정이율 i" kind="pct" hint="위험보험료(사망보험금 중 기본보험료 배수 부분)의 할인" />
+        <F p={["savings", "credited"]} label="공시이율 (예시)" kind="pct" hint="매월 회사가 정한다 — 적용이율 j = max(공시이율, 최저보증이율)" />
+        <F p={["basis", "averagePublished"]} label="평균공시이율" kind="pct" hint="적립액 예시의 둘째" />
+      </Grid>
+      <div data-path="savings.guarantee" className="space-y-2">
+        <span className="fld-label">최저보증이율 — 경과기간 구간</span>
+        {tiers.map((_, i) => (
+          <div key={i} data-path={`savings.guarantee[${i}]`} className="sub grid grid-cols-[auto_6rem_auto_7rem_auto] items-center gap-2 text-[13px]">
+            <span>경과</span><F p={["savings", "guarantee", i, "from"]} label="경과 년" kind="num" bare /><span>년부터</span>
+            <F p={["savings", "guarantee", i, "rate"]} label="최저보증이율" kind="pct" bare />
+            {i > 0 ? <Remove onClick={() => f.edit([{ path: ["savings", "guarantee", i] }])} /> : <span />}
+          </div>
+        ))}
+        <Add onClick={() => f.edit([{ path: ["savings", "guarantee"], add: true, value: { from: (num(tiers[tiers.length - 1]?.from) ?? 0) + 5, rate: "0.5%" } }])}>＋ 구간</Add>
+      </div>
+    </div>
+  );
+}
+
+/** 적립형 A01 — 사망보험금 배수 · 만기 최저보증 · α 기간 · 해약공제 */
+function SavingsTermsBody() {
+  return (
+    <Grid>
+      <F p={["savings", "deathMultiple"]} label="사망보험금 — 기본보험료의 배수" kind="num" unit="배" hint="사망보험금 = 기본보험료 × 배수 + 계약자적립액 (500% → 5)" />
+      <F p={["savings", "maturityFloor"]} label="만기환급금 최저보증" kind="pct" hint="납입보험료 대비 — 100.1%" />
+      <F p={["savings", "alphaYears"]} label="계약체결비용 α 기간" kind="num" unit="년" hint="그 뒤는 α′ (M06 사업비)" />
+      <F p={["savings", "deductRatio"]} label="해약공제 — 기본보험료 대비" kind="pct" />
+      <F p={["savings", "deductYears"]} label="해약공제 기간" kind="num" unit="년" hint="매년 균등하게 줄인다" />
+    </Grid>
+  );
+}
+
+/** 적립형 산출 결과 — 공시이율 예시 셋의 해마다 환급률(납입누계 · 적립액 · 환급금은 첫 예시) */
+function SavingsPanel({ results, onSheet }: { results: SavingsResult[]; onSheet: () => void }) {
+  const base = results[0];
+  if (!base) return null;
+  const ts = base.rows.filter((r) => r.t > 0 && ([1, 2, 3, 5, 7, 10, 15, 20].includes(r.t) || r.t === base.n)).map((r) => r.t);
+  return (
+    <div className="calc-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12.5px] font-semibold text-[#334155]">산출 결과 — 기본보험료 월 {won0(base.basePremium)}원 · {base.n}년</span>
+        <button type="button" className="btn ml-auto" onClick={onSheet} title="한 해 한 줄의 표로 계산 과정을 봅니다">＝ 적립액 계산</button>
+      </div>
+      {results.some((r) => r.error) && <p className="mt-1 text-[11.5px] text-rose-700">식으로 계산할 수 없습니다 — {results.find((r) => r.error)!.error}</p>}
+      {base.missingRates.length > 0 && <p className="mt-1 text-[11.5px] text-amber-700">값 표가 없어 0 으로 둔 위험률: {base.missingRates.join(", ")}</p>}
+      <table className="calc-table mt-1.5">
+        <thead><tr><th>경과</th><th>납입보험료</th><th>계약자적립액</th><th>환급금</th>{results.map((r) => <th key={r.scenario}>환급률 — {r.label}{r.scenario === "guarantee" ? "" : ` ${(r.rate * 100).toFixed(2)}%`}</th>)}</tr></thead>
+        <tbody>
+          {ts.map((t) => (
+            <tr key={t}>
+              <td>{t}년{t === base.n ? " (만기)" : ""}</td>
+              <td className="num">{won0(base.rows[t].paid)}</td><td className="num">{won0(base.rows[t].av)}</td><td className="num">{won0(base.rows[t].w)}</td>
+              {results.map((r) => <td key={r.scenario} className="num">{r.rows[t] ? `${(r.rows[t].ratio * 100).toFixed(1)}%` : "—"}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="fld-hint mt-1">공시이율 예시는 그 이율을 계약기간 내내 그대로 쓴 것입니다. 최저보증이율은 공시이율이 그보다 낮을 때의 하한입니다. 사망보험금 = 기본보험료 × 배수 + 계약자적립액.</p>
     </div>
   );
 }
@@ -1164,6 +1236,10 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const sheets = useMemo(() => (needSheets ? calcSheets(spec, calcOn) : null), [spec, calcOn, needSheets]);
   const survTabs = useMemo(() => (needSurv ? survivorTables(spec, calcOn) : null), [spec, calcOn, needSurv]);
   const sumAssured = calcOn.sumAssured ?? SUM_ASSURED_DEFAULT;
+  // 적립형(공시이율형 저축보험) — 카드·산출 조건 줄이 다르다(보장성 카드 C01·S01·B01·B02·M07·M08 없음)
+  const savings = !!spec.savings;
+  const savRes = useMemo(() => (savings ? SAVINGS_SCENARIOS.map((sc) => computeSavings(spec, calcOn, sc.id)) : []), [spec, calcOn, savings]);
+  const basePremium = calcOn.basePremium ?? BASE_PREMIUM_DEFAULT;
   /** 보험금 카드에서 "유지자 카드에서 보기" — S01 의 그 lx 를 펼쳐 비춘다 */
   const onSurvCard = (sid: string) => { openCard("S01"); onSelect([`formula:surv.${sid}`]); };
   const byKey = (re: RegExp) => full.formulas.filter((f) => f.key && re.test(f.key));
@@ -1297,7 +1373,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
   const onBenSurvivor = (i: number, sid: string) => saveSurvs(cur(), sv0.benefitOf.map((x, j) => (j === i ? sid : x)));
   const errM01 = bad(/^meta\.|^contract/), errM03 = bad(/^basis\.(?!waiver)|해지율/), errM06 = bad(/^사업비/);
   const infoN = ["insurer", "version", "date", "note"].filter((k) => str(m[k])).length;
-  const cards: CardDef[] = [
+  const protCards: CardDef[] = [
     // 산출방법서 차례대로: 개요(M00 정보 · M01 상품) → 1장 가. 예정기초율((1) 이율·(3) 해지율 M03 · (2) 위험률 M04 · (5) 사업비 M06)
     // → 다·라. 납입자수·보험료 계산기수(M05, (4) 납입면제 포함) → 다·마. 유지자수·보험금(B01) → 바. 보험료(M07) → 2·3장(M08) → 따로 적는 식(M09)
     { id: "M00", code: "M00", title: "문서 정보 (회사 · 판 · 작성일 · 비고)", paths: ["meta.insurer", "meta.version", "meta.date", "meta.note"], status: status(undefined, infoN > 0, true),
@@ -1359,6 +1435,32 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     { id: "M09", code: "M09", title: "따로 적는 식", paths: ["formulas"], status: status(undefined, ownIdxs.length > 0, true),
       summary: [ownIdxs.length ? `식 ${ownIdxs.length}개` : "없음"],
       help: "표준 식 말고 따로 적을 식입니다(새 절도 만들 수 있습니다). 표준 식을 고치는 것은 그 단계의 카드에서 합니다 — 고친 식은 이 목록에 나타나지 않습니다.", body: <FormulasBody idxs={ownIdxs} /> },
+  ];
+
+  // 적립형 — 문서 정보 · 상품 · 이율(공시·최저보증) · 위험률 · 사업비 → 보험금·해약공제 → 보험료의 구성·계약자적립액 → 따로 적는 식
+  const pick = (id: string) => protCards.find((c) => c.id === id)!;
+  const savCredited = savRes[0]?.rows[savRes[0].n];
+  const cards: CardDef[] = !savings ? protCards : [
+    pick("M00"), pick("M01"),
+    { id: "M03", code: "M03", title: "예정이율 — 보장부분 확정이율 · 공시이율 · 최저보증이율", paths: ["basis.interest", "basis.averagePublished", "savings.credited", "savings.guarantee"],
+      status: status(errM03, sp.basis.interest !== undefined && !!sp.savings?.credited), message: errM03,
+      summary: [sp.basis.interest !== undefined ? `i = ${pct(sp.basis.interest)}` : "", sp.savings ? `공시 ${pct(sp.savings.credited)}` : "", sp.basis.averagePublished !== undefined ? `평균 ${pct(sp.basis.averagePublished)}` : "",
+        sp.savings?.guarantee.length ? `최저보증 ${sp.savings.guarantee.map((g) => pct(g.rate)).join("·")}` : ""],
+      help: "적립형은 계약자적립액을 공시이율로 쌓습니다(공시이율이 최저보증이율보다 낮으면 최저보증이율). 보장부분 확정이율은 사망보험금 가운데 기본보험료 배수 부분의 위험보험료를 할인하는 데만 씁니다. 평균공시이율·최저보증이율은 적립액 예시(산출 결과)의 둘째·셋째입니다.",
+      body: <SavingsRateBody /> },
+    pick("M04"),
+    { ...pick("M06"), help: "적립형은 기본보험료 대비 매월 — α 계약체결비용(A01 의 기간 이내), α′ 그 뒤, β 계약관리비용. 이 값이 보험료의 구성 식(적립보험료)에 그대로 들어갑니다." },
+    { id: "A01", code: "A01", title: "보험금 · 해약공제 — 사망 · 만기 · 해약", paths: ["savings.deathMultiple", "savings.maturityFloor", "savings.alphaYears", "savings.deductRatio", "savings.deductYears", "formula:save.death", "formula:save.deduct", "formula:save.W"], formulas: true,
+      status: sp.savings?.deathMultiple ? "done" : "editing",
+      summary: sp.savings ? [`사망 ${pct(sp.savings.deathMultiple)} + 적립액`, `만기 최저 ${pct(sp.savings.maturityFloor)}`, `해약공제 ${pct(sp.savings.deductRatio)} · ${sp.savings.deductYears}년`] : [],
+      help: "산출방법서 1장 다. 보험금과 3장 해약환급금 및 만기환급금입니다. 사망보험금 = 기본보험료 × 배수 + 계약자적립액, 만기환급금 = max(계약자적립액, 납입보험료 × 최저보증), 해약환급금 = 계약자적립액 − 해약공제입니다.",
+      body: <><SavingsTermsBody /><Formulas items={byKey(/^save:(death|deduct|paid|W|ratio)$/)} show={formulasOn.includes("A01")} /></> },
+    { id: "A02", code: "A02", title: "보험료의 구성 · 계약자적립액 (P^위험 · P^적립 · AV)", paths: ["formula:save.risk", "formula:save.alpha", "formula:save.accum", "formula:save.rate", "formula:save.monthly", "formula:save.AV"], formulas: true,
+      status: savRes.some((r) => r.error) ? "error" : "done", message: savRes.find((r) => r.error)?.error,
+      summary: savCredited ? [`${savRes[0].n}년 만기 ${won0(savCredited.w)}원`, `환급률 ${(savCredited.ratio * 100).toFixed(1)}%`, editChip(edited(/^save:/))] : [],
+      help: "기본보험료에서 계약체결비용 · 계약관리비용 · 위험보험료를 뺀 적립보험료를 매월 적용이율로 쌓아 계약자적립액 AV 를 냅니다. 식과 값은 모두 기본보험료 1원당이고, 식을 고치면 아래 산출 결과와 산출방법서가 함께 바뀝니다.",
+      body: <><Formulas items={byKey(/^save:(risk|alpha|accum|rate|monthly|AV)$/)} show={formulasOn.includes("A02")} /><SavingsPanel results={savRes} onSheet={onPremiumSheet} /></> },
+    pick("M09"),
   ];
 
   const touches = (paths: string[]) => changed.some((s) => paths.some((p) => under(s, p) || under(p, s)));
@@ -1459,6 +1561,22 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
     <FormCtx.Provider value={ctx}>
       <div ref={box} className="form-body thin-scroll">
         {/* 시산보험료 조건 — 산출방법서의 정보가 아니라 "이 조건으로 계산해 보는" 계약 한 점. 조건 파일에 저장하지 않는다 */}
+        {savings ? (
+          <div className="trial-bar">
+            <b>산출 조건</b>
+            <select className="inp" value={calcOn.sex ?? "M"} onChange={(e) => setCalcOn({ ...calcOn, sex: e.target.value as Sex })}><option value="M">남</option><option value="F">여</option></select>
+            <select className="inp" value={calcOn.age} onChange={(e) => setCalcOn({ ...calcOn, age: Number(e.target.value) })}>{[20, 30, 40, 50, 60].map((a) => <option key={a} value={a}>{a}세</option>)}</select>
+            <select className="inp" aria-label="보험기간" value={savingsTerm(sp, calcOn.payYears)} title="보험기간 — 전기납 월납 (M01 가입 조건의 보험기간)" onChange={(e) => setCalcOn({ ...calcOn, payYears: Number(e.target.value), freq: 12 })}>
+              {savingsTerms(sp).map((y) => <option key={y} value={y}>{y}년 만기 (전기납)</option>)}
+            </select>
+            <select className="inp" aria-label="기본보험료" value={basePremium} title="월 기본보험료" onChange={(e) => setCalcOn({ ...calcOn, basePremium: Number(e.target.value) })}>
+              {[...new Set([5e4, 1e5, 2e5, 3e5, 5e5, 1e6, basePremium])].sort((a, b) => a - b).map((v) => <option key={v} value={v}>월 {krw(v)}</option>)}
+            </select>
+            <span className="trial-out">만기환급금 <b>{savCredited ? won0(savCredited.w) : "—"}</b>원 · 환급률 <b>{savCredited ? (savCredited.ratio * 100).toFixed(1) : "—"}</b>% <small>(공시이율 {pct(sp.savings!.credited)})</small></span>
+            <button type="button" className="btn" onClick={onPremiumSheet}>＝ 적립액 계산</button>
+            <span className="fld-hint w-full">적립액을 계산해 보는 계약 한 점입니다 — 조건 파일에 저장하지 않습니다. 적립형은 월납 전기납이고, 식과 값은 기본보험료 1원당이라 맨 뒤에 기본보험료를 곱합니다.</span>
+          </div>
+        ) : <>
         <div className="trial-bar">
           <b>산출 조건</b>
           <select className="inp" value={calcOn.sex ?? "M"} onChange={(e) => setCalcOn({ ...calcOn, sex: e.target.value as Sex })}><option value="M">남</option><option value="F">여</option></select>
@@ -1501,6 +1619,7 @@ export default function ConditionForm({ yaml, spec, errors, onEdit, highlight, c
           ))}
           <button type="button" className="btn" onClick={addRider} title="특약을 더합니다 — 그 이름의 담보가 생기고 탭이 됩니다">＋ 특약</button>
         </div>
+        </>}
         {cards.map((card, i) => (
           <Card key={card.id} c={card} index={i} open={open.includes(card.id)} onToggle={() => toggle(card)} showF={formulasOn.includes(card.id)} onToggleF={() => toggleFormulas(card.id)} onDoc={() => onShowDoc(card.focus ?? card.paths)} />
         ))}
