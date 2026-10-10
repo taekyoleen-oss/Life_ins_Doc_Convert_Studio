@@ -155,6 +155,18 @@ export default function Studio() {
       }
       writeJson(SV, 1);
     }
+    // 저축보험 샘플을 표준 모양(유지자 · 보험금 · 보장)으로 바꾼 뒤(2026-10-10) — 그 샘플에서 시작한 저장본은 한 번 새 샘플로, 예전 것은 최근 작업에
+    const SV6 = `${KEY}:sample-v6`;
+    if (!readJson(SV6)) {
+      const sav = SAMPLES.find((x) => x.id === "savings")!;
+      if (s && s !== sav.yaml && s.split("\n", 1)[0] === sav.yaml.split("\n", 1)[0]) {
+        const rec = readJson(`${KEY}:recent`);
+        writeJson(`${KEY}:recent`, [{ id: `${Date.now()}`, name: "예전 샘플 저장본", at: Date.now(), product: yamlToSpec(s).spec.meta.productName, yaml: s, sheet: null }, ...(Array.isArray(rec) ? rec : [])].slice(0, RECENT_MAX));
+        s = sav.yaml; writeStore(s); writeJson(`${KEY}:sheet`, null);
+        setToast({ text: `${sav.label} 샘플이 새 모양으로 바뀌어 다시 열었습니다 — 예전 저장본은 [최근 작업]에 남겨 두었습니다`, kind: "ok" });
+      }
+      writeJson(SV6, 1);
+    }
     // 용어 바꿈(2026-10-06) — "암입원 기대일수" → "암입원율": 저장본의 조건·위험률 표 머리도 한 번 바꾼다
     const SV4 = `${KEY}:term-v4`;
     if (!readJson(SV4)) {

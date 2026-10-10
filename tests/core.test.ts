@@ -139,7 +139,7 @@ describe("LaTeX", () => {
       if (b.t !== "formula") continue;
       expect(() => katex.renderToString(formulaToTex(b.text), { displayMode: true, throwOnError: true }), `${s.id}: ${b.text}`).not.toThrow();
     }
-  });
+  }, 60000);     // 혼자 1.5초 — 전체 시험을 함께 돌리면 9초까지 걸린다(기본 5초)
   it("조건 → LaTeX → 되읽기 → 조건이 그대로다 (모든 샘플)", () => {
     for (const s of SAMPLES) {
       const spec = yamlToSpec(s.yaml).spec;
