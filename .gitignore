@@ -59,3 +59,11 @@ public/standards/
 # 사내 위험률 모음 — 외부 반출 금지 (scripts/import-rate-library.py 가 이 PC 에만 만든다)
 /private/
 /public/rate-library.json
+
+# 검증·하네스 임시 출력
+.vitest-*.json
+.tsc-*.txt
+.eslint*.txt
+.scratch*.txt
+.server-*.txt
+_workspace/

@@ -4,7 +4,8 @@ import { withFormulas } from "./methoddoc/formulas";
 import { docToMarkdown, renderMethodDoc } from "./methoddoc/render";
 import type { MethodSpec } from "./methoddoc/spec";
 import { jsonToSpec, specToYaml } from "./conditions/yaml";
-import { docTitle, toStandardDocx } from "./standards";
+import { docTitle, toStandardDocx, toStandardHwpx } from "./standards";
+import type { DocFormat } from "./settings";
 import { parseDelimited, sanitizeSheet, type ColMap, type SheetState } from "./sheet";
 
 /**
@@ -14,12 +15,13 @@ import { parseDelimited, sanitizeSheet, type ColMap, type SheetState } from "./s
  *   조건.yaml         조건 파일 그대로(주석 포함) — 다시 열 때 이것을 쓴다
  *   위험률표.csv       위험률 표(있을 때만) — Excel 로 바로 열린다
  *   MethodSpec.json   다른 앱(자유설계보험) 입력 — 위험률 표 포함
- *   산출방법서.md · 산출방법서.docx   조건에서 만든 산출방법서(사람이 읽는 용 — 열 때는 쓰지 않는다)
+ *   산출방법서.md · 산출방법서.docx   조건에서 만든 산출방법서(사람이 읽는 용 — 열 때는 쓰지 않는다).
+ *                     설정이 한글 중심이면 .docx 대신 산출방법서.hwpx
  * 한 부분이 없어도(위험률 표가 없는 조건 등) 패키지가 된다 — 든 것만 되살린다.
  */
 export const PACKAGE_EXT = ".lifepkg";
 export const PACKAGE_FORMAT = "Life_ins_Doc_Convert_Studio 패키지 v1";
-const F = { meta: "package.json", yaml: "조건.yaml", csv: "위험률표.csv", json: "MethodSpec.json", md: "산출방법서.md", docx: "산출방법서.docx" } as const;
+const F = { meta: "package.json", yaml: "조건.yaml", csv: "위험률표.csv", json: "MethodSpec.json", md: "산출방법서.md", docx: "산출방법서.docx", hwpx: "산출방법서.hwpx" } as const;
 
 export interface PackageMeta {
   format: string;
@@ -37,7 +39,7 @@ const csvCell = (c: string) => (/[",\n\r]/.test(c) ? `"${c.replace(/"/g, '""')}"
 const toCsv = (st: SheetState) => "﻿" + [st.sheet.head, ...st.sheet.rows].map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
 
 /** 조건(YAML 원문) · 위험률 표 · 표를 붙인 조건(specT) → 패키지 바이트 */
-export function buildPackage(o: { yaml: string; sheet: SheetState | null; spec: MethodSpec; name?: string; now?: Date }): Uint8Array {
+export function buildPackage(o: { yaml: string; sheet: SheetState | null; spec: MethodSpec; name?: string; now?: Date; docFormat?: DocFormat }): Uint8Array {
   const enc = new TextEncoder();
   const hasSheet = !!o.sheet && o.sheet.map.some((m) => m.to === "rate");
   const sections = renderMethodDoc(withFormulas(o.spec));
@@ -53,7 +55,7 @@ export function buildPackage(o: { yaml: string; sheet: SheetState | null; spec: 
   if (hasSheet) put(F.csv, toCsv(o.sheet!));
   put(F.json, JSON.stringify(o.spec, null, 2));
   put(F.md, "﻿" + docToMarkdown(sections, docTitle(o.spec)));
-  put(F.docx, toStandardDocx(o.spec, false));
+  if (o.docFormat === "hwp") put(F.hwpx, toStandardHwpx(o.spec, false, o.now)); else put(F.docx, toStandardDocx(o.spec, false));
   files.unshift([F.meta, enc.encode(JSON.stringify(meta, null, 2))]);
   parts.unshift(F.meta);
   return zipStore(files);

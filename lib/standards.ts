@@ -3,6 +3,7 @@ import { yamlToSpec } from "./conditions/yaml";
 import { withFormulas } from "./methoddoc/formulas";
 import { renderMethodDoc, STANDARD_FORMAT } from "./methoddoc/render";
 import { docToDocx } from "./methoddoc/docx";
+import { docToHwpx } from "./methoddoc/hwpx";
 import type { MethodSpec } from "./methoddoc/spec";
 
 /**
@@ -35,11 +36,22 @@ export const STANDARD_GUIDE = [
   "한글(HWPX)로 고치려면 이 파일을 한글에서 열어 [다른 이름으로 저장 → HWPX 문서] 로 저장한 뒤 고칩니다. 이 안내 표는 지워도 됩니다.",
 ];
 
+/** 한글(.hwpx)로 받은 표준 양식의 작성 안내 — 수식·저장 방법만 한글에 맞게 */
+export const STANDARD_GUIDE_HWP = STANDARD_GUIDE.map((g) =>
+  g.startsWith("수식은 Word 수식") ? "수식은 한글 수식으로 들어 있습니다. [식] 제목 줄 아래에 설명 한 줄, 그 아래에 식 한 줄씩 둡니다. 식을 고칠 때는 수식을 두 번 눌러 수식 편집기에서 고치고, 새 식은 [입력 → 수식](Ctrl+N, M)으로 넣거나 평문으로 적어도 됩니다 — 평문은 아래첨자 _{x+t}, 위첨자 ^{t}."
+    : g.startsWith("한글(HWPX)로 고치려면") ? "고친 뒤에는 [다른 이름으로 저장]에서 파일 형식을 \"한글 표준 문서 (*.hwpx)\" 로 두고 저장해 앱에 올립니다(.hwp 로 저장하면 표와 수식을 읽지 못합니다). 이 안내 표는 지워도 됩니다."
+      : g);
+
 export const docTitle = (spec: MethodSpec) => `${spec.meta.productName || "상품"} 보험료 및 책임준비금 산출방법서`;
 
 /** 조건 → 표준 산출방법서 Word 파일 */
 export function toStandardDocx(spec: MethodSpec, guide = true): Uint8Array {
   return docToDocx(renderMethodDoc(withFormulas(spec)), docTitle(spec), guide ? { guide: STANDARD_GUIDE } : {});
+}
+
+/** 조건 → 표준 산출방법서 한글(.hwpx) 파일 — Word 와 같은 내용 */
+export function toStandardHwpx(spec: MethodSpec, guide = true, now?: Date): Uint8Array {
+  return docToHwpx(renderMethodDoc(withFormulas(spec)), docTitle(spec), { ...(guide ? { guide: STANDARD_GUIDE_HWP } : {}), now });
 }
 
 /** 견본 조건 — 작성일을 박아 파일이 늘 같게 */

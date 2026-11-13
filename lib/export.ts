@@ -2,7 +2,8 @@ import katex from "katex";
 import { docToHtml, docToMarkdown, type DocSection } from "./methoddoc/render";
 import { docToLatex, formulaToTex } from "./methoddoc/tex";
 import type { MethodSpec } from "./methoddoc/spec";
-import { toStandardDocx } from "./standards";
+import { HWPX_MIME } from "./methoddoc/hwpx";
+import { toStandardDocx, toStandardHwpx } from "./standards";
 
 export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -23,6 +24,8 @@ export const exporters = {
   json: (spec: MethodSpec) => download(`${safe(spec.meta.productName)}_MethodSpec.json`, JSON.stringify(spec, null, 2), "application/json"),
   /** 표준 산출방법서 Word — Word 에서 고쳐 다시 올린다. guide=false 면 맨 앞 작성 안내 표를 뺀다 */
   docx: (spec: MethodSpec, guide = true) => download(`${safe(spec.meta.productName)}_산출방법서.docx`, toStandardDocx(spec, guide), DOCX_MIME),
+  /** 표준 산출방법서 한글(.hwpx) — 한글에서 고쳐 다시 올린다. Word 와 같은 내용 */
+  hwpx: (spec: MethodSpec, guide = true) => download(`${safe(spec.meta.productName)}_산출방법서.hwpx`, toStandardHwpx(spec, guide), HWPX_MIME),
   md: (sections: DocSection[], title: string, spec: MethodSpec) => download(`${safe(spec.meta.productName)}_산출방법서.md`, "﻿" + docToMarkdown(sections, title), "text/markdown"),
   tex: (sections: DocSection[], title: string, spec: MethodSpec) => download(`${safe(spec.meta.productName)}_산출방법서.tex`, docToLatex(sections, title), "application/x-tex"),
   html: (sections: DocSection[], title: string, spec: MethodSpec) => download(`${safe(spec.meta.productName)}_산출방법서.html`,

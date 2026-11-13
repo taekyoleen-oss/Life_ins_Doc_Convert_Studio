@@ -15,10 +15,14 @@ const VisionDialog = dynamic(() => import("./VisionDialog"), { ssr: false });
 import RateSheetPane from "./RateSheetPane";
 // 보험료 계산 화면(스프레드시트)은 열 때만 받는다
 const PremiumSheet = dynamic(() => import("./PremiumSheet"), { ssr: false });
+// 산출 흐름(모듈마다 식 · 파이썬 코드 · 값) — 열 때만 받고 그때만 계산한다
+const CalcFlow = dynamic(() => import("./CalcFlow"), { ssr: false });
 import RateLibraryDialog, { type LibPick } from "./RateLibraryDialog";
 import { itemColumns, sanitizeLibrary, virtualizeSources, virtualSource, type RateLibrary } from "@/lib/rate-library";
 import { SAMPLES, SHARED_SAMPLE_IDS, START_SAMPLE_ID } from "@/lib/samples";
 import { editYaml, mergeSpec, patchYaml, yamlToSpec, type YamlEdit } from "@/lib/conditions/yaml";
+import { applyChanges, diffSpec, relinkSheet, renamedRates, syncWarnings } from "@/lib/conditions/changes";
+import SyncDialog, { OpenChoice, SHEET_CHANGE, type SyncInput } from "./SyncDialog";
 import { anchorsForPaths, diffPaths, linesOfPaths, pathsAtLines, pathsForAnchors } from "@/lib/conditions/link";
 import { withFormulas } from "@/lib/methoddoc/formulas";
 import { CALC_DEFAULT, type CalcContract } from "@/lib/methoddoc/calc";
@@ -30,7 +34,10 @@ import { parseMethodDoc } from "@/lib/methoddoc/parse";
 import type { MethodSpec, RateRole } from "@/lib/methoddoc/spec";
 import { ACCEPT, fromDoc, loadFile, type Original } from "@/lib/load";
 import { DOCX_MIME, download, exporters } from "@/lib/export";
-import { STANDARDS, standardFile, standardSpec, toStandardDocx } from "@/lib/standards";
+import { STANDARDS, standardFile, standardSpec, toStandardDocx, toStandardHwpx } from "@/lib/standards";
+import { HWPX_MIME } from "@/lib/methoddoc/hwpx";
+import { DOC_FORMATS, readSettings, SETTINGS0, writeSettings, type Settings } from "@/lib/settings";
+import { SettingsMenu } from "./SettingsMenu";
 import { addEmptyColumn, attachTables, autoMap, linkGroups, linkNote, newRateId, ratesWithoutTable, sanitizeSheet, sheetFromDoc, sheetFromFile, sheetFromSpec, sheetFromText, unlinkRate, unlinkedGroups, type Sheet, type SheetState } from "@/lib/sheet";
 import { DOC_PARTS, SECTION_OF, formulaSnippet, inlineSnippet, type FormulaSample } from "@/lib/snippets";
 import { buildPackage, isPackage, PACKAGE_EXT, readPackage } from "@/lib/package";
@@ -100,6 +107,8 @@ function sanitizeLayout(raw: unknown): Layout {
   };
 }
 const SHEET_EXT = /\.(csv|tsv|xlsx|xls)$/i;
+/** 산출방법서 파일 — 손댄 조건이 있을 때 열면 "새로 열기 / 지금 조건에 반영" 을 묻는다 */
+const DOC_EXT = /\.(docx|hwpx|hwp|pdf)$/i;
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** 메뉴 항목을 고르면 <details> 를 닫는다 (그대로 두면 열린 목록이 편집기를 가린다) */
@@ -128,6 +137,11 @@ export default function Studio() {
   const [allSamples, setAllSamples] = useState(false);
   /** 공유 테스트 안내 — 처음 여는 사람에게 펼쳐 두고, 닫으면 다시 펼치지 않는다(머리의 [테스트 안내]로 다시) */
   const [guide, setGuide] = useState(false);
+  /** 설정 — 문서 형식(Word 중심 / 한글 중심). 이 브라우저에만 기억한다 */
+  const [settings, setSettings] = useState<Settings>(SETTINGS0);
+  useEffect(() => { setSettings(readSettings()); }, []);
+  const saveSettings = (v: Settings) => { setSettings(v); writeSettings(v); };
+  const hwp = settings.docFormat === "hwp", fmt = DOC_FORMATS[settings.docFormat];
   useEffect(() => {
     fetch("/rate-library.json").then((r) => (r.ok ? r.json() : null)).then((j) => setLibrary(sanitizeLibrary(j))).catch(() => { /* 없으면 공개 기본 위험률만 */ });
   }, []);
@@ -228,6 +242,7 @@ export default function Studio() {
   const [follow, setFollow] = useState(false);
   const [pal, setPal] = useState(false);                   // 수식·기호 견본 (LaTeX·Markdown 탭 — 커서 자리에)
   const [calcOpen, setCalcOpen] = useState(false);         // 보험료 계산 화면(스프레드시트)
+  const [flowOpen, setFlowOpen] = useState(false);         // 산출 흐름 화면(모듈 흐름도)
   const [calcOn, setCalcOn] = useState<CalcContract>(CALC_DEFAULT);   // 산출 결과에 쓰는 계약 한 점 — 조건에 저장하지 않는다
   const [palLeft, setPalLeft] = useState(false);           // 수식 더하기 (조건 창 — M08 식으로)
   const editor = useRef<EditorApi | null>(null);
@@ -280,6 +295,9 @@ export default function Studio() {
   // Word 로 고쳐 올린 결과 — 무엇이 조건에 들어갔는지 탭에 남긴다
   const [wordLog, setWordLog] = useState<{ name: string; format?: string; changes: string[] } | null>(null);
   const mergeInput = useRef<HTMLInputElement | null>(null);
+  // 고친 산출방법서 반영 — 읽은 결과를 반영 확인 창에(고른 것만 조건에) · 손댄 조건 위에 산출방법서를 열 때 묻는 창
+  const [sync, setSync] = useState<(SyncInput & { original: Original }) | null>(null);
+  const [ask, setAsk] = useState<File | null>(null);
   // 그림으로 읽기(스캔 PDF · PNG · JPG) — 쪽을 고르고 사용자 키로 보낸다
   const [vision, setVision] = useState<{ file: File; reason: string } | null>(null);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.kind === "err" ? 9000 : 6000); return () => clearTimeout(t); }, [toast]);
@@ -369,9 +387,11 @@ export default function Studio() {
   }, []);
   /** 문서를 반영해 위험률이 늘거나 줄었을 때 표도 맞춘다 */
   const syncSheetRates = (before: MethodSpec["rates"], after: MethodSpec["rates"]) => {
-    const was = new Set(before.map((r) => r.id)), now = new Set(after.map((r) => r.id));
+    // 기호만 바뀐 위험률은 표의 잇기를 새 기호로 옮긴다(빈 열을 새로 만들고 옛 열을 끊지 않게)
+    const moved = renamedRates(before, after);
+    const was = new Set([...before.map((r) => r.id), ...moved.map(([, to]) => to)]), now = new Set([...after.map((r) => r.id), ...moved.map(([from]) => from)]);
     setSheet((st) => {
-      let next = st;
+      let next = relinkSheet(st, moved);
       for (const r of after) if (!was.has(r.id)) next = addEmptyColumn(next, r);
       for (const r of before) if (!now.has(r.id)) next = unlinkRate(next, r.id);
       return next;
@@ -528,9 +548,11 @@ export default function Studio() {
   };
 
   // ── 열기 ─────────────────────────────────────────────────────────────────
-  const open = useCallback(async (file: File) => {
+  const open = useCallback(async (file: File, fresh = false) => {
     if (SHEET_EXT.test(file.name)) { await openSheetFile(file); return; }
-    if (yaml !== saved && !window.confirm("지금 조건에 고친 내용이 있습니다. 새 파일로 바꿀까요?")) return;
+    // 손댄 조건 위에 산출방법서를 열면 — 새 조건으로 바꿀지, 지금 조건에 바뀐 곳만 반영할지 묻는다
+    if (yaml !== saved && !fresh && DOC_EXT.test(file.name)) { setAsk(file); return; }
+    if (yaml !== saved && !fresh && !window.confirm("지금 조건에 고친 내용이 있습니다. 새 파일로 바꿀까요?")) return;
     if (IMAGE_EXT.test(file.name)) { setVision({ file, reason: "그림 파일입니다." }); return; }
     if (file.name.toLowerCase().endsWith(PACKAGE_EXT)) { await openPackage(file); return; }
     try {
@@ -570,10 +592,10 @@ export default function Studio() {
   const savePackage = () => {
     if (syntaxErrors.length) { setToast({ text: `조건 파일 ${syntaxErrors[0].line}번째 줄 오류를 먼저 고쳐 주세요`, kind: "err" }); return; }
     const name = packageName();
-    download(name, buildPackage({ yaml, sheet, spec: specT }), "application/zip");
+    download(name, buildPackage({ yaml, sheet, spec: specT, docFormat: settings.docFormat }), "application/zip");
     pushRecent(name, yaml, sheet);
     setSaved(yaml);
-    const parts = ["조건", "산출방법서(Word·Markdown)", "MethodSpec JSON", ...(sheet?.map.some((m) => m.to === "rate") ? ["위험률 표"] : [])];
+    const parts = ["조건", `산출방법서(${fmt.name}·Markdown)`,"MethodSpec JSON", ...(sheet?.map.some((m) => m.to === "rate") ? ["위험률 표"] : [])];
     setToast({ text: `${name} — ${parts.join(" · ")}${noTable.length ? ` (값 표 없는 위험률 ${noTable.length}개는 그대로)` : ""} 를 한 파일로 저장했습니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다`, kind: "ok" });
   };
   const openPackage = async (file: File) => {
@@ -636,24 +658,39 @@ export default function Studio() {
       setToast({ text: `${file.name} 읽는 중…`, kind: "ok" });
       const doc = await extractDoc(file.name, new Uint8Array(await file.arrayBuffer()));
       const back = parseMethodDoc(doc, { fallbackName: parsed.spec.meta.productName });
-      const { spec, changes } = mergeSpec(parsed.spec, back.spec, back.evidence, { standard: !!back.format });
+      const { spec, items } = mergeSpec(parsed.spec, back.spec, back.evidence, { standard: !!back.format });
       // 별첨 위험률 값 표가 있고 지금 표(내보낸 모양)와 다르면 그 표로 바꾼다 — 문서에서 값을 고치거나 열을 더한 것
       const sh = sheetFromDoc(doc, file.name);
       const cur = sheetFromSpec(specT, "")?.sheet;
-      const newSheet = sh && JSON.stringify([sh.head, sh.rows]) !== JSON.stringify([cur?.head, cur?.rows]) ? { sheet: sh, map: autoMap(sh, spec.rates) } : null;
-      if (newSheet) changes.push(`위험률 값 표: ${sh!.head.length - 1}열 × ${sh!.rows.length}행 (별첨) → 위험률 표 창`);
-      if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
-      setOriginal({ name: file.name, doc, evidence: back.evidence, missing: back.missing });
-      setWordLog({ name: file.name, format: back.format, changes: [...changes, ...back.warnings.map((w) => `⚠ ${w}`)] });
-      setTab("word"); showPane("doc");
-      if (newSheet) { setSheet(newSheet); showPane("sheet"); }
-      if (!changes.length) { setToast({ text: `${file.name} — 조건과 다른 값이 없습니다`, kind: "warn" }); return; }
-      setYaml(patchYaml(yaml, spec));
-      if (!newSheet) syncSheetRates(parsed.spec.rates, spec.rates);
-      setToast({ text: `${file.name} — 조건 ${changes.length}건 반영${back.format ? "" : " (표준 양식이 아니어서 값만)"}`, kind: "ok" });
+      const newSheet = sh && JSON.stringify([sh.head.length, sh.rows]) !== JSON.stringify([cur?.head.length, cur?.rows]) ? { sheet: sh, map: autoMap(sh, spec.rates) } : null;
+      // 바로 넣지 않는다 — 반영 확인 창에서 바뀐 곳·보험료 변화를 보고 고른 것만 넣는다(confirmSync)
+      setToast(null);
+      setSync({ name: file.name, format: back.format, read: back.evidence.length, current: parsed.spec, merged: spec, items, newSheet,
+        // 표준 양식에 없는 칸은 그 상품에 없는 것이다 — 지금 조건에 값이 있는데 문서에서 못 읽은 것만 알린다(다른 양식은 모두)
+        warnings: syncWarnings(parsed.spec, back), original: { name: file.name, doc, evidence: back.evidence, missing: back.missing } });
     } catch (e) {
       setToast({ text: errText(e), kind: "err" });
     }
+  };
+  /** 반영 확인 창의 [고른 것 반영] — 고른 항목만 조건 파일의 그 칸에 넣는다(주석·순서는 그대로) */
+  const confirmSync = (ids: string[]) => {
+    const x = sync;
+    if (!x) return;
+    setSync(null);
+    const spec = applyChanges(x.current, x.merged, ids.filter((id) => id !== SHEET_CHANGE));
+    const withSheet = ids.includes(SHEET_CHANGE) && x.newSheet;
+    // 실제로 바뀐 것으로 다시 센다 — 고른 항목에 딸려 함께 바뀐 칸도 적는다
+    const done = diffSpec(x.current, spec).map((it) => `${it.group} · ${it.label}: ${it.before} → ${it.after}`);
+    if (withSheet) done.push(`위험률 값 표: ${x.newSheet!.sheet.head.length - 1}열 × ${x.newSheet!.sheet.rows.length}행 (별첨) → 위험률 표 창`);
+    if (original?.pdfUrl) URL.revokeObjectURL(original.pdfUrl);
+    setOriginal(x.original);
+    setWordLog({ name: x.name, format: x.format, changes: [...done, ...x.warnings.map((w) => `⚠ ${w}`)] });
+    setTab("word"); showPane("doc");
+    setYaml(patchYaml(yaml, spec));
+    if (withSheet) { setSheet({ sheet: x.newSheet!.sheet, map: autoMap(x.newSheet!.sheet, spec.rates) }); showPane("sheet"); }
+    else syncSheetRates(x.current.rates, spec.rates);
+    const rest = x.items.length + (x.newSheet ? 1 : 0) - ids.length;
+    setToast({ text: `${x.name} — 조건 ${done.length}곳 반영${rest ? ` (고르지 않은 ${rest}곳은 그대로)` : ""}${x.format ? "" : " · 표준 양식이 아니어서 값만"} — 되돌리기 ↶`, kind: "ok" });
   };
 
   /** 그림에서 옮겨 적은 글 → 조건. [불러오기] 와 같이 조건을 새로 만든다 */
@@ -672,7 +709,7 @@ export default function Studio() {
   const print = () => { setTab("doc"); showPane("doc"); setTimeout(() => window.print(), 150); };
 
   const s = parsed.spec;
-  const tabs: [Tab, string][] = [["doc", "산출방법서"], ["latex", `LaTeX${latex.dirty ? " ●" : ""}`], ["markdown", `Markdown${md.dirty ? " ●" : ""}`], ["word", "Word"],
+  const tabs: [Tab, string][] = [["doc", "산출방법서"], ["latex", `LaTeX${latex.dirty ? " ●" : ""}`], ["markdown", `Markdown${md.dirty ? " ●" : ""}`], ["word", fmt.name],
     ...(original ? [["original", `원문 · ${original.name}`] as [Tab, string]] : [])];
   const top = visible("cond") || visible("doc");
   const nTables = specT.rates.filter((r) => r.table).length;
@@ -697,13 +734,14 @@ export default function Studio() {
           ))}
         </div>
         <button className="btn-primary" onClick={() => setCalcOpen(true)} title="산출방법서의 식으로 이 앱이 보험료를 계산합니다 — 한 해 한 줄의 표로 과정을 봅니다">＝ 보험료 계산</button>
+        <button className="btn-primary" onClick={() => setFlowOpen(true)} title="보험료가 나오는 차례를 상자로 이어 보입니다 — 단계마다 식 · 파이썬 코드 · 값, 앱 · 파이썬 · 엑셀 비교">산출 흐름</button>
         <button className="btn-primary" onClick={() => fileInput.current?.click()} title="산출방법서(Word·PDF·한글·Markdown·LaTeX) · 조건 YAML · MethodSpec JSON · 위험률 표를 불러옵니다">불러오기</button>
         <input ref={fileInput} aria-label="열 파일" type="file" accept={`${ACCEPT},.csv,.tsv,.xlsx`} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f); e.target.value = ""; }} />
         <details className="menu">
           <summary className="btn">패키지 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">조건 · 산출방법서 · 위험률 표를 한 파일로 ({PACKAGE_EXT})</p>
-            <button onClick={savePackage}>패키지로 저장<small>{packageName()} — 조건 YAML · 산출방법서 Word/Markdown · MethodSpec JSON{sheet?.map.some((m) => m.to === "rate") ? " · 위험률 표 CSV" : " (위험률 표 없음)"}</small></button>
+            <button onClick={savePackage}>패키지로 저장<small>{packageName()} — 조건 YAML · 산출방법서 {fmt.name}/Markdown · MethodSpec JSON{sheet?.map.some((m) => m.to === "rate") ? " · 위험률 표 CSV" : " (위험률 표 없음)"}</small></button>
             <button onClick={() => packageInput.current?.click()}>패키지 열기…<small>{PACKAGE_EXT} — 든 것을 그대로 되살립니다 ([불러오기]나 끌어다 놓기도 됩니다)</small></button>
             <p className="menu-head">최근 작업 {recent.length ? `(${recent.length})` : "— 아직 없음"}</p>
             {recent.map((r) => <button key={r.id} onClick={() => openRecent(r)}>{r.name}<small>{r.product || "(이름 없음)"} · {when(r.at)}{r.sheet ? ` · 위험률 표 ${r.sheet.sheet.head.length - 1}열` : ""}</small></button>)}
@@ -726,15 +764,22 @@ export default function Studio() {
           <summary className="btn">내보내기 ▾</summary>
           <div className="menu-list right-0" onClick={closeMenu}>
             <p className="menu-head">산출방법서</p>
-            <button onClick={() => exporters.docx(specT)}>Word .docx<small>표준 산출방법서 — 한글에서도 열림 · 작성 안내 포함</small></button>
-            <button onClick={() => exporters.docx(specT, false)}>Word .docx (작성 안내 없이)<small>출력·제출용</small></button>
+            {/* 설정의 문서 형식이 먼저 — 두 형식 모두 늘 쓸 수 있다 */}
+            {(hwp ? (["hwp", "word"] as const) : (["word", "hwp"] as const)).map((f) => {
+              const run = f === "hwp" ? exporters.hwpx : exporters.docx, name = `${DOC_FORMATS[f].name} ${DOC_FORMATS[f].ext}`;
+              return [
+                <button key={f} onClick={() => run(specT)}>{name}<small>표준 산출방법서 — {DOC_FORMATS[f].name}에서 열어 고칩니다 · 작성 안내 포함</small></button>,
+                <button key={`${f}-plain`} onClick={() => run(specT, false)}>{name} (작성 안내 없이)<small>출력·제출용</small></button>,
+              ];
+            })}
             <p className="menu-head">조건</p>
             <button onClick={() => exporters.yaml(yaml, s)}>조건 파일 .yaml</button>
+            <p className="menu-head">고친 산출방법서 → 조건</p>
+            <button onClick={() => mergeInput.current?.click()}>고친 산출방법서 반영…<small>Word · 한글 · PDF — 바뀐 곳과 보험료 변화를 보고 고른 것만 지금 조건에 넣습니다</small></button>
             {/* 추가기능(개발중) — 사용자에게 아직 공개하지 않는다. 공유 화면에서는 누를 수 없고, 개발자 주소(?all)에서만 켜진다 */}
             <p className="menu-head">추가기능 (개발중){allSamples ? " — 개발자 화면에서만 켜짐" : ""}</p>
             <fieldset disabled={!allSamples} className="menu-dev" title={allSamples ? undefined : "개발 중인 기능입니다 — 아직 쓸 수 없습니다"}>
               <button onClick={exportJson}>자유설계보험으로 보내기 — MethodSpec .json<small>저장한 파일을 자유설계보험 [산출방법서 변환기] 화면에 올리고 [상품 만들기에 넣기] 하면 그쪽에서 보험료를 계산합니다 · 위험률 표 {nTables}개 포함{noTable.length ? ` · 표 없는 위험률 ${noTable.length}개` : ""}</small></button>
-              <button onClick={() => mergeInput.current?.click()}>고친 Word 올려 조건에 반영<small>바뀐 값·식·주석만 들어갑니다 — 상품별 견본은 [Word] 탭</small></button>
               <button onClick={() => exporters.tex(sections, title, s)}>LaTeX .tex<small>xelatex 로 조판 (kotex)</small></button>
               <button onClick={() => exporters.md(sections, title, s)}>Markdown .md</button>
               <button onClick={() => exporters.html(sections, title, s)}>HTML .html<small>수식 포함 단독 파일</small></button>
@@ -742,6 +787,7 @@ export default function Studio() {
             </fieldset>
           </div>
         </details>
+        <SettingsMenu value={settings} onChange={saveSettings} />
         <button className="btn" onClick={() => setGuide((v) => !v)} aria-pressed={guide} title="공유 테스트 안내 — 무엇을 해 보면 되는지 · 저장 · 의견 보내기">테스트 안내</button>
         <button className="btn" onClick={() => setHelp(true)}>도움말</button>
       </header>
@@ -756,7 +802,7 @@ export default function Studio() {
                 <li>[샘플 ▾]에서 <b>종신보험</b> 또는 <b>암보험</b>을 엽니다(암보험은 주계약·암입원특약·암수술특약 탭).</li>
                 <li>맨 위 <b>[산출 조건]</b>에서 성별·나이·납입기간·가입금액을 바꾸면 보험료가 바로 바뀝니다(담보 보험료는 10원 미만 버림).</li>
                 <li>왼쪽 카드(M01~M09)를 열거나 칸을 고르면 오른쪽 산출방법서의 그 자리가 노랗게 표시됩니다.</li>
-                <li><b>[＝ 보험료 계산]</b>으로 한 해 한 줄의 계산 표를, [Word] 탭에서 산출방법서 Word 를 받아 볼 수 있습니다.</li>
+                <li><b>[＝ 보험료 계산]</b>으로 한 해 한 줄의 계산 표를, [{fmt.name}] 탭에서 산출방법서 {fmt.name} 파일을 받아 볼 수 있습니다([설정 ▾]에서 Word · 한글을 고릅니다).</li>
               </ol>
             </div>
             <div>
@@ -851,18 +897,18 @@ export default function Studio() {
                 })()}
                 {tab === "word" && (
                   <div className="thin-scroll min-h-0 flex-1 overflow-auto bg-white px-6 py-5 text-sm leading-7">
-                    <h3 className="mb-1 text-base font-bold">Word로 고치기 — 표준 산출방법서</h3>
+                    <h3 className="mb-1 text-base font-bold">{fmt.name}로 고치기 — 표준 산출방법서</h3>
                     <div className="my-3 flex flex-wrap gap-2">
-                      <button className="btn-primary" onClick={() => exporters.docx(specT)}>Word 내려받기</button>
-                      <button className="btn-primary" onClick={() => mergeInput.current?.click()}>고친 Word 올리기 → 조건에 반영</button>
-                      <button className="btn" onClick={() => exporters.docx(specT, false)}>Word (작성 안내 없이)</button>
+                      <button className="btn-primary" onClick={() => (hwp ? exporters.hwpx : exporters.docx)(specT)}>{fmt.name} 내려받기</button>
+                      <button className="btn-primary" onClick={() => mergeInput.current?.click()}>고친 {fmt.name} 올리기 → 조건에 반영</button>
+                      <button className="btn" onClick={() => (hwp ? exporters.hwpx : exporters.docx)(specT, false)}>{fmt.name} (작성 안내 없이)</button>
                       <button className="btn" onClick={print}>PDF 저장</button>
                     </div>
                     <ol className="word-steps">
-                      <li><b>내려받기</b> — 지금 조건을 표준 산출방법서(.docx)로 받습니다.</li>
-                      <li><b>고치기</b> — 표의 값·행, <code>[식]</code> 아래 식 줄, <code>※</code> 설명을 고칩니다. 절 제목과 표 머리글은 그대로 둡니다. 식은 <code>l_{"{x+t}"}</code> 처럼 적거나 Word 수식 편집기로 넣습니다.</li>
-                      <li><b>올리기</b> — 바뀐 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서 v6</code> 행이 있으면 식·주석·절까지(위험률·담보 행을 지운 것도), 없으면 값만 읽습니다. 별첨 위험률 값 표를 고치면 아래 위험률 표 창에 들어갑니다.</li>
-                      <li><b>출력</b> — Word(작성 안내 없이) 또는 PDF(인쇄 → PDF 저장, 수식이 조판되어 나옵니다).</li>
+                      <li><b>내려받기</b> — 지금 조건을 표준 산출방법서({fmt.ext})로 받습니다.{hwp ? " 한글에서 고친 뒤 저장할 때 파일 형식은 \"한글 표준 문서 (*.hwpx)\" 그대로 둡니다." : ""}</li>
+                      <li><b>고치기</b> — 표의 값·행, <code>[식]</code> 아래 식 줄, <code>※</code> 설명을 고칩니다. 절 제목과 표 머리글은 그대로 둡니다. 식은 <code>l_{"{x+t}"}</code> 처럼 적거나 {fmt.editor}로 넣습니다.</li>
+                      <li><b>올리기</b> — 바뀐 곳과 보험료 변화를 보여 주는 확인 창이 뜨고, 고른 것만 조건에 들어갑니다(조건 파일의 주석·순서는 지킵니다). 개요 표에 <code>양식 | 표준 산출방법서</code> 행이 있으면 식·주석·절까지(위험률·담보 행을 지운 것도), 없으면 값만 읽습니다. 별첨 위험률 값 표를 고치면 아래 위험률 표 창에 들어갑니다.</li>
+                      <li><b>출력</b> — {fmt.name}(작성 안내 없이) 또는 PDF(인쇄 → PDF 저장, 수식이 조판되어 나옵니다).</li>
                     </ol>
                     {wordLog && (
                       <div className={`word-log ${wordLog.changes.length ? "" : "word-log-none"}`}>
@@ -873,14 +919,16 @@ export default function Studio() {
                         <p className="text-xs text-muted-foreground">어디서 읽었는지는 [원문] 탭에서 봅니다.</p>
                       </div>
                     )}
-                    <h4 className="mt-4 font-bold">상품별 표준 산출방법서 견본 (Word)</h4>
+                    <h4 className="mt-4 font-bold">상품별 표준 산출방법서 견본 ({fmt.name})</h4>
                     <table className="word-std">
                       <tbody>
                         {STANDARDS.map((x) => (
                           <tr key={x.id}>
                             <td><b>{standardFile(x)}</b><br /><small className="text-muted-foreground">{x.hint}</small></td>
                             <td className="whitespace-nowrap">
-                              <button className="btn" onClick={() => download(`${standardFile(x)}.docx`, toStandardDocx(standardSpec(x)), DOCX_MIME)}>Word</button>{" "}
+                              {hwp
+                                ? <button className="btn" onClick={() => download(`${standardFile(x)}.hwpx`, toStandardHwpx(standardSpec(x)), HWPX_MIME)}>한글</button>
+                                : <button className="btn" onClick={() => download(`${standardFile(x)}.docx`, toStandardDocx(standardSpec(x)), DOCX_MIME)}>Word</button>}{" "}
                               <button className="btn" onClick={() => loadSample(x.yaml)}>조건 열기</button>
                             </td>
                           </tr>
@@ -927,12 +975,15 @@ export default function Studio() {
 
       {drag && <div className="drop-overlay">여기에 놓으면 엽니다<small>패키지(.lifepkg) · PDF · DOCX · HWP · HWPX · TEX · MD · YAML · JSON · PNG · JPG — CSV · XLSX 는 위험률 표로</small></div>}
       {toast && <div className={`toast toast-${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
-      {help && <Help onClose={() => setHelp(false)} />}
+      {help && <Help onClose={() => setHelp(false)} fmt={fmt} />}
       {calcOpen && <PremiumSheet spec={specT} contract={calcOn} setContract={setCalcOn} onClose={() => setCalcOpen(false)} />}
+      {flowOpen && <CalcFlow spec={specT} contract={calcOn} onClose={() => setFlowOpen(false)} />}
       {libOpen && <RateLibraryDialog library={library} rates={s.rates} onAdd={addFromLibrary} onClose={() => setLibOpen(false)} />}
       {importOpen && <RateImportDialog rates={s.rates} onAdd={addFromImport} onClose={() => setImportOpen(false)} />}
       {processOpen && <RateProcessDialog rates={specT.rates} onAdd={addFromProcess} onClose={() => setProcessOpen(false)} />}
       {vision && <VisionDialog file={vision.file} reason={vision.reason} onDone={onVisionDone} onClose={() => setVision(null)} />}
+      {ask && <OpenChoice name={ask.name} onNew={() => { const f = ask; setAsk(null); void open(f, true); }} onMerge={() => { const f = ask; setAsk(null); void applyFile(f); }} onClose={() => setAsk(null)} />}
+      {sync && <SyncDialog input={sync} sheet={sheet} contract={calcOn} onApply={confirmSync} onClose={() => setSync(null)} />}
     </div>
   );
 }
@@ -957,7 +1008,7 @@ function Splitter({ dir, value, onChange }: { dir: "x" | "y"; value: number; onC
   );
 }
 
-function Help({ onClose }: { onClose: () => void }) {
+function Help({ onClose, fmt }: { onClose: () => void; fmt: (typeof DOC_FORMATS)["word"] }) {
   return (
     <div className="modal-back no-print" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -976,11 +1027,13 @@ function Help({ onClose }: { onClose: () => void }) {
           <li><b>바뀐 곳 표시</b> 파일을 연 뒤(또는 [표시 지우기] 뒤) 입력·수정·추가한 칸과 카드, 그것이 만든 산출방법서 블록에 초록 표시가 붙고, 아래 상태줄에 개수가 보입니다.</li>
           <li><b>되돌리기</b> 조건 창의 [↶ 되돌리기]·[↷ 다시]는 입력·수식·파일 열기·반영 등 조건과 위험률 표의 모든 변경을 한 걸음씩 되돌립니다(칸 밖에서 Ctrl+Z · Ctrl+Shift+Z). 이어서 타자한 글자는 한 걸음으로 묶입니다.</li>
           <li><b>그림으로 읽기</b> 스캔 PDF·PNG·JPG 를 열면 쪽을 골라 본인의 Anthropic API 키로 보냅니다. AI 는 쪽을 글로 옮겨 적기만 하고 값은 앱의 규칙이 읽습니다. 글자 있는 PDF 도 [원문] 탭에서 [그림으로 다시 읽기] 할 수 있습니다.</li>
-          <li><b>Word로 고치기</b> [Word] 탭에서 표준 산출방법서(.docx — 상품별 견본 포함)를 받아 고친 뒤 올리면 바뀐 값·식·주석만 조건에 들어갑니다(지운 행·칸도 빠집니다). [불러오기]로 올리면 조건 전체를 새로 만듭니다.</li>
+          <li><b>문서 형식 (Word · 한글)</b> 머리의 [설정 ▾]에서 Word 중심 · 한글 중심을 고릅니다. 고른 형식이 [내보내기] 맨 위 · 견본 · 패키지 저장 · 안내 글에 쓰입니다(어느 쪽이든 두 형식 모두 내보내고 불러올 수 있습니다). 한글에서는 저장 형식을 &quot;한글 표준 문서 (*.hwpx)&quot;로 둡니다.</li>
+          <li><b>{fmt.name}로 고치기</b> [{fmt.name}] 탭에서 표준 산출방법서({fmt.ext} — 상품별 견본 포함)를 받아 고친 뒤 올리면 <b>반영 확인 창</b>이 바뀐 곳을 줄마다 보이고 보험료가 어떻게 달라지는지 알려 줍니다 — 고른 것만 조건에 들어갑니다(지운 행·칸도 빠집니다). [불러오기]로 올리면 조건을 새로 만들고, 지금 조건에 고친 내용이 있으면 새로 열지 · 바뀐 곳만 반영할지 먼저 묻습니다.</li>
+          <li><b>산출 흐름</b> 머리의 [산출 흐름]은 보험료가 나오는 차례(산출방법서 → 기초율 · 위험률 → 유지자 → 보험금 → 보장 → 보험료 → 준비금 → 합계)를 이어진 상자로 보입니다. 상자를 누르면 그 단계의 설명 · 식 · 파이썬 코드 · 값이 나오고, [▶ 차례로 실행]으로 파이썬을 돌린 뒤 [앱 · 파이썬 · 엑셀 비교]에서 세 값이 같은지 봅니다(엑셀은 내려받아 엑셀에서 한 번 열어 저장한 파일을 올립니다).</li>
           <li><b>LaTeX·Markdown 으로 고치기</b> 원문을 고친 뒤 [조건에 반영] 하면 바뀐 값만 조건에 들어갑니다. 조건 파일의 주석과 순서는 그대로 둡니다.</li>
           <li><b>대응 위치</b> 왼쪽 칸·줄을 고르면 오른쪽에서 그 조건이 만든 곳(표의 행·수식·원문 근거·위험률 표의 열)이 노랗게, 오른쪽을 누르면 왼쪽 칸이 표시됩니다.</li>
           <li><b>화면 조절</b> 창 사이 막대를 끌어 크기를 바꾸고(두 번 누르면 처음 비율), 창마다 [⤢ 전체]·[– 숨기기], 위 [보기]에서 다시 켭니다.</li>
-          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서(Word·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lifepkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[불러오기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
+          <li><b>패키지 · 최근 작업</b> [패키지 → 패키지로 저장]은 조건(YAML)·산출방법서({fmt.name}·Markdown)·MethodSpec JSON·위험률 표(CSV)를 한 파일(<code>.lifepkg</code>)로 저장합니다(위험률 표가 없어도 됩니다). [패키지 열기]·[불러오기]·끌어다 놓기로 되살리고, 저장·연 것은 [최근 작업]에 남아 한 번에 불러옵니다. 첫 화면과 [샘플]도 조건·산출방법서·위험률 표가 한 세트입니다. 이름을 .zip 으로 바꾸면 안의 파일을 꺼낼 수 있습니다.</li>
           <li><b>다른 앱과 연동</b> [내보내기 → MethodSpec .json] 은 자유설계보험(flexible_insurance) 등이 읽는 중립 형식입니다(위험률 표 포함). 그 JSON 을 여기서 [불러오기] 해도 됩니다.</li>
         </ol>
         <p className="text-xs text-muted-foreground">조건 표기: 이율 <code>2.5%</code> · 사업비 <code>1.5/1000</code> · 배수 <code>1배</code> · 위험률 유형 death / incidence / recurring / waiver / lapse / other.</p>

@@ -1,6 +1,7 @@
 import { Document, isCollection, isMap, isNode, isScalar, isSeq, LineCounter, parseDocument, stringify, type Node } from "yaml";
 import { combosOf, generateFormulas, syncFromSurvivors } from "../methoddoc/formulas";
-import { normFormula, parseRate, parseTimes } from "../methoddoc/parse";
+import { diffSpec, renameRate, type ChangeItem } from "./changes";
+import { normFormula, parseRate, parseTimes, UNREAD } from "../methoddoc/parse";
 import {
   emptySpec, hasProduct, METHOD_SPEC_VERSION, RATE_ROLE_LABEL, validateSpec,
   type BenefitSpec, type EntryRow, type Evidence, type ExpenseItem, type MethodSpec, type ProductInfo, type RateRef, type RateRole, type SurvivorSpec, type ComboSpec, type SavingsSpec,
@@ -316,7 +317,8 @@ export function jsonToSpec(text: string): MethodSpec {
 }
 
 // ── 산출방법서를 고쳐 되읽은 값을 조건 파일에 반영 ──────────────────────────
-export interface MergeResult { spec: MethodSpec; changes: string[] }
+/** changes = 한 줄 글 목록(기록용) · items = 항목별 변경(반영 확인 창이 줄마다 보이고 고르게 한다 — `applyChanges`) */
+export interface MergeResult { spec: MethodSpec; changes: string[]; items: ChangeItem[] }
 
 /** 가입 조건 비교용 — 칸 순서가 달라도 같은 내용이면 같다 */
 const productKey = (p?: ProductInfo) => JSON.stringify(p ? {
@@ -351,20 +353,47 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
     setIf(`basis.${k}`, (s) => s.basis[k], (s, v) => { (s.basis as Record<string, unknown>)[k] = v; });
   }
   setIf("basis.lapse", (s) => s.basis.lapse, (s, v) => { s.basis.lapse = v; });
+  // 문서의 칸에 글은 있는데 값으로 읽지 못한 것(되읽기가 경고로 알린다) — 지운 것으로 치지 않고 지금 조건 값을 둔다
+  const unread = new Set(evidence.filter((e) => e.source === UNREAD).map((e) => e.path));
+  if (parsed.savings && out.savings) {
+    const keep = Object.fromEntries(Object.entries(out.savings).filter(([k]) => unread.has(`savings.${k}`)));
+    parsed = { ...parsed, savings: { ...parsed.savings, ...keep } };
+  }
   setIf("savings", (s) => s.savings, (s, v) => { s.savings = v; });
-  if (took.has("expenses") && parsed.expenses.length) {
-    const view = (s: MethodSpec) => s.expenses.map((e) => `${e.symbol}=${e.rate ?? e.times}`).join(" ");
-    if (view(out) !== view(parsed)) { changes.push(`expenses: ${view(out)} → ${view(parsed)}`); out.expenses = parsed.expenses.map((e) => ({ ...e, raw: undefined })); }
+  if (took.has("expenses") && (parsed.expenses.length || unread.size)) {
+    const key = (e: ExpenseItem) => (e.symbol || e.group);
+    const next: ExpenseItem[] = parsed.expenses.map((e) => ({ ...e, raw: undefined }));
+    out.expenses.forEach((e, i) => { if (unread.has(`expenses.${key(e)}`) && !next.some((x) => key(x) === key(e))) next.splice(i, 0, e); });
+    const view = (es: ExpenseItem[]) => es.map((e) => `${e.symbol}=${e.rate ?? e.times}`).join(" ");
+    if (next.length && view(out.expenses) !== view(next)) { changes.push(`expenses: ${view(out.expenses)} → ${view(next)}`); out.expenses = next; }
   }
   // 위험률: 이름으로 짝짓는다
   const idMap = new Map<string, string>();
-  if (took.has("rates")) for (const r of parsed.rates) {
+  if (took.has("rates")) for (const [i, r] of parsed.rates.entries()) {
     const bare = r.name.replace(/^.* · /, "");
-    const hit = out.rates.find((x) => x.name === r.name || x.name === bare);
+    let hit = out.rates.find((x) => x.name === r.name || x.name === bare);
+    // 표준 양식의 예정위험률 표는 기호(= 위험률 id)를 싣는다 — 기호가 같고 옛 이름이 문서에 없으면 이름을 고친 것이다(새 위험률이 아니다 — 값 표가 이어진 채로)
+    // ponytail: 되읽기가 기호를 못 읽어 차례로 붙인 id(r1 · r2 …)와 실제 기호를 가릴 수 없어 그 모양은 기호로 치지 않는다
+    const sym = opt.standard && r.id !== `r${i + 1}` && /^[A-Za-z][A-Za-z0-9]*$/.test(r.id);
+    if (!hit && sym) {
+      const old = out.rates.find((x) => x.id === r.id && !parsed.rates.some((p) => p.name === x.name || p.name.replace(/^.* · /, "") === x.name));
+      if (old) { changes.push(`rates "${old.name}" 이름: ${old.name} → ${r.name}`); old.name = r.name; hit = old; }
+    }
     if (hit) {
+      // 이름은 그대로고 기호만 고쳤다 — 그 위험률을 가리키는 담보 · 유지자 · 합성 · 납입면제 사유까지 함께 옮긴다
+      if (sym && hit.id !== r.id && !out.rates.some((x) => x.id === r.id) && !parsed.rates.some((p) => p !== r && p.id === hit!.id)) {
+        changes.push(`rates "${hit.name}" 기호: ${hit.id} → ${r.id}`);
+        renameRate(out, hit.id, r.id);
+      }
       idMap.set(r.id, hit.id);
       if (hit.role !== r.role) { changes.push(`rates "${hit.name}" 유형: ${hit.role} → ${r.role}`); hit.role = r.role; }
-      if (r.source && r.source !== hit.source && !/^시트 /.test(r.source)) { hit.source = r.source; }
+      if (opt.standard) {
+        // 표준 양식은 근거·출처 칸이 곧 조건이다 — 고친 것도 지운 것도 알린다(예전에는 말없이 바뀌어 "바뀐 곳 없음" 으로 보였다)
+        if ((r.source ?? "") !== (hit.source ?? "") && !/^시트 /.test(r.source ?? "")) {
+          changes.push(`rates "${hit.name}" 근거: ${hit.source ?? "—"} → ${r.source ?? "—"}`);
+          if (r.source) hit.source = r.source; else delete hit.source;
+        }
+      } else if (r.source && r.source !== hit.source && !/^시트 /.test(r.source)) { hit.source = r.source; }
     } else {
       const id = out.rates.some((x) => x.id === r.id) ? `r${out.rates.length + 1}` : r.id;
       idMap.set(r.id, id);
@@ -383,10 +412,13 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
   if (took.has("benefits") && parsed.benefits.length) {
     const fix = (id?: string) => (id ? idMap.get(id) ?? id : id);
     // 문서의 담보 표가 곧 담보다 — 문서에서 지운 칸(면책 "없음"·구간 주석 삭제)은 조건에서도 빠진다. id 와(문서에 없으면) 단위만 이어받는다
-    const next = parsed.benefits.map((b) => {
+    const next = parsed.benefits.map((b, i) => {
       const prev = out.benefits.find((x) => x.name === b.name);
       const ben: BenefitSpec = { ...b, id: prev?.id ?? b.id, rateId: fix(b.rateId), exitRateIds: b.exitRateIds?.map((x) => fix(x)!) };
       if (!ben.unit && prev?.unit) ben.unit = prev.unit;
+      // 읽지 못한 칸(보장금액 배수 "반" · 면책 "3개월")은 지금 값 그대로
+      if (prev && unread.has(`benefits[${i}].multiple`)) Object.assign(ben, { multiple: prev.multiple, amount: prev.amount });
+      if (prev && unread.has(`benefits[${i}].waitDays`)) Object.assign(ben, { waitDays: prev.waitDays, waitPayRatio: prev.waitPayRatio, reduceDays: prev.reduceDays, reduceRatio: prev.reduceRatio });
       return JSON.parse(JSON.stringify(ben)) as BenefitSpec;     // undefined 칸을 지워 비교·저장이 깔끔하게
     });
     const view = (bs: BenefitSpec[]) => JSON.stringify(bs.map((b) => [b.name, b.role, b.multiple, b.base, b.amount, b.endAge, b.waitDays, b.waitPayRatio, b.reduceDays, b.reduceRatio, b.trigger, b.survivorId, b.rateId, b.exitRateIds, b.steps, b.points]));
@@ -399,6 +431,19 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
       changes.push(`survivors: 생존자 ${out.survivors?.length ?? 0}개 → ${next?.length ?? 0}개 갱신`);
       out.survivors = next;
       if (!next) out.benefits = out.benefits.map((b) => ({ ...b, survivorId: undefined }));
+    }
+  }
+  // 표준 양식(v8)은 납입면제를 따로 적지 않는다 — [납입] 유지자의 대상 위험률이 곧 납입면제 사유이고 되읽기가 그것으로 basis 를 맞춰 둔다.
+  // 유지자를 따로 적지 않는 조건(담보·납입면제에서 만들어지는 모양)이면 그 basis 를 견줘 넣는다 — 적어 둔 조건은 유지자가 곧 납입면제다(위에서 넣었다)
+  if (opt.standard && took.has("survivors") && !took.has("basis.waiverRateIds") && !out.survivors?.length) {
+    const next = parsed.basis.waiverRateIds?.map((id) => idMap.get(id) ?? id);
+    if (JSON.stringify(next ?? []) !== JSON.stringify(out.basis.waiverRateIds ?? [])) {
+      changes.push(`basis.waiverRateIds: ${JSON.stringify(out.basis.waiverRateIds ?? [])} → ${JSON.stringify(next ?? [])}`);
+      if (next?.length) out.basis.waiverRateIds = next; else delete out.basis.waiverRateIds;
+    }
+    if (!!parsed.basis.waiver !== !!out.basis.waiver) {
+      changes.push(`basis.waiver: ${!!out.basis.waiver} → ${!!parsed.basis.waiver}`);
+      out.basis.waiver = !!parsed.basis.waiver;
     }
   }
   // 위험률 합성 — 갱신한 유지자·보험금에서 만들어지는 것까지 펼쳐 견준다(적지 않아도 같은 합성이면 바뀐 게 아니다)
@@ -425,10 +470,17 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
   const autoCur = generateFormulas(current);
   const stale = (f: MethodSpec["formulas"][number]) => autoCur.some((a) => a.section === f.section && a.label === f.label
     && normFormula(a.text) === normFormula(f.text) && normFormula(a.note ?? "") === normFormula(f.note ?? ""));
-  const fresh = parsed.formulas.filter((f) => !stale(f));
+  // 고친 식 아래의 주석이 자동 식의 주석 그대로면(문서가 자동 주석을 함께 싣는다) 사람이 적은 주석이 아니다 — 식만 남긴다
+  const bare = <F extends MethodSpec["formulas"][number]>(f: F): F => {
+    if (!f.note || !autoCur.some((a) => a.section === f.section && a.label === f.label && normFormula(a.note ?? "") === normFormula(f.note!))) return f;
+    const rest = { ...f };
+    delete rest.note;
+    return rest;
+  };
+  const fresh = parsed.formulas.filter((f) => !stale(f)).map(bare);
   // 빈칸·표기 차이(LaTeX 를 거치면 "× (" 가 "×(" 가 된다)는 바뀐 게 아니다 — 자동 식과 같은 normFormula 로 견준다
   const fkey = (fs: MethodSpec["formulas"]) => fs.map((f) => JSON.stringify([f.section, f.label, normFormula(f.text), normFormula(f.note ?? "")])).sort();
-  if (took.has("formulas") && !same(fkey(out.formulas), fkey(fresh))) {
+  if (took.has("formulas") && !same(fkey(out.formulas.map(bare)), fkey(fresh))) {
     changes.push(`formulas: 조건의 식 ${out.formulas.length}개 → ${fresh.length}개 (${fresh.map((f) => f.label).join(", ") || "자동 식만"})`);
     out.formulas = fresh;
   }
@@ -446,7 +498,7 @@ export function mergeSpec(current: MethodSpec, parsed: MethodSpec, evidence: Evi
     changes.push(`sections: 원문 절 ${out.sections.length}개 → ${parsed.sections.length}개`);
     out.sections = parsed.sections;
   }
-  return { spec: out, changes };
+  return { spec: out, changes, items: diffSpec(current, out) };
 }
 
 /**

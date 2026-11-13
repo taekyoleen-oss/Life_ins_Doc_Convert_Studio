@@ -55,17 +55,25 @@ const xmlText = (s: string) => s.replace(/<[^>]*>/g, "")
 const attr = (tag: string, name: string) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
 
 /** XLSX 첫 시트 → 행. SheetJS 없이 — ZIP 은 methoddoc 의 unzip, 시트는 XML 을 직접 읽는다 */
-export async function readXlsx(buf: Uint8Array): Promise<string[][]> {
+export const readXlsx = async (buf: Uint8Array): Promise<string[][]> => (await readXlsxAll(buf, 1))[0];
+
+/** XLSX 의 시트를 통합 문서의 차례대로 → 시트마다 행. 수식 칸은 엑셀이 저장해 둔 계산값(없으면 빈 칸) — 산출 흐름 창의 엑셀 비교가 쓴다 */
+export async function readXlsxAll(buf: Uint8Array, limit = Infinity): Promise<string[][][]> {
   const files = await unzip(buf);
   const text = (name: string) => { const f = files.get(name); return f ? new TextDecoder().decode(f) : ""; };
-  const rid = attr(/<sheet\s[^>]*>/.exec(text("xl/workbook.xml"))?.[0] ?? "", "r:id");
-  const rel = (text("xl/_rels/workbook.xml.rels").match(/<Relationship\s[^>]*>/g) ?? []).find((t) => attr(t, "Id") === rid);
-  const target = rel && attr(rel, "Target");
-  const path = !target ? "xl/worksheets/sheet1.xml" : target.startsWith("/") ? target.slice(1) : `xl/${target}`;
-  const xml = text(path);
-  if (!xml) throw new Error("XLSX 에서 시트를 찾지 못했습니다");
+  const rels = text("xl/_rels/workbook.xml.rels").match(/<Relationship\s[^>]*>/g) ?? [];
   const shared = (text("xl/sharedStrings.xml").match(/<si\b[^>]*>[\s\S]*?<\/si>/g) ?? [])
     .map((si) => (si.replace(/<rPh\b[\s\S]*?<\/rPh>/g, "").match(/<t\b[^>]*>[\s\S]*?<\/t>/g) ?? []).map(xmlText).join(""));
+  return (text("xl/workbook.xml").match(/<sheet\s[^>]*>/g) ?? [""]).slice(0, limit).map((tag) => {
+    const rel = rels.find((t) => attr(t, "Id") === attr(tag, "r:id"));
+    const target = rel && attr(rel, "Target");
+    const xml = text(!target ? "xl/worksheets/sheet1.xml" : target.startsWith("/") ? target.slice(1) : `xl/${target}`);
+    if (!xml) throw new Error("XLSX 에서 시트를 찾지 못했습니다");
+    return sheetRows(xml, shared);
+  });
+}
+
+function sheetRows(xml: string, shared: string[]): string[][] {
   const rows: string[][] = [];
   for (const c of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
     const m = /^([A-Z]+)(\d+)$/.exec(attr(c[1], "r") ?? "");

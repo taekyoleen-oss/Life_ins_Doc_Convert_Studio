@@ -40,6 +40,13 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForFunction(() => document.querySelector(".doc-body h1")?.textContent.includes("암진단 포함"));
   if (await p.locator(".guide-bar").count()) await p.click(".guide-bar button:has-text('안내 닫기')");
   const OPEN = "input[aria-label='열 파일']", MERGE = "input[aria-label='고쳐 반영할 파일']";
+  // 산출방법서 [불러오기] — 손댄 조건 위에 열면 묻는 창이 뜬다: [새 조건으로 열기]를 고른다. 창이 떴는지를 돌려준다
+  const openDoc = async (file) => {
+    await p.setInputFiles(OPEN, file);
+    const asked = await p.waitForSelector(".open-choice", { timeout: 1500 }).then(() => true, () => false);
+    if (asked) await p.click(".open-choice button:has-text('새 조건으로 열기')");
+    return asked;
+  };
   ok("첫 화면: 종신보험 산출방법서", (await p.textContent(".doc-body h1")).includes("종신보험"));
   ok("KaTeX 수식이 그려진다", (await p.locator(".doc-body .formula .katex").count()) >= 8);
   const heads0 = await p.$$eval("table.sheet th.sheet-name", (els) => els.map((e) => e.textContent.replace(/^[A-Z]\s*/, "").trim()));
@@ -303,12 +310,49 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   await p.waitForSelector(".py-modal .py-cell");
   const pyTitles = await p.$$eval(".py-modal .py-title", (e) => e.map((x) => x.textContent));
   const pyCode = await p.textContent(".py-modal .py-cell:nth-child(3) .py-code").catch(() => "");
-  ok("Python 일괄 산출: 계약·기초율 → 위험률 표 → 담보마다 조건/유지자/현가/보험료/준비금 → 합계 13셀, 식이 주석으로",
-    pyTitles.length === 13 && pyTitles[0] === "계약·기초율" && pyTitles[12] === "합계" && pyTitles.some((t) => t.includes("책임준비금·해지환급금")) && pyCode.includes("# 담보 하나를 독립된"), pyTitles.join(" | ").slice(0, 120));
+  ok("Python 일괄 산출: 계약·기초율 → 위험률 표 → 담보마다 조건/유지자/현가/보험료/준비금 → 합계 17셀, 식이 주석으로",
+    pyTitles.length === 17 && pyTitles[0] === "계약·기초율" && pyTitles[16] === "합계" && pyTitles.some((t) => t.includes("책임준비금·해지환급금")) && pyCode.includes("# 담보 하나를 독립된"), pyTitles.join(" | ").slice(0, 120));
   ok("Python 창에 [▶ 전부 실행] · [.py 내려받기]", (await p.locator(".py-modal button:has-text('전부 실행')").count()) === 1 && (await p.locator(".py-modal button:has-text('.py 내려받기')").count()) === 1);
   await p.click(".py-modal button:has-text('닫기')");
   await p.waitForTimeout(300);
   await p.click(".calc-modal button:has-text('닫기')");
+  await p.waitForTimeout(300);
+
+  // 0-6) 산출 흐름 — 보험료가 나오는 차례를 이어진 상자로: 상자마다 설명 · 식 · 파이썬 코드 · 값, 앱 · 파이썬 · 엑셀 비교 (파이썬 실행은 Pyodide 를 받아야 하므로 여기서는 하지 않는다)
+  const headBtns = await p.$$eval("header > button, header > details > summary", (e) => e.map((x) => x.textContent.trim()));
+  ok("머리 단추 차례: ＝ 보험료 계산 · 산출 흐름 · 불러오기 · 패키지 · 샘플 · 내보내기 · 설정", headBtns.join("|").replace(/ ▾/g, "").includes("산출 흐름|불러오기|패키지|샘플|내보내기|설정") && headBtns[0].includes("보험료 계산"), headBtns.join(" | "));
+  await p.click("header > button:has-text('산출 흐름')");
+  const FLOW = "[role=dialog][aria-label='산출 흐름']";
+  await p.waitForSelector(`${FLOW} [data-flow]`);
+  const flowIds = await p.$$eval(`${FLOW} [data-flow]`, (e) => e.map((x) => x.dataset.flow));
+  const flowTotal = (await p.textContent(`${FLOW} [data-flow=total]`)).replace(/\s+/g, " ");
+  ok("산출 흐름: 산출방법서 → 기초율 · 위험률 → 보장마다 갈래(조건 · 유지자 · 보험금 · 납입 · 보장 · 보험료 · 준비금) → 합계 342,500원 — 상자 18개",
+    flowIds.length === 18 && flowIds[0] === "doc" && flowIds.at(-1) === "total" && flowIds.filter((x) => x.endsWith(":prem")).length === 2 && flowTotal.includes("342,500"), `${flowIds.length}개 · ${flowTotal}`);
+  const premId = flowIds.find((x) => x.endsWith(":prem"));
+  const premBox = (await p.textContent(`${FLOW} [data-flow='${premId}']`)).replace(/\s+/g, " ");
+  await p.click(`${FLOW} [data-flow='${premId}']`);
+  await p.waitForTimeout(300);
+  const flowSide = (await p.textContent(`${FLOW} .flow-side`)).replace(/\s+/g, " ");
+  ok("산출 흐름: 보험료 상자(10만원당 261)를 누르면 받는 값 · 내는 값 · 식 · 산출 값 · 파이썬 코드가 옆에", premBox.includes("261") && ["받는 값", "내는 값", "산출방법서", "앞 단계", "산출 값", "파이썬 코드", "아직 실행하지 않았습니다"].every((t) => flowSide.includes(t))
+    && (await p.locator(`${FLOW} .flow-side .formula-preview .katex`).count()) >= 1 && (await p.locator(`${FLOW} .flow-side .flow-code .flow-ln`).count()) >= 5, `${premBox} · ${flowSide.slice(0, 100)}`);
+  await p.click(`${FLOW} button:has-text('앱 · 파이썬 · 엑셀 비교')`);
+  await p.waitForTimeout(300);
+  const cmpText = (await p.textContent(`${FLOW} .flow-cmp`)).replace(/\s+/g, " ");
+  ok("산출 흐름: 비교 표 — 보장마다 N* · PVB · P · G₁ · 10만원당과 합계, 파이썬 '실행 전' · 엑셀 '올리기 전' · 엑셀 파일 올리기", (await p.locator(`${FLOW} .flow-cmp tr[data-key]`).count()) >= 10
+    && cmpText.includes("실행 전") && cmpText.includes("올리기 전") && cmpText.includes("342,500") && (await p.locator(`${FLOW} input[aria-label='엑셀 계산 파일']`).count()) === 1, cmpText.slice(0, 160));
+  const [flPy] = await Promise.all([p.waitForEvent("download"), p.click(`${FLOW} button:has-text('파이썬 내려받기')`)]);
+  const flPyText = fs.readFileSync(await flPy.path(), "utf8");
+  const [flXl] = await Promise.all([p.waitForEvent("download"), p.click(`${FLOW} button:has-text('엑셀 내려받기')`)]);
+  const flXlBuf = fs.readFileSync(await flXl.path());
+  ok("산출 흐름: 파이썬(.py — 단계마다 주석) · 엑셀(.xlsx 수식) 내려받기", flPy.suggestedFilename().endsWith("_일괄산출.py") && (flPyText.match(/^# /gm) || []).length >= 30 && flPyText.includes("COMPARE")
+    && flXl.suggestedFilename().endsWith("_보험료계산.xlsx") && flXlBuf.slice(0, 2).toString("latin1") === "PK", `${flPy.suggestedFilename()} ${flPyText.length}자 · ${flXl.suggestedFilename()}`);
+  // 앱이 만든 엑셀에는 수식만 있다 — 그대로 올리면 "엑셀에서 한 번 열어 저장" 하라고 알린다(틀린 값으로 견주지 않는다)
+  await p.setInputFiles(`${FLOW} input[aria-label='엑셀 계산 파일']`, { name: "수식만.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: flXlBuf });
+  await p.waitForTimeout(600);
+  const xlNote = await p.textContent(`${FLOW} .flow-side .calc-warn`).catch(() => "");
+  ok("산출 흐름: 계산값이 없는 엑셀을 올리면 엑셀에서 열어 저장하라고 알린다", xlNote.includes("엑셀에서 한 번 열어 저장"), xlNote.slice(0, 100));
+  await p.screenshot({ path: `${OUT}/s1d_flow.png` });
+  await p.click(`${FLOW} header button:has-text('닫기')`);
   await p.waitForTimeout(300);
 
   await p.click(".seg button:has-text('YAML')");           // 아래 1)~7)은 YAML 편집기로
@@ -347,7 +391,8 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   ok("조건 이율 3% → 산출방법서 3.000%", rate.includes("3.000%"), rate);
 
   // 5) PDF 열기 → 조건 + 원문 탭
-  await p.setInputFiles("input[aria-label='열 파일']", pdf);
+  const asked5 = await openDoc(pdf);
+  ok("손댄 조건 위에 산출방법서를 열면 묻는다 — 지금 조건에 반영하기 / 새 조건으로 열기", asked5);
   await p.waitForSelector(".orig-list", { timeout: 60000 });
   await p.waitForTimeout(800);
   const yamlText = await p.$$eval(".cm-content .cm-line", (els) => els.map((e) => e.textContent).join("\n"));
@@ -389,7 +434,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   // 6-1) 표준 양식 PDF 열기 — Word 와 같은 조건이 되고 보험료까지 나온다
   const sdir10 = path.join(__dirname, "../samples");
   const stdPdf = path.join(sdir10, fs.readdirSync(sdir10).find((f) => f.normalize("NFC").startsWith("10_기본상품") && /\.pdf$/i.test(f)));
-  await p.setInputFiles(OPEN, stdPdf);
+  await openDoc(stdPdf);
   await p.waitForSelector(".toast:has-text('표준 산출방법서 v')", { timeout: 60000 });
   await p.waitForTimeout(1200);
   const t10 = (await p.textContent(".toast")).replace(/\s+/g, " ");
@@ -713,25 +758,86 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const swap = (buf, from, to) => { const i = buf.indexOf(Buffer.from(from)); if (i < 0) throw new Error(`없음: ${from}`); const b = Buffer.from(buf); Buffer.from(to).copy(b, i); return b; };
   let edited = swap(docx, ">2.500%<", ">3.000%<");
   edited = swap(edited, 'preserve">20</m:t>', 'preserve">25</m:t>');   // 식은 Word 수식 — 기준연납순보험료의 min(n,20) 안의 20
-  await p.setInputFiles(MERGE, { name: "종신_고침.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: edited });
+  const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  // 고치지 않은 문서를 올리면 — 반영 확인 창이 "조건과 같습니다"
+  await p.setInputFiles(MERGE, { name: "종신_그대로.docx", mimeType: DOCX_MIME, buffer: docx });
+  await p.waitForSelector(".sync-modal");
+  ok("반영 확인 창: 고치지 않은 Word 를 올리면 '조건과 같습니다' — 반영할 것 없음", (await p.locator(".sync-modal .sync-same").count()) === 1 && (await p.locator(".sync-modal tr[data-change]").count()) === 0
+    && (await p.locator(".sync-modal button.btn-primary").count()) === 0, (await p.textContent(".sync-modal")).slice(0, 120));
+  await p.click(".sync-modal button:has-text('닫기')");
+  await p.setInputFiles(MERGE, { name: "종신_고침.docx", mimeType: DOCX_MIME, buffer: edited });
+  await p.waitForSelector(".sync-modal tr[data-change]");
+  const syncRows = await p.$$eval(".sync-modal tr[data-change]", (e) => e.map((x) => x.textContent.replace(/\s+/g, " ")));
+  const syncGroups = await p.$$eval(".sync-modal tbody[data-group]", (e) => e.map((x) => x.dataset.group));
+  const syncPrem = (await p.textContent(".sync-modal .sync-prem")).replace(/\s+/g, " ");
+  ok("반영 확인 창: ① 읽은 문서(표준 산출방법서) ② 바뀐 곳 둘(이율 · 식 — 지금 조건 → 문서 값) ③ 보험료 변화(250,000원 → 달라짐)",
+    /표준 산출방법서 v\d/.test(await p.textContent(".sync-modal .sync-step")) && syncRows.length === 2 && syncGroups.join(",") === "이율,식" && syncRows[0].includes("2.5%") && syncRows[0].includes("3%")
+    && syncPrem.includes("250,000원") && /[+−][\d,]+원\)/.test(await p.textContent(".sync-modal .sync-total")), `${syncRows.join(" / ").slice(0, 160)} · ${syncPrem.slice(-80)}`);
+  // 줄마다 고른다 — 이율을 풀면 식만 반영, 보험료 변화도 다시 계산된다
+  const total2 = await p.textContent(".sync-modal .sync-total");
+  await p.locator(".sync-modal tbody[data-group='이율'] tr[data-change] input[type=checkbox]").uncheck();
+  await p.waitForTimeout(300);
+  ok("반영 확인 창: 줄을 풀면 [고른 것 반영 (1)] · 보험료 변화가 다시 계산된다", (await p.textContent(".sync-modal button.btn-primary")).includes("(1)") && (await p.textContent(".sync-modal .sync-total")) !== total2, await p.textContent(".sync-modal .sync-total"));
+  await p.locator(".sync-modal tbody[data-group='이율'] tr[data-change] input[type=checkbox]").check();
+  await p.screenshot({ path: `${OUT}/s11a_sync.png` });
+  await p.click(".sync-modal button.btn-primary");
   await p.waitForSelector(".word-log");
   const wlog = await p.textContent(".word-log");
-  ok("고친 Word 올리기 → 이율과 고친 식만 조건에 반영", /basis\.interest/.test(wlog) && /formulas/.test(wlog) && !/expenses|benefits|rates/.test(wlog), wlog.slice(0, 200));
+  ok("고친 Word 올리기 → 이율과 고친 식만 조건에 반영(한글로 적은 줄 — 묶음 · 칸: 앞 → 뒤)", /이율 · [^:]+: 2\.5% → 3%/.test(wlog) && /식 · /.test(wlog) && !/사업비 · |위험률 · |보험금·보장 · |basis\.|formulas/.test(wlog)
+    && (await p.textContent(".toast")).includes("조건 2곳 반영"), wlog.slice(0, 200));
   await p.click(".tab:has-text('산출방법서')");
   const row17 = await p.locator(".doc-body tr", { hasText: "적용이율" }).first().textContent();
   await p.click(".tab:has-text('Word')"); await p.screenshot({ path: `${OUT}/s11_word.png` }); await p.click(".tab:has-text('산출방법서')");
   ok("반영 뒤 산출방법서 적용이율 3.000% · 고친 식이 나온다", row17.includes("3.000%") && (await p.locator(".doc-body .formula", { hasText: "25" }).count()) >= 1, row17);
 
-  // 18) [Word] 탭의 상품별 견본 — Word 견본을 받아 [열기] → 표준 산출방법서로 읽는다 (한글 견본은 두지 않는다)
+  // 18) [Word] 탭의 상품별 견본 — Word 견본을 받아 [열기] → 표준 산출방법서로 읽는다 (견본은 설정의 문서 형식 하나만 — Word 중심이면 Word)
   await p.click(".tab:has-text('Word')");
-  ok("[Word] 상품별 견본에 한글 단추가 없다 — 표준 양식은 Word 로만", (await p.locator(".word-std button", { hasText: "한글" }).count()) === 0);
+  ok("[Word] 상품별 견본은 설정의 문서 형식으로 — Word 중심이면 한글 단추가 없다", (await p.locator(".word-std button", { hasText: "한글" }).count()) === 0);
   const [dw] = await Promise.all([p.waitForEvent("download"), p.click(".word-std tr:has-text('표준_산출방법서_질병보험') button:has-text('Word')")]);
   const stdDocx = fs.readFileSync(await dw.path());
   ok("[Word] 표준_산출방법서_질병보험.docx 내려받기", dw.suggestedFilename() === "표준_산출방법서_질병보험.docx" && stdDocx.length > 10000, `${stdDocx.length}B`);
-  await p.setInputFiles(OPEN, { name: "표준_산출방법서_질병보험.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: stdDocx });
+  await openDoc({ name: "표준_산출방법서_질병보험.docx", mimeType: DOCX_MIME, buffer: stdDocx });
   await p.waitForSelector(".toast:has-text('표준_산출방법서_질병보험.docx —')");
   const t18 = await p.textContent(".toast");
   ok("Word 표준 산출방법서 [열기] → 표준 산출방법서로 읽음", /표준 산출방법서 v\d/.test(t18), t18);
+
+  // 18-1) 설정 — 문서 형식을 한글 중심으로: 탭 · 내보내기 · 견본 · 패키지가 한글(.hwpx)로, 한글 파일을 올리면 조건과 같다(왕복)
+  await p.click("summary:has-text('설정')");
+  const fmtLabels = await p.$$eval("[role=radiogroup][aria-label='문서 형식'] label", (e) => e.map((x) => x.textContent.slice(0, 12)));
+  await p.locator("[role=radiogroup][aria-label='문서 형식'] label", { hasText: "한글 중심" }).locator("input").check();
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(400);
+  ok("[설정 ▾] 문서 형식 — Word 중심 · 한글 중심, 한글을 고르면 [Word] 탭이 [한글] 탭으로", fmtLabels.length === 2 && fmtLabels[0].startsWith("Word 중심") && fmtLabels[1].startsWith("한글 중심")
+    && (await p.locator("button.tab", { hasText: /^한글$/ }).count()) === 1 && (await p.locator("button.tab", { hasText: /^Word$/ }).count()) === 0, fmtLabels.join(" / "));
+  await p.click("summary:has-text('내보내기')");
+  const expHwp = await p.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => x.textContent.replace(x.querySelector("small")?.textContent ?? "", "").trim()));
+  ok("한글 중심: 내보내기 맨 위가 한글 .hwpx — Word 도 그 아래 그대로", JSON.stringify(expHwp.slice(0, 4)) === JSON.stringify(["한글 .hwpx", "한글 .hwpx (작성 안내 없이)", "Word .docx", "Word .docx (작성 안내 없이)"]), expHwp.slice(0, 5).join(" | "));
+  const [dh] = await Promise.all([p.waitForEvent("download"), p.click("details[open] .menu-list button:has-text('한글 .hwpx') >> nth=0")]);
+  const hwpx = fs.readFileSync(await dh.path());
+  ok("한글 .hwpx 내려받기 — HWPX 꾸러미(mimetype application/hwp+zip · Contents/section0.xml)", dh.suggestedFilename().endsWith(".hwpx") && hwpx.slice(0, 2).toString("latin1") === "PK"
+    && hwpx.includes(Buffer.from("application/hwp+zip")) && hwpx.includes(Buffer.from("Contents/section0.xml")), `${dh.suggestedFilename()} ${hwpx.length}B`);
+  await p.keyboard.press("Escape");
+  await p.setInputFiles(MERGE, { name: "질병_그대로.hwpx", mimeType: "application/hwp+zip", buffer: hwpx });
+  await p.waitForSelector(".sync-modal");
+  const hwpSync = (await p.textContent(".sync-modal")).replace(/\s+/g, " ");
+  ok("한글 .hwpx 를 그대로 올리면 표준 산출방법서로 읽고 '조건과 같습니다' (한글 ↔ 조건 왕복)", /표준 산출방법서 v\d/.test(hwpSync) && (await p.locator(".sync-modal .sync-same").count()) === 1, hwpSync.slice(0, 200));
+  await p.click(".sync-modal button:has-text('닫기'), .sync-modal button:has-text('취소')");
+  await p.click("button.tab:has-text('한글')");
+  const hwpTab = (await p.locator("section:has(.word-std)").last().textContent()).replace(/\s+/g, " ");
+  ok("[한글] 탭 — 한글 내려받기 · 고친 한글 올리기 · 견본은 한글 단추(Word 단추 없음) · 저장 형식 안내", hwpTab.includes("한글 내려받기") && hwpTab.includes("고친 한글 올리기") && hwpTab.includes("한글 표준 문서 (*.hwpx)")
+    && (await p.locator(".word-std button", { hasText: /^한글$/ }).count()) >= 3 && (await p.locator(".word-std button", { hasText: /^Word$/ }).count()) === 0);
+  await p.click("summary:has-text('패키지')");
+  const [dpk] = await Promise.all([p.waitForEvent("download"), p.click("details[open] .menu-list button:has-text('패키지로 저장')")]);
+  const pkgH = fs.readFileSync(await dpk.path());
+  ok("한글 중심: 패키지에 산출방법서.hwpx (.docx 대신)", pkgH.includes(Buffer.from("산출방법서.hwpx")) && !pkgH.includes(Buffer.from("산출방법서.docx")));
+  await p.reload({ waitUntil: "networkidle" });
+  await p.waitForFunction(() => document.querySelector(".doc-body h1")?.textContent.includes("암진단 포함"));   // 주소의 샘플로 바뀐 뒤(저장된 설정도 그때 읽는다)
+  await p.waitForTimeout(500);
+  ok("문서 형식은 이 브라우저에 기억된다 — 다시 열어도 [한글] 탭", (await p.locator("button.tab", { hasText: /^한글$/ }).count()) === 1, (await p.$$eval("button.tab", (e) => e.map((x) => x.textContent))).join(" | "));
+  await p.click("summary:has-text('설정')");
+  await p.locator("[role=radiogroup][aria-label='문서 형식'] label", { hasText: "Word 중심" }).locator("input").check();
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(300);
 
   // 19) 그림으로 읽기 — 스캔 PDF → 쪽 고르기 → Anthropic API(여기서는 가짜 응답) → 옮겨 적은 글을 규칙이 읽어 조건
   const page1 = { blocks: [
@@ -757,7 +863,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   });
   const sdir = path.join(__dirname, "../samples");
   const scan = path.join(sdir, fs.readdirSync(sdir).find((f) => f.normalize("NFC").startsWith("07_") && f.endsWith(".pdf")));
-  await p.setInputFiles(OPEN, scan);
+  await openDoc(scan);
   await p.waitForSelector(".modal.vision .vision-page img", { timeout: 20000 });
   ok("스캔 PDF 열기 → [그림으로 읽기] 창 · 쪽 미리보기 · 예상 비용", /예상 비용 약 \$/.test(await p.textContent(".modal.vision .vision-send")));
   await p.screenshot({ path: `${OUT}/s12_vision.png` });
@@ -807,10 +913,11 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
     && qDoc.indexOf("[암입원특약] 1.") > qDoc.indexOf("3. 해지환급금의 계산에 관한 사항") && qDoc.includes("rcx+t") && qDoc.includes("chx+t") && qDoc.includes("csx+t") && !qDoc.includes("r(1)x+t"), `${h1} · ${qTrial.slice(0, 120)}`);
   };
   await q.click("summary:has-text('내보내기')");
-  const expItems = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => [x.firstChild.textContent.trim(), x.disabled || !!x.closest("fieldset:disabled")]));
-  ok("공유 화면: 내보내기 = Word .docx · Word (작성 안내 없이) · 조건 .yaml 이 먼저, 나머지는 추가기능(개발중)으로 비활성",
-    JSON.stringify(expItems.slice(0, 3).map((x) => x[0])) === JSON.stringify(["Word .docx", "Word .docx (작성 안내 없이)", "조건 파일 .yaml"]) && expItems.slice(0, 3).every((x) => !x[1])
-    && expItems.length === 9 && expItems.slice(3).every((x) => x[1]) && (await q.textContent("details[open] .menu-list")).includes("추가기능 (개발중)"), JSON.stringify(expItems));
+  const expItems = await q.$$eval("details[open] .menu-list button", (bs) => bs.map((x) => [x.textContent.replace(x.querySelector("small")?.textContent ?? "", "").trim(), x.disabled || !!x.closest("fieldset:disabled")]));
+  ok("공유 화면: 내보내기 = Word .docx 둘 · 한글 .hwpx 둘 · 조건 .yaml · 고친 산출방법서 반영이 먼저, 나머지 다섯은 추가기능(개발중)으로 비활성",
+    JSON.stringify(expItems.slice(0, 6).map((x) => x[0])) === JSON.stringify(["Word .docx", "Word .docx (작성 안내 없이)", "한글 .hwpx", "한글 .hwpx (작성 안내 없이)", "조건 파일 .yaml", "고친 산출방법서 반영…"]) && expItems.slice(0, 6).every((x) => !x[1])
+    && expItems.length === 11 && expItems.slice(6).every((x) => x[1]) && (await q.textContent("details[open] .menu-list")).includes("추가기능 (개발중)"), JSON.stringify(expItems));
+  ok("공유 화면: 머리에 [산출 흐름] · [설정 ▾]", (await q.locator("header > button", { hasText: /^산출 흐름$/ }).count()) === 1 && (await q.locator("header summary", { hasText: "설정" }).count()) === 1);
   ok("[열기] 는 [불러오기]", (await q.locator("header > button.btn-primary", { hasText: /^불러오기$/ }).count()) === 1 && (await q.locator("header button", { hasText: /^열기$/ }).count()) === 0);
   await q.keyboard.press("Escape");
   await q.click("summary:has-text('샘플')");
@@ -824,6 +931,16 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   const trialC = (await q.textContent(".trial-bar")).replace(/\s+/g, " ");
   ok("암보험: 탭 셋(주계약 · 암입원특약 · 암수술특약) · 사망률 없음 · 보험료가 나온다", tabs.length === 3 && tabs[1].includes("암입원특약") && tabs[2].includes("암수술특약")
     && (await q.locator(".doc-body tr", { hasText: "사망률" }).count()) === 0 && trialC.includes("240,270"), `${tabs.join(" / ")} · ${trialC.slice(0, 120)}`);
+  // 산출 흐름 — 계약 단위가 여럿이면 단위 탭(주계약 · 특약)으로 나눠 보인다, 합계는 늘 전체
+  await q.click("header > button:has-text('산출 흐름')");
+  await q.waitForSelector("[role=dialog][aria-label='산출 흐름'] [data-flow=total]");
+  const qFlowTabs = await q.$$eval("[role=dialog][aria-label='산출 흐름'] [role=tablist][aria-label='계약 단위'] [role=tab]", (e) => e.map((x) => x.textContent));
+  await q.click("[role=dialog][aria-label='산출 흐름'] [role=tab]:has-text('암입원특약')");
+  await q.waitForTimeout(300);
+  const qFlowTotal = (await q.textContent("[role=dialog][aria-label='산출 흐름'] [data-flow=total]")).replace(/\s+/g, " ");
+  ok("암보험 산출 흐름: 계약 단위 탭 셋 · 특약 탭에는 그 특약의 갈래 하나 · 합계 240,270원", qFlowTabs.length === 3 && qFlowTabs[1].includes("암입원특약")
+    && (await q.locator("[role=dialog][aria-label='산출 흐름'] [data-flow$=':prem']").count()) === 1 && qFlowTotal.includes("240,270"), `${qFlowTabs.join(" / ")} · ${qFlowTotal}`);
+  await q.click("[role=dialog][aria-label='산출 흐름'] header button:has-text('닫기')");
   await q.click(".unit-tabs .unit-tab:has-text('암입원특약')");
   await q.click(".card[data-card=B01] .card-head");                     // 보장 카드를 펼쳐야 담보 덩이가 그려진다
   await q.waitForTimeout(600);
@@ -852,6 +969,7 @@ const ok = (name, cond, extra = "") => log.push(`${cond ? "PASS" : "FAIL"}  ${na
   sv.on("console", (m) => { if (m.type() === "error") errs.push("console " + m.text()); });
   sv.on("dialog", (d) => { d.accept().catch(() => {}); });
   await sv.goto("http://localhost:3217/?sample=savings", { waitUntil: "networkidle" });
+  await sv.waitForFunction(() => document.querySelector(".doc-body h1")?.textContent.includes("저축보험"));   // 첫 그림은 첫 화면 샘플 — 주소의 샘플로 바뀔 때까지
   await sv.waitForTimeout(900);
   // 이미 펼쳐진 카드는 머리를 누르면 접힌다 — 펼쳐져 있지 않을 때만 누른다
   const openSv = async (id) => { if (!(await sv.locator(`.card[data-card=${id}].card-open`).count())) await sv.click(`.card[data-card=${id}] .card-head`); await sv.waitForTimeout(500); };

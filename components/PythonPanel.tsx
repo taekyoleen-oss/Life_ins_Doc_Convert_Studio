@@ -12,11 +12,12 @@ import type { MethodSpec } from "@/lib/methoddoc/spec";
  */
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 
-interface Pyodide { runPython(code: string): unknown; setStdout(o: { batched: (s: string) => void }): void; setStderr(o: { batched: (s: string) => void }): void }
+export interface Pyodide { runPython(code: string): unknown; setStdout(o: { batched: (s: string) => void }): void; setStderr(o: { batched: (s: string) => void }): void }
 declare global { interface Window { loadPyodide?: (o: { indexURL: string }) => Promise<Pyodide> } }
 
 let loading: Promise<Pyodide> | null = null;
-function loadPyodide(): Promise<Pyodide> {
+/** 산출 흐름 창(CalcFlow)도 같은 실행기를 쓴다 — 한 번 받으면 두 창이 함께 */
+export function loadPyodide(): Promise<Pyodide> {
   if (loading) return loading;
   loading = new Promise<Pyodide>((resolve, reject) => {
     const go = () => window.loadPyodide!({ indexURL: PYODIDE_URL }).then(resolve, reject);
