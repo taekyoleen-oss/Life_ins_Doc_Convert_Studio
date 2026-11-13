@@ -4,7 +4,7 @@ import { BASE_RATES_CSV } from "@/lib/base-rates";
 import { mergeSpec, yamlToSpec, yamlView } from "@/lib/conditions/yaml";
 import { loadFile } from "@/lib/load";
 import { computeSpec } from "@/lib/methoddoc/calc";
-import { docToDocx, zipStore } from "@/lib/methoddoc/docx";
+import { docToDocx, richParts, zipStore } from "@/lib/methoddoc/docx";
 import { extractDocx, extractHwpx, hwpEquation, unzip } from "@/lib/methoddoc/extract";
 import { withFormulas } from "@/lib/methoddoc/formulas";
 import { docToHwpx, hwpScript } from "@/lib/methoddoc/hwpx";
@@ -68,6 +68,12 @@ describe("한글 수식 스크립트 — 쓴 것을 읽으면 원래 평문 식"
     expect(hwpEquation(' {"해약공제"} _  {{t}} {~=~} {{α}} ^  {"공제"} {~·~}{max}{ LEFT (~}{0}{~ RIGHT )}')).toBe("해약공제_{t} = α^{공제} · max ( 0 )");
     expect(hwpEquation("N _{x} = sum _{u=0} ^{n-1} D _{x+u} times left ( 1 - lambda right )")).toBe("N_{x} = Σ_{u=0}^{n-1} D_{x+u} × ( 1 - λ )");
     expect(hwpEquation('"sum" + "it" + alpha')).toBe("sum + it + α");   // 따옴표 안은 글자 그대로
+  });
+  it("표 칸 글의 여러 글자 기호도 첨자로 — r80_{x+t} (한글에서 연 위험률 합성 표에서 글자 그대로 보였다)", () => {
+    expect(richParts("q_{x+t} + r80_{x+t} · rc_x")).toEqual([
+      { t: "q" }, { t: "x+t", v: "sub" }, { t: " + " }, { t: "r80" }, { t: "x+t", v: "sub" }, { t: " · " }, { t: "rc" }, { t: "x", v: "sub" },
+    ]);
+    expect(richParts("α_P는 그대로")).toEqual([{ t: "α" }, { t: "P", v: "sub" }, { t: "는 그대로" }]);
   });
 });
 
